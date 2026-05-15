@@ -35,10 +35,10 @@ app.innerHTML = `
   </section>
 
   <section class="panel">
-    <label class="dropzone" for="videoInput">
+    <label class="dropzone" id="dropzone" for="videoInput">
       <input id="videoInput" type="file" accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
-      <span>选择或拖入视频文件</span>
-      <small>浏览器能解码的格式可直接处理；特殊编码建议先转成 mp4/webm。</small>
+      <span id="fileLabel">选择或拖入视频文件</span>
+      <small>拖到这里松手即可上传；浏览器能解码的格式可直接处理，特殊编码建议走后端 ffmpeg。</small>
     </label>
 
     <div class="grid">
@@ -74,6 +74,8 @@ app.innerHTML = `
   </section>
 `;
 
+const dropzone = document.querySelector<HTMLLabelElement>('#dropzone')!;
+const fileLabel = document.querySelector<HTMLSpanElement>('#fileLabel')!;
 const videoInput = document.querySelector<HTMLInputElement>('#videoInput')!;
 const processBtn = document.querySelector<HTMLButtonElement>('#processBtn')!;
 const downloadPdfBtn = document.querySelector<HTMLButtonElement>('#downloadPdfBtn')!;
@@ -91,9 +93,30 @@ let transcriptText = '';
 let summaryText = '';
 
 videoInput.addEventListener('change', () => {
-  selectedFile = videoInput.files?.[0] ?? null;
-  processBtn.disabled = !selectedFile;
-  statusEl.textContent = selectedFile ? `已选择：${selectedFile.name}` : '等待上传视频。';
+  selectFile(videoInput.files?.[0] ?? null);
+});
+
+for (const eventName of ['dragenter', 'dragover']) {
+  dropzone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.add('is-dragover');
+  });
+}
+
+for (const eventName of ['dragleave', 'dragend']) {
+  dropzone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.remove('is-dragover');
+  });
+}
+
+dropzone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  dropzone.classList.remove('is-dragover');
+  selectFile(event.dataTransfer?.files?.[0] ?? null);
 });
 
 processBtn.addEventListener('click', async () => {
@@ -144,6 +167,13 @@ downloadTranscriptBtn.addEventListener('click', () => {
 downloadSummaryBtn.addEventListener('click', () => {
   downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), 'vid2deck-summary.md');
 });
+
+function selectFile(file: File | null): void {
+  selectedFile = file;
+  processBtn.disabled = !selectedFile;
+  fileLabel.textContent = selectedFile ? `已选择：${selectedFile.name}` : '选择或拖入视频文件';
+  statusEl.textContent = selectedFile ? `已选择：${selectedFile.name}` : '等待上传视频。';
+}
 
 function readSettings(): Settings {
   return {
@@ -254,6 +284,7 @@ async function makePdf(items: Slide[]): Promise<Blob> {
 }
 
 async function transcribeLocally(file: File, onProgress: (message: string) => void): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
   try {
     onProgress('加载本地 ASR 模型：Xenova/whisper-tiny...');
     const mod = await import('@xenova/transformers');
@@ -268,7 +299,7 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
     });
 
     onProgress('正在转写音频...');
-    const result = await transcriber(URL.createObjectURL(file), {
+    const result = await transcriber(objectUrl, {
       chunk_length_s: 30,
       stride_length_s: 5,
       language: 'chinese',
@@ -282,6 +313,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
   } catch (error) {
     console.warn(error);
     return '';
+  } finally {
+    URL.revokeObjectURL(objectUrl);
   }
 }
 
