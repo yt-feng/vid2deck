@@ -8,6 +8,7 @@ import os
 import time
 from http.server import BaseHTTPRequestHandler
 from typing import Any
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
@@ -16,11 +17,17 @@ DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 
+class DeepSeekError(RuntimeError):
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
 def signing_secret() -> bytes:
     secret = os.getenv("AUTH_SECRET") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("AUTH_CODE", "")
     if not secret:
         raise RuntimeError("AUTH_SECRET is not configured")
-    return secret.encode("utf-8")
+    return secret.strip().encode("utf-8")
 
 
 def verify_token(token: str) -> str:
@@ -45,7 +52,7 @@ def verify_token(token: str) -> str:
 
 
 def summarize_with_deepseek(transcript: str) -> str:
-    api_key = os.getenv("DEEPSEEK_API_KEY")
+    api_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY is not configured")
 
@@ -79,12 +86,21 @@ def summarize_with_deepseek(transcript: str) -> str:
         },
         method="POST",
     )
-    with urlopen(request, timeout=90) as response:
-        data = json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=90) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:1000]
+        if exc.code == 401:
+            detail = "DeepSeek returned 401 Unauthorized. Please check Vercel DEEPSEEK_API_KEY: it may be invalid, revoked, copied with extra spaces, or not redeployed."
+        raise DeepSeekError(exc.code, detail) from exc
     return data["choices"][0]["message"]["content"].strip()
 
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.send_json({"ok": True, "route": "/api/summarize", "method": "POST only"})
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_cors_headers()
@@ -105,6 +121,8 @@ class handler(BaseHTTPRequestHandler):
                 return
             summary = summarize_with_deepseek(transcript)
             self.send_json({"summary": summary})
+        except DeepSeekError as exc:
+            self.send_json({"detail": str(exc)}, 502)
         except Exception as exc:
             self.send_json({"detail": str(exc)}, 500)
 
@@ -115,7 +133,7 @@ class handler(BaseHTTPRequestHandler):
 
     def send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", os.getenv("CORS_ORIGINS", "*"))
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
