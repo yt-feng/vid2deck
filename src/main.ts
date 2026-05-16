@@ -1,25 +1,9 @@
 import { jsPDF } from 'jspdf';
 import './style.css';
 
-type Slide = {
-  id: number;
-  time: number;
-  hash: bigint;
-  dataUrl: string;
-  width: number;
-  height: number;
-};
-
-type Settings = {
-  sampleEvery: number;
-  duplicateThreshold: number;
-  minGap: number;
-  summaryApiUrl: string;
-  authUsername: string;
-  authCode: string;
-};
-
-type TransformerPipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
+type Slide = { id: number; time: number; hash: bigint; dataUrl: string; width: number; height: number };
+type Settings = { sampleEvery: number; duplicateThreshold: number; minGap: number; summaryApiUrl: string; authCode: string };
+type Pipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -29,7 +13,7 @@ app.innerHTML = `
     <div>
       <p class="eyebrow">Vid2Deck</p>
       <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-      <p class="subhead">视频抽帧、相似页去重和 PDF 导出默认都在浏览器本地完成；summary 通过 Vercel 后端安全读取 DEEPSEEK_API_KEY。</p>
+      <p class="subhead">视频抽帧、相似页去重、PDF 导出和转写默认都在浏览器本地完成；summary 通过 Vercel 后端安全读取 DeepSeek key。</p>
     </div>
   </section>
 
@@ -44,12 +28,11 @@ app.innerHTML = `
       <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="2" /></label>
       <label>去重阈值（越大越宽松）<input id="duplicateThreshold" type="number" min="0" max="64" value="8" /></label>
       <label>保留页最小间隔（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
-      <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize" /></label>
-      <label>登录账号<input id="authUsername" type="text" value="admin" autocomplete="username" /></label>
+      <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize-simple" /></label>
       <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
     </div>
 
-    <div class="hint">Summary 会先调用 /api/login 获取 token，再调用 /api/summarize；DeepSeek key 只存在 Vercel 环境变量里，不会暴露给前端。</div>
+    <div class="hint">Summary 会直接调用 /api/summarize-simple，并通过 X-Access-Code 校验访问码；DeepSeek key 只存在 Vercel 环境变量里，不会暴露给前端。</div>
 
     <div class="actions">
       <button id="processBtn" disabled>开始生成</button>
@@ -59,76 +42,61 @@ app.innerHTML = `
     </div>
 
     <div class="progress-panel" id="progressPanel" hidden>
-      <div class="progress-meta">
-        <span id="progressText">准备开始</span>
-        <strong id="progressPercent">0%</strong>
-      </div>
-      <div class="progress-track" aria-label="处理进度">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
+      <div class="progress-meta"><span id="progressText">准备开始</span><strong id="progressPercent">0%</strong></div>
+      <div class="progress-track" aria-label="处理进度"><div class="progress-fill" id="progressFill"></div></div>
     </div>
 
     <div class="status" id="status">等待上传视频。</div>
   </section>
 
   <section class="results">
-    <article>
-      <h2>去重后的页面</h2>
-      <div id="slides" class="slides"></div>
-    </article>
-    <article>
-      <h2>逐字稿</h2>
-      <textarea id="transcript" placeholder="转写结果会出现在这里，也可以手动粘贴/编辑后再生成 summary。"></textarea>
-    </article>
-    <article>
-      <h2>Summary</h2>
-      <textarea id="summary" placeholder="summary 会出现在这里。"></textarea>
-    </article>
+    <article><h2>去重后的页面</h2><div id="slides" class="slides"></div></article>
+    <article><h2>逐字稿</h2><textarea id="transcript" placeholder="转写结果会出现在这里，也可以手动粘贴/编辑后再生成 summary。"></textarea></article>
+    <article><h2>Summary</h2><textarea id="summary" placeholder="summary 会出现在这里。"></textarea></article>
   </section>
 `;
 
-const dropzone = document.querySelector<HTMLLabelElement>('#dropzone')!;
-const fileLabel = document.querySelector<HTMLSpanElement>('#fileLabel')!;
-const videoInput = document.querySelector<HTMLInputElement>('#videoInput')!;
-const processBtn = document.querySelector<HTMLButtonElement>('#processBtn')!;
-const downloadPdfBtn = document.querySelector<HTMLButtonElement>('#downloadPdfBtn')!;
-const downloadTranscriptBtn = document.querySelector<HTMLButtonElement>('#downloadTranscriptBtn')!;
-const downloadSummaryBtn = document.querySelector<HTMLButtonElement>('#downloadSummaryBtn')!;
-const statusEl = document.querySelector<HTMLDivElement>('#status')!;
-const progressPanel = document.querySelector<HTMLDivElement>('#progressPanel')!;
-const progressText = document.querySelector<HTMLSpanElement>('#progressText')!;
-const progressPercent = document.querySelector<HTMLElement>('#progressPercent')!;
-const progressFill = document.querySelector<HTMLDivElement>('#progressFill')!;
-const slidesEl = document.querySelector<HTMLDivElement>('#slides')!;
-const transcriptEl = document.querySelector<HTMLTextAreaElement>('#transcript')!;
-const summaryEl = document.querySelector<HTMLTextAreaElement>('#summary')!;
+const $ = <T extends Element>(selector: string) => {
+  const el = document.querySelector<T>(selector);
+  if (!el) throw new Error(`Missing ${selector}`);
+  return el;
+};
+
+const dropzone = $<HTMLLabelElement>('#dropzone');
+const fileLabel = $<HTMLSpanElement>('#fileLabel');
+const videoInput = $<HTMLInputElement>('#videoInput');
+const processBtn = $<HTMLButtonElement>('#processBtn');
+const downloadPdfBtn = $<HTMLButtonElement>('#downloadPdfBtn');
+const downloadTranscriptBtn = $<HTMLButtonElement>('#downloadTranscriptBtn');
+const downloadSummaryBtn = $<HTMLButtonElement>('#downloadSummaryBtn');
+const statusEl = $<HTMLDivElement>('#status');
+const progressPanel = $<HTMLDivElement>('#progressPanel');
+const progressText = $<HTMLSpanElement>('#progressText');
+const progressPercent = $<HTMLElement>('#progressPercent');
+const progressFill = $<HTMLDivElement>('#progressFill');
+const slidesEl = $<HTMLDivElement>('#slides');
+const transcriptEl = $<HTMLTextAreaElement>('#transcript');
+const summaryEl = $<HTMLTextAreaElement>('#summary');
 
 let selectedFile: File | null = null;
 let slides: Slide[] = [];
 let pdfBlob: Blob | null = null;
-let transcriptText = '';
-let summaryText = '';
 
-videoInput.addEventListener('change', () => {
-  selectFile(videoInput.files?.[0] ?? null);
-});
-
-for (const eventName of ['dragenter', 'dragover']) {
-  dropzone.addEventListener(eventName, (event) => {
+videoInput.addEventListener('change', () => selectFile(videoInput.files?.[0] ?? null));
+for (const name of ['dragenter', 'dragover']) {
+  dropzone.addEventListener(name, (event) => {
     event.preventDefault();
     event.stopPropagation();
     dropzone.classList.add('is-dragover');
   });
 }
-
-for (const eventName of ['dragleave', 'dragend']) {
-  dropzone.addEventListener(eventName, (event) => {
+for (const name of ['dragleave', 'dragend']) {
+  dropzone.addEventListener(name, (event) => {
     event.preventDefault();
     event.stopPropagation();
     dropzone.classList.remove('is-dragover');
   });
 }
-
 dropzone.addEventListener('drop', (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -147,21 +115,22 @@ processBtn.addEventListener('click', async () => {
     setStatus('正在抽帧并去重...');
     slides = await extractUniqueSlides(selectedFile, settings, setStatus);
     renderSlides(slides);
+
     setProgress('正在生成 PDF', 58);
     pdfBlob = await makePdf(slides);
-    downloadPdfBtn.disabled = !pdfBlob;
+    downloadPdfBtn.disabled = false;
 
     setProgress('准备本地转写音频', 62);
     setStatus('正在本地转写音频...首次加载模型会比较慢。');
-    transcriptText = await transcribeLocally(selectedFile, setStatus);
+    const transcriptText = await transcribeLocally(selectedFile, setStatus);
     transcriptEl.value = transcriptText || '未生成逐字稿。可在这里手动粘贴文字后再生成 summary。';
     downloadTranscriptBtn.disabled = !transcriptText;
 
     const transcriptForSummary = transcriptEl.value.trim();
     if (settings.summaryApiUrl && transcriptForSummary) {
-      setProgress('正在登录后端并请求 DeepSeek summary', 94, true);
-      setStatus('正在登录后端并请求 DeepSeek summary...');
-      summaryText = await summarizeWithApi(settings, transcriptForSummary);
+      setProgress('正在请求 DeepSeek summary', 94, true);
+      setStatus('正在请求 DeepSeek summary...');
+      const summaryText = await summarizeWithApi(settings, transcriptForSummary);
       summaryEl.value = summaryText;
       downloadSummaryBtn.disabled = !summaryText;
     } else {
@@ -179,33 +148,24 @@ processBtn.addEventListener('click', async () => {
   }
 });
 
-downloadPdfBtn.addEventListener('click', () => {
-  if (pdfBlob) downloadBlob(pdfBlob, 'vid2deck-slides.pdf');
-});
-
-downloadTranscriptBtn.addEventListener('click', () => {
-  downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), 'vid2deck-transcript.txt');
-});
-
-downloadSummaryBtn.addEventListener('click', () => {
-  downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), 'vid2deck-summary.md');
-});
+downloadPdfBtn.addEventListener('click', () => { if (pdfBlob) downloadBlob(pdfBlob, 'vid2deck-slides.pdf'); });
+downloadTranscriptBtn.addEventListener('click', () => downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), 'vid2deck-transcript.txt'));
+downloadSummaryBtn.addEventListener('click', () => downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), 'vid2deck-summary.md'));
 
 function selectFile(file: File | null): void {
   selectedFile = file;
-  processBtn.disabled = !selectedFile;
-  fileLabel.textContent = selectedFile ? `已选择：${selectedFile.name}` : '选择或拖入视频文件';
-  statusEl.textContent = selectedFile ? `已选择：${selectedFile.name}` : '等待上传视频。';
+  processBtn.disabled = !file;
+  fileLabel.textContent = file ? `已选择：${file.name}` : '选择或拖入视频文件';
+  setStatus(file ? `已选择：${file.name}` : '等待上传视频。');
 }
 
 function readSettings(): Settings {
   return {
-    sampleEvery: Math.max(0.5, Number((document.querySelector<HTMLInputElement>('#sampleEvery')!).value || 2)),
-    duplicateThreshold: Number((document.querySelector<HTMLInputElement>('#duplicateThreshold')!).value || 8),
-    minGap: Math.max(0, Number((document.querySelector<HTMLInputElement>('#minGap')!).value || 3)),
-    summaryApiUrl: (document.querySelector<HTMLInputElement>('#summaryApiUrl')!).value.trim(),
-    authUsername: (document.querySelector<HTMLInputElement>('#authUsername')!).value.trim() || 'admin',
-    authCode: (document.querySelector<HTMLInputElement>('#authCode')!).value
+    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 2)),
+    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 8),
+    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
+    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim(),
+    authCode: $<HTMLInputElement>('#authCode').value
   };
 }
 
@@ -219,9 +179,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
 
   try {
     await waitForEvent(video, 'loadedmetadata');
-    if (!Number.isFinite(video.duration) || video.duration <= 0) {
-      throw new Error('无法读取视频时长。请尝试转成 H.264 mp4 或 WebM 后再上传。');
-    }
+    if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('无法读取视频时长。请尝试转成 H.264 mp4 或 WebM 后再上传。');
 
     const width = video.videoWidth || 1280;
     const height = video.videoHeight || 720;
@@ -232,8 +190,6 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
     canvas.height = height;
 
     const kept: Slide[] = [];
-    let id = 1;
-
     for (let t = 0; t < video.duration; t += settings.sampleEvery) {
       const framePercent = Math.min(55, Math.round((t / video.duration) * 55));
       setProgress(`抽帧去重：${formatTime(t)} / ${formatTime(video.duration)}`, Math.max(3, framePercent));
@@ -241,13 +197,8 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
       await seekVideo(video, Math.min(t, video.duration - 0.05));
       ctx.drawImage(video, 0, 0, width, height);
       const hash = averageHash(ctx, width, height);
-      const nearDuplicate = kept.some((slide) => {
-        const tooCloseInTime = Math.abs(slide.time - t) < settings.minGap;
-        return tooCloseInTime || hammingDistance(slide.hash, hash) <= settings.duplicateThreshold;
-      });
-      if (!nearDuplicate) {
-        kept.push({ id: id++, time: t, hash, dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height });
-      }
+      const nearDuplicate = kept.some((slide) => Math.abs(slide.time - t) < settings.minGap || hammingDistance(slide.hash, hash) <= settings.duplicateThreshold);
+      if (!nearDuplicate) kept.push({ id: kept.length + 1, time: t, hash, dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height });
       await yieldToBrowser();
     }
 
@@ -288,13 +239,13 @@ async function makePdf(items: Slide[]): Promise<Blob> {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  items.forEach((slide, index) => {
+  for (const [index, slide] of items.entries()) {
     if (index > 0) pdf.addPage();
     const ratio = Math.min(pageWidth / slide.width, pageHeight / slide.height);
     const drawWidth = slide.width * ratio;
     const drawHeight = slide.height * ratio;
     pdf.addImage(slide.dataUrl, 'JPEG', (pageWidth - drawWidth) / 2, (pageHeight - drawHeight) / 2, drawWidth, drawHeight);
-  });
+  }
   return pdf.output('blob');
 }
 
@@ -304,26 +255,20 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
     onProgress('加载本地 ASR 模型：Xenova/whisper-tiny...');
     setProgress('加载本地转写模型', 64, true);
     const mod = await import('@xenova/transformers');
-    const pipelineFactory = (mod as unknown as { pipeline: (task: string, model?: string, options?: Record<string, unknown>) => Promise<TransformerPipeline> }).pipeline;
+    const pipelineFactory = (mod as unknown as { pipeline: (task: string, model?: string, options?: Record<string, unknown>) => Promise<Pipeline> }).pipeline;
     const transcriber = await pipelineFactory('automatic-speech-recognition', 'Xenova/whisper-tiny', {
-      progress_callback: (progress: { status?: string; file?: string; progress?: number }) => {
-        if (progress.status) {
-          const pct = typeof progress.progress === 'number' ? Math.round(progress.progress) : undefined;
-          const overall = typeof pct === 'number' ? 64 + Math.round(pct * 0.18) : undefined;
-          setProgress(`加载转写模型：${progress.status}`, overall, typeof overall !== 'number');
-          onProgress(`模型加载：${progress.status}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
-        }
+      progress_callback: (progress: { status?: string; progress?: number }) => {
+        if (!progress.status) return;
+        const pct = typeof progress.progress === 'number' ? Math.round(progress.progress) : undefined;
+        const overall = typeof pct === 'number' ? 64 + Math.round(pct * 0.18) : undefined;
+        setProgress(`加载转写模型：${progress.status}`, overall, typeof overall !== 'number');
+        onProgress(`模型加载：${progress.status}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
       }
     });
 
     onProgress('正在转写音频...');
     setProgress('正在转写音频，长视频可能需要几分钟', 85, true);
-    const result = await transcriber(objectUrl, {
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      language: 'chinese',
-      task: 'transcribe'
-    }) as { text?: string } | Array<{ text?: string }>;
+    const result = await transcriber(objectUrl, { chunk_length_s: 30, stride_length_s: 5, language: 'chinese', task: 'transcribe' }) as { text?: string } | Array<{ text?: string }>;
     setProgress('转写完成', 92);
     return Array.isArray(result) ? result.map((item) => item.text ?? '').join('\n').trim() : (result.text ?? '').trim();
   } catch (error) {
@@ -336,35 +281,14 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
 
 async function summarizeWithApi(settings: Settings, transcript: string): Promise<string> {
   if (!settings.authCode) throw new Error('请先填写访问码，也就是 Vercel 环境变量 AUTH_CODE。');
-  const baseUrl = settings.summaryApiUrl.replace(/\/api\/summarize\/?$/, '');
-  const token = await loginToBackend(baseUrl, settings.authUsername, settings.authCode);
-  const response = await fetch(`${baseUrl}/api/summarize`, {
+  const response = await fetch(settings.summaryApiUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
+    headers: { 'Content-Type': 'application/json', 'X-Access-Code': settings.authCode },
     body: JSON.stringify({ transcript })
   });
   if (!response.ok) throw new Error(`Summary API 请求失败：${response.status} ${await response.text()}`);
   const data = await response.json() as { summary?: string };
   return data.summary ?? '';
-}
-
-async function loginToBackend(baseUrl: string, username: string, accessCode: string): Promise<string> {
-  const cacheKey = `vid2deck-token:${baseUrl}:${username}`;
-  const cached = sessionStorage.getItem(cacheKey);
-  if (cached) return cached;
-  const response = await fetch(`${baseUrl}/api/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, access_code: accessCode })
-  });
-  if (!response.ok) throw new Error(`登录后端失败：${response.status} ${await response.text()}`);
-  const data = await response.json() as { token?: string };
-  if (!data.token) throw new Error('登录后端失败：没有返回 token。');
-  sessionStorage.setItem(cacheKey, data.token);
-  return data.token;
 }
 
 function renderSlides(items: Slide[]): void {
@@ -379,8 +303,6 @@ function renderSlides(items: Slide[]): void {
 function resetOutputs(): void {
   slides = [];
   pdfBlob = null;
-  transcriptText = '';
-  summaryText = '';
   slidesEl.innerHTML = '';
   transcriptEl.value = '';
   summaryEl.value = '';
@@ -395,9 +317,7 @@ function setBusy(isBusy: boolean): void {
   videoInput.disabled = isBusy;
 }
 
-function setStatus(message: string): void {
-  statusEl.textContent = message;
-}
+function setStatus(message: string): void { statusEl.textContent = message; }
 
 function setProgress(label: string, percent?: number, indeterminate = false): void {
   progressPanel.hidden = false;
@@ -423,12 +343,12 @@ function hideProgress(): void {
 
 function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onSuccess = () => { cleanup(); resolve(); };
-    const onError = () => { cleanup(); reject(new Error('视频读取失败。浏览器可能不支持该编码。')); };
     const cleanup = () => {
       target.removeEventListener(eventName, onSuccess);
       target.removeEventListener('error', onError);
     };
+    const onSuccess = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error('视频读取失败。浏览器可能不支持该编码。')); };
     target.addEventListener(eventName, onSuccess, { once: true });
     target.addEventListener('error', onError, { once: true });
   });
@@ -436,12 +356,12 @@ function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
 
 function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onSeeked = () => { cleanup(); resolve(); };
-    const onError = () => { cleanup(); reject(new Error('视频 seek 失败。')); };
     const cleanup = () => {
       video.removeEventListener('seeked', onSeeked);
       video.removeEventListener('error', onError);
     };
+    const onSeeked = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error('视频 seek 失败。')); };
     video.addEventListener('seeked', onSeeked, { once: true });
     video.addEventListener('error', onError, { once: true });
     video.currentTime = time;
@@ -465,6 +385,4 @@ function formatTime(seconds: number): string {
   return `${minutes}:${secs}`;
 }
 
-function yieldToBrowser(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
+function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
