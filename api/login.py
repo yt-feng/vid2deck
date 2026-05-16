@@ -15,10 +15,10 @@ TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 
 
 def signing_secret() -> bytes:
-    secret = os.getenv("AUTH_SECRET") or os.getenv("DEEPSEEK_API_KEY") or AUTH_CODE
+    secret = os.getenv("AUTH_SECRET") or AUTH_CODE
     if not secret:
-        raise RuntimeError("AUTH_SECRET is not configured")
-    return secret.encode("utf-8")
+        raise RuntimeError("AUTH_SECRET or AUTH_CODE is not configured")
+    return secret.strip().encode("utf-8")
 
 
 def create_token(username: str) -> str:
