@@ -15,22 +15,21 @@ type Settings = {
   duplicateThreshold: number;
   minGap: number;
   summaryApiUrl: string;
+  authUsername: string;
+  authCode: string;
 };
 
 type TransformerPipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
 
 const app = document.querySelector<HTMLDivElement>('#app');
-
-if (!app) {
-  throw new Error('Missing #app');
-}
+if (!app) throw new Error('Missing #app');
 
 app.innerHTML = `
   <section class="hero">
     <div>
       <p class="eyebrow">Vid2Deck</p>
       <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-      <p class="subhead">视频抽帧、相似页去重和 PDF 导出默认都在浏览器本地完成；summary 通过你自己的后端安全读取 DEEPSEEK_API_KEY。</p>
+      <p class="subhead">视频抽帧、相似页去重和 PDF 导出默认都在浏览器本地完成；summary 通过 Vercel 后端安全读取 DEEPSEEK_API_KEY。</p>
     </div>
   </section>
 
@@ -38,15 +37,19 @@ app.innerHTML = `
     <label class="dropzone" id="dropzone" for="videoInput">
       <input id="videoInput" type="file" accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
       <span id="fileLabel">选择或拖入视频文件</span>
-      <small>拖到这里松手即可上传；浏览器能解码的格式可直接处理，特殊编码建议走后端 ffmpeg。</small>
+      <small>拖到这里松手即可上传；视频处理仍然在浏览器本地完成。</small>
     </label>
 
     <div class="grid">
       <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="2" /></label>
       <label>去重阈值（越大越宽松）<input id="duplicateThreshold" type="number" min="0" max="64" value="8" /></label>
       <label>保留页最小间隔（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
-      <label>Summary API URL<input id="summaryApiUrl" type="url" placeholder="https://your-api.example.com/api/summarize" /></label>
+      <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize" /></label>
+      <label>登录账号<input id="authUsername" type="text" value="admin" autocomplete="username" /></label>
+      <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
     </div>
+
+    <div class="hint">Summary 会先调用 /api/login 获取 token，再调用 /api/summarize；DeepSeek key 只存在 Vercel 环境变量里，不会暴露给前端。</div>
 
     <div class="actions">
       <button id="processBtn" disabled>开始生成</button>
@@ -156,13 +159,13 @@ processBtn.addEventListener('click', async () => {
 
     const transcriptForSummary = transcriptEl.value.trim();
     if (settings.summaryApiUrl && transcriptForSummary) {
-      setProgress('正在请求 DeepSeek summary API', 94, true);
-      setStatus('正在请求 DeepSeek summary API...');
-      summaryText = await summarizeWithApi(settings.summaryApiUrl, transcriptForSummary);
+      setProgress('正在登录后端并请求 DeepSeek summary', 94, true);
+      setStatus('正在登录后端并请求 DeepSeek summary...');
+      summaryText = await summarizeWithApi(settings, transcriptForSummary);
       summaryEl.value = summaryText;
       downloadSummaryBtn.disabled = !summaryText;
     } else {
-      summaryEl.value = '未配置 Summary API URL。部署 server/ 里的后端后，把 /api/summarize 地址填到上方即可使用 DeepSeek 生成 summary。';
+      summaryEl.value = '未配置 Summary API URL，或没有逐字稿可总结。';
     }
 
     setProgress('全部完成', 100);
@@ -200,7 +203,9 @@ function readSettings(): Settings {
     sampleEvery: Math.max(0.5, Number((document.querySelector<HTMLInputElement>('#sampleEvery')!).value || 2)),
     duplicateThreshold: Number((document.querySelector<HTMLInputElement>('#duplicateThreshold')!).value || 8),
     minGap: Math.max(0, Number((document.querySelector<HTMLInputElement>('#minGap')!).value || 3)),
-    summaryApiUrl: (document.querySelector<HTMLInputElement>('#summaryApiUrl')!).value.trim()
+    summaryApiUrl: (document.querySelector<HTMLInputElement>('#summaryApiUrl')!).value.trim(),
+    authUsername: (document.querySelector<HTMLInputElement>('#authUsername')!).value.trim() || 'admin',
+    authCode: (document.querySelector<HTMLInputElement>('#authCode')!).value
   };
 }
 
@@ -241,14 +246,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         return tooCloseInTime || hammingDistance(slide.hash, hash) <= settings.duplicateThreshold;
       });
       if (!nearDuplicate) {
-        kept.push({
-          id: id++,
-          time: t,
-          hash,
-          dataUrl: canvas.toDataURL('image/jpeg', 0.9),
-          width,
-          height
-        });
+        kept.push({ id: id++, time: t, hash, dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height });
       }
       await yieldToBrowser();
     }
@@ -270,9 +268,7 @@ function averageHash(ctx: CanvasRenderingContext2D, width: number, height: numbe
   tctx.drawImage(ctx.canvas, 0, 0, width, height, 0, 0, size, size);
   const data = tctx.getImageData(0, 0, size, size).data;
   const grays: number[] = [];
-  for (let i = 0; i < data.length; i += 4) {
-    grays.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-  }
+  for (let i = 0; i < data.length; i += 4) grays.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
   const avg = grays.reduce((sum, value) => sum + value, 0) / grays.length;
   return grays.reduce((hash, value, index) => value >= avg ? hash | (1n << BigInt(index)) : hash, 0n);
 }
@@ -292,17 +288,13 @@ async function makePdf(items: Slide[]): Promise<Blob> {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-
   items.forEach((slide, index) => {
     if (index > 0) pdf.addPage();
     const ratio = Math.min(pageWidth / slide.width, pageHeight / slide.height);
     const drawWidth = slide.width * ratio;
     const drawHeight = slide.height * ratio;
-    const x = (pageWidth - drawWidth) / 2;
-    const y = (pageHeight - drawHeight) / 2;
-    pdf.addImage(slide.dataUrl, 'JPEG', x, y, drawWidth, drawHeight);
+    pdf.addImage(slide.dataUrl, 'JPEG', (pageWidth - drawWidth) / 2, (pageHeight - drawHeight) / 2, drawWidth, drawHeight);
   });
-
   return pdf.output('blob');
 }
 
@@ -319,8 +311,7 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
           const pct = typeof progress.progress === 'number' ? Math.round(progress.progress) : undefined;
           const overall = typeof pct === 'number' ? 64 + Math.round(pct * 0.18) : undefined;
           setProgress(`加载转写模型：${progress.status}`, overall, typeof overall !== 'number');
-          const pctText = typeof pct === 'number' ? ` ${pct}%` : '';
-          onProgress(`模型加载：${progress.status}${pctText}`);
+          onProgress(`模型加载：${progress.status}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
         }
       }
     });
@@ -333,12 +324,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
       language: 'chinese',
       task: 'transcribe'
     }) as { text?: string } | Array<{ text?: string }>;
-
     setProgress('转写完成', 92);
-    if (Array.isArray(result)) {
-      return result.map((item) => item.text ?? '').join('\n').trim();
-    }
-    return (result.text ?? '').trim();
+    return Array.isArray(result) ? result.map((item) => item.text ?? '').join('\n').trim() : (result.text ?? '').trim();
   } catch (error) {
     console.warn(error);
     return '';
@@ -347,17 +334,37 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
   }
 }
 
-async function summarizeWithApi(apiUrl: string, transcript: string): Promise<string> {
-  const response = await fetch(apiUrl, {
+async function summarizeWithApi(settings: Settings, transcript: string): Promise<string> {
+  if (!settings.authCode) throw new Error('请先填写访问码，也就是 Vercel 环境变量 AUTH_CODE。');
+  const baseUrl = settings.summaryApiUrl.replace(/\/api\/summarize\/?$/, '');
+  const token = await loginToBackend(baseUrl, settings.authUsername, settings.authCode);
+  const response = await fetch(`${baseUrl}/api/summarize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
     body: JSON.stringify({ transcript })
   });
-  if (!response.ok) {
-    throw new Error(`Summary API 请求失败：${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Summary API 请求失败：${response.status} ${await response.text()}`);
   const data = await response.json() as { summary?: string };
   return data.summary ?? '';
+}
+
+async function loginToBackend(baseUrl: string, username: string, accessCode: string): Promise<string> {
+  const cacheKey = `vid2deck-token:${baseUrl}:${username}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) return cached;
+  const response = await fetch(`${baseUrl}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, access_code: accessCode })
+  });
+  if (!response.ok) throw new Error(`登录后端失败：${response.status} ${await response.text()}`);
+  const data = await response.json() as { token?: string };
+  if (!data.token) throw new Error('登录后端失败：没有返回 token。');
+  sessionStorage.setItem(cacheKey, data.token);
+  return data.token;
 }
 
 function renderSlides(items: Slide[]): void {
@@ -396,7 +403,6 @@ function setProgress(label: string, percent?: number, indeterminate = false): vo
   progressPanel.hidden = false;
   progressText.textContent = label;
   progressFill.classList.toggle('is-indeterminate', indeterminate);
-
   if (typeof percent === 'number' && Number.isFinite(percent)) {
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
     progressFill.style.width = `${clamped}%`;
@@ -417,14 +423,8 @@ function hideProgress(): void {
 
 function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onSuccess = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error('视频读取失败。浏览器可能不支持该编码。'));
-    };
+    const onSuccess = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error('视频读取失败。浏览器可能不支持该编码。')); };
     const cleanup = () => {
       target.removeEventListener(eventName, onSuccess);
       target.removeEventListener('error', onError);
@@ -436,14 +436,8 @@ function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
 
 function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onSeeked = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error('视频 seek 失败。'));
-    };
+    const onSeeked = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error('视频 seek 失败。')); };
     const cleanup = () => {
       video.removeEventListener('seeked', onSeeked);
       video.removeEventListener('error', onError);
