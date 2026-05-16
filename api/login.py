@@ -30,6 +30,9 @@ def create_token(username: str) -> str:
 
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.send_json({"ok": True, "route": "/api/login", "method": "POST only"})
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_cors_headers()
@@ -62,7 +65,7 @@ class handler(BaseHTTPRequestHandler):
 
     def send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", os.getenv("CORS_ORIGINS", "*"))
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
