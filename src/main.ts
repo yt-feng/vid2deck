@@ -3,7 +3,11 @@ import './style.css';
 
 type Slide = { id: number; time: number; hash: bigint; dataUrl: string; width: number; height: number };
 type Settings = { sampleEvery: number; duplicateThreshold: number; minGap: number; summaryApiUrl: string; authCode: string };
-type Pipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
+type WorkerResult =
+  | { type: 'ready' }
+  | { type: 'model-progress'; status: string; progress?: number }
+  | { type: 'result'; id: number; text: string }
+  | { type: 'error'; id?: number; error: string };
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -32,7 +36,7 @@ app.innerHTML = `
       <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
     </div>
 
-    <div class="hint">Summary 会直接调用 /api/summarize-simple，并通过 X-Access-Code 校验访问码；DeepSeek key 只存在 Vercel 环境变量里，不会暴露给前端。</div>
+    <div class="hint">逐字稿会自动分块、本地识别并流式输出；中文、英文和中英混杂会自动判断。Summary 会调用 /api/summarize-simple，并通过 X-Access-Code 校验访问码。</div>
 
     <div class="actions">
       <button id="processBtn" disabled>开始生成</button>
@@ -51,7 +55,7 @@ app.innerHTML = `
 
   <section class="results">
     <article><h2>去重后的页面</h2><div id="slides" class="slides"></div></article>
-    <article><h2>逐字稿</h2><textarea id="transcript" placeholder="转写结果会出现在这里，也可以手动粘贴/编辑后再生成 summary。"></textarea></article>
+    <article><h2>逐字稿</h2><textarea id="transcript" placeholder="转写结果会分段出现在这里。"></textarea></article>
     <article><h2>Summary</h2><textarea id="summary" placeholder="summary 会出现在这里。"></textarea></article>
   </section>
 `;
@@ -120,10 +124,9 @@ processBtn.addEventListener('click', async () => {
     pdfBlob = await makePdf(slides);
     downloadPdfBtn.disabled = false;
 
-    setProgress('准备本地转写音频', 62);
-    setStatus('正在本地转写音频...首次加载模型会比较慢。');
+    setProgress('准备本地分块转写音频', 62);
+    setStatus('正在本地转写音频，会按 30 秒一段流式输出。');
     const transcriptText = await transcribeLocally(selectedFile, setStatus);
-    transcriptEl.value = transcriptText || '未生成逐字稿。可在这里手动粘贴文字后再生成 summary。';
     downloadTranscriptBtn.disabled = !transcriptText;
 
     const transcriptForSummary = transcriptEl.value.trim();
@@ -250,33 +253,165 @@ async function makePdf(items: Slide[]): Promise<Blob> {
 }
 
 async function transcribeLocally(file: File, onProgress: (message: string) => void): Promise<string> {
-  const objectUrl = URL.createObjectURL(file);
+  transcriptEl.value = '';
+  const worker = new Worker(new URL('./transcribeWorker.ts', import.meta.url), { type: 'module' });
+
   try {
+    const audio = await decodeToMono16k(file, onProgress);
+    const chunkSeconds = 30;
+    const sampleRate = 16000;
+    const chunkSize = chunkSeconds * sampleRate;
+    const totalChunks = Math.ceil(audio.length / chunkSize);
+    let lastText = '';
+
     onProgress('加载本地 ASR 模型：Xenova/whisper-tiny...');
     setProgress('加载本地转写模型', 64, true);
-    const mod = await import('@xenova/transformers');
-    const pipelineFactory = (mod as unknown as { pipeline: (task: string, model?: string, options?: Record<string, unknown>) => Promise<Pipeline> }).pipeline;
-    const transcriber = await pipelineFactory('automatic-speech-recognition', 'Xenova/whisper-tiny', {
-      progress_callback: (progress: { status?: string; progress?: number }) => {
-        if (!progress.status) return;
-        const pct = typeof progress.progress === 'number' ? Math.round(progress.progress) : undefined;
-        const overall = typeof pct === 'number' ? 64 + Math.round(pct * 0.18) : undefined;
-        setProgress(`加载转写模型：${progress.status}`, overall, typeof overall !== 'number');
-        onProgress(`模型加载：${progress.status}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
-      }
-    });
+    await loadTranscriptionWorker(worker);
 
-    onProgress('正在转写音频...');
-    setProgress('正在转写音频，长视频可能需要几分钟', 85, true);
-    const result = await transcriber(objectUrl, { chunk_length_s: 30, stride_length_s: 5, language: 'chinese', task: 'transcribe' }) as { text?: string } | Array<{ text?: string }>;
+    for (let index = 0; index < totalChunks; index += 1) {
+      const start = index * chunkSize;
+      const end = Math.min(audio.length, start + chunkSize);
+      const chunk = audio.slice(start, end);
+      const startSec = start / sampleRate;
+      const endSec = end / sampleRate;
+      const basePercent = 66 + Math.round((index / Math.max(totalChunks, 1)) * 24);
+
+      setProgress(`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`, basePercent, true);
+      onProgress(`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`);
+
+      if (rms(chunk) < 0.0035) {
+        appendTranscript(`[${formatClock(startSec)} - ${formatClock(endSec)}] （静音或无明显语音，已跳过）`);
+        await yieldToBrowser();
+        continue;
+      }
+
+      const rawText = await transcribeChunk(worker, index, chunk);
+      const cleanedText = cleanTranscriptText(rawText);
+      if (cleanedText && !isNearDuplicate(cleanedText, lastText)) {
+        appendTranscript(`[${formatClock(startSec)} - ${formatClock(endSec)}] ${cleanedText}`);
+        lastText = cleanedText;
+      }
+      await yieldToBrowser();
+    }
+
     setProgress('转写完成', 92);
-    return Array.isArray(result) ? result.map((item) => item.text ?? '').join('\n').trim() : (result.text ?? '').trim();
+    return transcriptEl.value.trim();
   } catch (error) {
     console.warn(error);
-    return '';
+    return transcriptEl.value.trim();
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    worker.terminate();
   }
+}
+
+async function decodeToMono16k(file: File, onProgress: (message: string) => void): Promise<Float32Array> {
+  onProgress('正在解码音频...');
+  setProgress('正在解码音频', 60, true);
+  const audioContext = new AudioContext();
+  const audioBuffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+  await audioContext.close().catch(() => undefined);
+
+  const channelCount = audioBuffer.numberOfChannels;
+  const mono = new Float32Array(audioBuffer.length);
+  for (let channel = 0; channel < channelCount; channel += 1) {
+    const data = audioBuffer.getChannelData(channel);
+    for (let i = 0; i < data.length; i += 1) mono[i] += data[i] / channelCount;
+  }
+
+  if (audioBuffer.sampleRate === 16000) return mono;
+
+  onProgress('正在重采样音频到 16kHz...');
+  setProgress('正在重采样音频到 16kHz', 62, true);
+  const targetLength = Math.ceil(mono.length * 16000 / audioBuffer.sampleRate);
+  const offline = new OfflineAudioContext(1, targetLength, 16000);
+  const sourceBuffer = offline.createBuffer(1, mono.length, audioBuffer.sampleRate);
+  sourceBuffer.copyToChannel(mono, 0);
+  const source = offline.createBufferSource();
+  source.buffer = sourceBuffer;
+  source.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0).slice();
+}
+
+function loadTranscriptionWorker(worker: Worker): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onMessage = (event: MessageEvent<WorkerResult>) => {
+      if (event.data.type === 'ready') {
+        cleanup();
+        resolve();
+      } else if (event.data.type === 'error') {
+        cleanup();
+        reject(new Error(event.data.error));
+      } else if (event.data.type === 'model-progress') {
+        const pct = typeof event.data.progress === 'number' ? Math.round(event.data.progress) : undefined;
+        const overall = typeof pct === 'number' ? 64 + Math.round(pct * 0.02) : undefined;
+        setProgress(`加载转写模型：${event.data.status}`, overall, typeof overall !== 'number');
+      }
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('转写 Worker 加载失败。'));
+    };
+    const cleanup = () => {
+      worker.removeEventListener('message', onMessage as EventListener);
+      worker.removeEventListener('error', onError);
+    };
+    worker.addEventListener('message', onMessage as EventListener);
+    worker.addEventListener('error', onError);
+    worker.postMessage({ type: 'load' });
+  });
+}
+
+function transcribeChunk(worker: Worker, id: number, audio: Float32Array): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const onMessage = (event: MessageEvent<WorkerResult>) => {
+      if (event.data.type === 'result' && event.data.id === id) {
+        cleanup();
+        resolve(event.data.text);
+      } else if (event.data.type === 'error' && event.data.id === id) {
+        cleanup();
+        reject(new Error(event.data.error));
+      }
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('转写 Worker 运行失败。'));
+    };
+    const cleanup = () => {
+      worker.removeEventListener('message', onMessage as EventListener);
+      worker.removeEventListener('error', onError);
+    };
+    worker.addEventListener('message', onMessage as EventListener);
+    worker.addEventListener('error', onError);
+    worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer as ArrayBuffer]);
+  });
+}
+
+function appendTranscript(line: string): void {
+  transcriptEl.value = `${transcriptEl.value}${transcriptEl.value ? '\n' : ''}${line}`;
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function rms(audio: Float32Array): number {
+  let sum = 0;
+  for (const value of audio) sum += value * value;
+  return Math.sqrt(sum / Math.max(audio.length, 1));
+}
+
+function cleanTranscriptText(text: string): string {
+  return text
+    .replace(/([\s\S]{2,24})\1{2,}/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isNearDuplicate(current: string, previous: string): boolean {
+  if (!current || !previous) return false;
+  if (current === previous) return true;
+  if (current.length > 12 && previous.includes(current)) return true;
+  if (previous.length > 12 && current.includes(previous)) return true;
+  return false;
 }
 
 async function summarizeWithApi(settings: Settings, transcript: string): Promise<string> {
@@ -383,6 +518,14 @@ function formatTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
   return `${minutes}:${secs}`;
+}
+
+function formatClock(seconds: number): string {
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600).toString().padStart(2, '0');
+  const minutes = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+  const secs = (total % 60).toString().padStart(2, '0');
+  return `${hours}:${minutes}:${secs}`;
 }
 
 function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
