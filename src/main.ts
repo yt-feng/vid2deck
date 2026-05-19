@@ -9,6 +9,8 @@ type WorkerResult =
   | { type: 'result'; id: number; text: string }
   | { type: 'error'; id?: number; error: string };
 
+const VISUAL_HASH_BITS = 320;
+
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
 
@@ -29,14 +31,14 @@ app.innerHTML = `
     </label>
 
     <div class="grid">
-      <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="2" /></label>
-      <label>去重阈值（越大越宽松）<input id="duplicateThreshold" type="number" min="0" max="64" value="8" /></label>
-      <label>保留页最小间隔（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
+      <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
+      <label>去重阈值（越大越容易合并）<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
+      <label>同页合并窗口（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
       <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize-simple" /></label>
       <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
     </div>
 
-    <div class="hint">逐字稿会自动分块、本地识别并流式输出；中文、英文和中英混杂会自动判断。Summary 会调用 /api/summarize-simple，并通过 X-Access-Code 校验访问码。</div>
+    <div class="hint">抽帧现在使用保守去重：默认更倾向于保留新画面，避免漏掉关键 slide；逐字稿会自动分块、本地识别并流式输出。</div>
 
     <div class="actions">
       <button id="processBtn" disabled>开始生成</button>
@@ -116,7 +118,7 @@ processBtn.addEventListener('click', async () => {
   try {
     setBusy(true);
     setProgress('开始处理视频', 2);
-    setStatus('正在抽帧并去重...');
+    setStatus('正在抽帧并保守去重...');
     slides = await extractUniqueSlides(selectedFile, settings, setStatus);
     renderSlides(slides);
 
@@ -164,8 +166,8 @@ function selectFile(file: File | null): void {
 
 function readSettings(): Settings {
   return {
-    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 2)),
-    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 8),
+    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
+    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
     minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
     summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim(),
     authCode: $<HTMLInputElement>('#authCode').value
@@ -195,12 +197,12 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
     const kept: Slide[] = [];
     for (let t = 0; t < video.duration; t += settings.sampleEvery) {
       const framePercent = Math.min(55, Math.round((t / video.duration) * 55));
-      setProgress(`抽帧去重：${formatTime(t)} / ${formatTime(video.duration)}`, Math.max(3, framePercent));
+      setProgress(`抽帧保守去重：${formatTime(t)} / ${formatTime(video.duration)}`, Math.max(3, framePercent));
       onProgress(`抽帧中：${formatTime(t)} / ${formatTime(video.duration)}，已保留 ${kept.length} 张`);
       await seekVideo(video, Math.min(t, video.duration - 0.05));
       ctx.drawImage(video, 0, 0, width, height);
-      const hash = averageHash(ctx, width, height);
-      const nearDuplicate = kept.some((slide) => Math.abs(slide.time - t) < settings.minGap || hammingDistance(slide.hash, hash) <= settings.duplicateThreshold);
+      const hash = visualHash(ctx, width, height);
+      const nearDuplicate = kept.some((slide) => isDuplicateSlide(slide, hash, t, settings));
       if (!nearDuplicate) kept.push({ id: kept.length + 1, time: t, hash, dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height });
       await yieldToBrowser();
     }
@@ -212,19 +214,55 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
   }
 }
 
-function averageHash(ctx: CanvasRenderingContext2D, width: number, height: number): bigint {
-  const size = 8;
-  const tmp = document.createElement('canvas');
-  const tctx = tmp.getContext('2d', { willReadFrequently: true });
-  if (!tctx) return 0n;
-  tmp.width = size;
-  tmp.height = size;
-  tctx.drawImage(ctx.canvas, 0, 0, width, height, 0, 0, size, size);
-  const data = tctx.getImageData(0, 0, size, size).data;
-  const grays: number[] = [];
-  for (let i = 0; i < data.length; i += 4) grays.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+function isDuplicateSlide(slide: Slide, currentHash: bigint, currentTime: number, settings: Settings): boolean {
+  const distancePercent = normalizedHashDistance(slide.hash, currentHash);
+  const closeInTime = Math.abs(slide.time - currentTime) < settings.minGap;
+  const threshold = closeInTime ? settings.duplicateThreshold * 1.15 : settings.duplicateThreshold;
+  return distancePercent <= threshold;
+}
+
+function visualHash(ctx: CanvasRenderingContext2D, width: number, height: number): bigint {
+  const brightnessHash = averageHashBits(ctx, width, height, 8);
+  const edgeHash = differenceHashBits(ctx, width, height, 17, 16);
+  return brightnessHash | (edgeHash << 64n);
+}
+
+function averageHashBits(ctx: CanvasRenderingContext2D, width: number, height: number, size: number): bigint {
+  const grays = grayscaleThumbnail(ctx, width, height, size, size);
   const avg = grays.reduce((sum, value) => sum + value, 0) / grays.length;
   return grays.reduce((hash, value, index) => value >= avg ? hash | (1n << BigInt(index)) : hash, 0n);
+}
+
+function differenceHashBits(ctx: CanvasRenderingContext2D, width: number, height: number, hashWidth: number, hashHeight: number): bigint {
+  const grays = grayscaleThumbnail(ctx, width, height, hashWidth, hashHeight);
+  let hash = 0n;
+  let bit = 0n;
+  for (let y = 0; y < hashHeight; y += 1) {
+    for (let x = 0; x < hashWidth - 1; x += 1) {
+      const left = grays[y * hashWidth + x];
+      const right = grays[y * hashWidth + x + 1];
+      if (left >= right) hash |= 1n << bit;
+      bit += 1n;
+    }
+  }
+  return hash;
+}
+
+function grayscaleThumbnail(ctx: CanvasRenderingContext2D, width: number, height: number, targetWidth: number, targetHeight: number): number[] {
+  const tmp = document.createElement('canvas');
+  const tctx = tmp.getContext('2d', { willReadFrequently: true });
+  if (!tctx) return [];
+  tmp.width = targetWidth;
+  tmp.height = targetHeight;
+  tctx.drawImage(ctx.canvas, 0, 0, width, height, 0, 0, targetWidth, targetHeight);
+  const data = tctx.getImageData(0, 0, targetWidth, targetHeight).data;
+  const grays: number[] = [];
+  for (let i = 0; i < data.length; i += 4) grays.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+  return grays;
+}
+
+function normalizedHashDistance(a: bigint, b: bigint): number {
+  return (hammingDistance(a, b) / VISUAL_HASH_BITS) * 100;
 }
 
 function hammingDistance(a: bigint, b: bigint): number {
