@@ -81,6 +81,11 @@ h1 {
   text-align: center;
 }
 
+.dropzone.is-dragover {
+  border-color: #7c3aed;
+  background: #f5f3ff;
+}
+
 .dropzone input {
   display: none;
 }
@@ -129,6 +134,12 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
 }
 
+.hint {
+  margin-top: 14px;
+  color: #475569;
+  line-height: 1.6;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -155,6 +166,44 @@ button:hover:not(:disabled) {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
+}
+
+.progress-panel {
+  margin-top: 18px;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-weight: 800;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 12px;
+  margin-top: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #111827, #7c3aed);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.progress-fill.is-indeterminate {
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
 }
 
 .status {
@@ -190,6 +239,7 @@ h2 {
 }
 
 figure {
+  position: relative;
   margin: 0;
   overflow: hidden;
   background: #0f172a;
@@ -209,6 +259,35 @@ figcaption {
   color: #e2e8f0;
   font-size: 0.86rem;
   font-weight: 700;
+}
+
+.slide-select {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+  padding: 7px 10px;
+  color: white;
+  background: rgba(15, 23, 42, 0.82);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(8px);
+}
+
+.slide-select input {
+  width: auto;
+  margin: 0;
+  accent-color: #7c3aed;
+}
+
+.slide-select span {
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 textarea {
