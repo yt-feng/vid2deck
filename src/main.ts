@@ -4,6 +4,7 @@ import './style.css';
 type Slide = { id: number; time: number; hash: bigint; dataUrl: string; width: number; height: number; selected: boolean };
 type Settings = { sampleEvery: number; duplicateThreshold: number; minGap: number; summaryApiUrl: string; authCode: string };
 type CapturedFrame = { index: number; time: number; hash: bigint; dataUrl: string; width: number; height: number };
+type VideoMeta = { duration: number; width: number; height: number };
 type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
 type WorkerResult =
   | { type: 'ready' }
@@ -44,7 +45,7 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">点击“抽帧进入工作台”后，会切换到类似相册的工作台：边抽边显示 frame，可全选/取消全选，也可逐张勾选后下载 PDF。</div>
+      <div class="hint">点击“抽帧进入工作台”后，会切换到类似相册的工作台：边抽边显示 frame，可全选/取消全选、裁剪、删除，也可拖动时间轴补抓 frame。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>抽帧进入工作台</button>
@@ -57,6 +58,7 @@ app.innerHTML = `
   <main id="workspaceView" class="workspace" hidden>
     <header class="workspace-bar">
       <button id="doneBtn" class="ghost-btn">● Done</button>
+      <button id="toggleSideBtn" class="ghost-btn" title="收起/展开左侧面板">⇤ 收起左栏</button>
       <label class="select-all-control">
         <input id="selectAllBox" type="checkbox" checked />
         <span>Select All</span>
@@ -99,7 +101,38 @@ app.innerHTML = `
         <div id="slides" class="slides workspace-slides"></div>
       </section>
     </section>
+
+    <section class="capture-timeline">
+      <div class="timeline-meta">
+        <span id="timelineTime">00:00:00</span>
+        <strong>Drag to capture frame or Press C</strong>
+        <span id="timelineDuration">00:00:00</span>
+      </div>
+      <div id="timelineRail" class="timeline-rail" role="slider" aria-label="拖动选择时间并补抓 frame">
+        <div id="timelineMarkers" class="timeline-markers"></div>
+        <div class="timeline-blue"></div>
+        <div id="timelineHandle" class="timeline-handle"></div>
+      </div>
+    </section>
   </main>
+
+  <dialog id="cropDialog" class="crop-dialog">
+    <form method="dialog" class="crop-panel">
+      <h2>裁剪 frame</h2>
+      <p>用百分比粗略裁剪。默认是整张图，Apply 后会替换当前 frame。</p>
+      <img id="cropImage" alt="待裁剪 frame" />
+      <div class="crop-grid">
+        <label>Left %<input id="cropLeft" type="number" min="0" max="99" value="0" /></label>
+        <label>Top %<input id="cropTop" type="number" min="0" max="99" value="0" /></label>
+        <label>Width %<input id="cropWidth" type="number" min="1" max="100" value="100" /></label>
+        <label>Height %<input id="cropHeight" type="number" min="1" max="100" value="100" /></label>
+      </div>
+      <div class="crop-actions">
+        <button id="cropCancelBtn" value="cancel" class="ghost-btn">Cancel</button>
+        <button id="cropApplyBtn" value="default">Apply Crop</button>
+      </div>
+    </form>
+  </dialog>
 `;
 
 const $ = <T extends Element>(selector: string) => {
@@ -115,6 +148,7 @@ const fileLabel = $<HTMLSpanElement>('#fileLabel');
 const videoInput = $<HTMLInputElement>('#videoInput');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
+const toggleSideBtn = $<HTMLButtonElement>('#toggleSideBtn');
 const selectAllBox = $<HTMLInputElement>('#selectAllBox');
 const selectCount = $<HTMLElement>('#selectCount');
 const transcribeBtn = $<HTMLButtonElement>('#transcribeBtn');
@@ -133,12 +167,28 @@ const transcriptEl = $<HTMLTextAreaElement>('#transcript');
 const summaryEl = $<HTMLTextAreaElement>('#summary');
 const previewImage = $<HTMLImageElement>('#previewImage');
 const previewEmpty = $<HTMLDivElement>('#previewEmpty');
+const timelineRail = $<HTMLDivElement>('#timelineRail');
+const timelineHandle = $<HTMLDivElement>('#timelineHandle');
+const timelineMarkers = $<HTMLDivElement>('#timelineMarkers');
+const timelineTimeEl = $<HTMLElement>('#timelineTime');
+const timelineDurationEl = $<HTMLElement>('#timelineDuration');
+const cropDialog = $<HTMLDialogElement>('#cropDialog');
+const cropImage = $<HTMLImageElement>('#cropImage');
+const cropLeft = $<HTMLInputElement>('#cropLeft');
+const cropTop = $<HTMLInputElement>('#cropTop');
+const cropWidth = $<HTMLInputElement>('#cropWidth');
+const cropHeight = $<HTMLInputElement>('#cropHeight');
+const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 
 let selectedFile: File | null = null;
 let slides: Slide[] = [];
 let isExtracting = false;
 let isTranscribing = false;
 let isSummarizing = false;
+let videoMeta: VideoMeta | null = null;
+let timelineTime = 0;
+let cropTargetSlideId: number | null = null;
+let isDraggingTimeline = false;
 
 videoInput.addEventListener('change', () => selectFile(videoInput.files?.[0] ?? null));
 transcriptEl.addEventListener('input', updateActionState);
@@ -148,6 +198,11 @@ doneBtn.addEventListener('click', () => {
   homeView.hidden = false;
   hideProgress();
   setHomeStatus(selectedFile ? `已选择：${selectedFile.name}` : '等待上传视频。');
+});
+
+toggleSideBtn.addEventListener('click', () => {
+  workspaceView.classList.toggle('side-collapsed');
+  toggleSideBtn.textContent = workspaceView.classList.contains('side-collapsed') ? '⇥ 展开左栏' : '⇤ 收起左栏';
 });
 
 selectAllBox.addEventListener('change', () => setAllSlidesSelected(selectAllBox.checked));
@@ -186,7 +241,7 @@ extractBtn.addEventListener('click', async () => {
     setStatus(`正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
     slides = await extractUniqueSlides(selectedFile, settings, setStatus, appendSlideCard);
     setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面，可全选或逐张勾选后下载 PDF。`);
+    setStatus(`抽帧完成：保留 ${slides.length} 张页面。可拖动底部蓝色时间轴补抓 frame，或逐张裁剪/删除。`);
   } catch (error) {
     console.error(error);
     setProgress('抽帧失败', 100);
@@ -254,6 +309,37 @@ downloadSummaryBtn.addEventListener('click', () => {
   downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), `${baseName(selectedFile.name)}-summary.md`);
 });
 
+timelineRail.addEventListener('pointerdown', (event) => {
+  isDraggingTimeline = true;
+  timelineRail.setPointerCapture(event.pointerId);
+  updateTimelineFromPointer(event);
+});
+timelineRail.addEventListener('pointermove', (event) => {
+  if (!isDraggingTimeline) return;
+  updateTimelineFromPointer(event);
+});
+timelineRail.addEventListener('pointerup', async (event) => {
+  if (!isDraggingTimeline) return;
+  isDraggingTimeline = false;
+  timelineRail.releasePointerCapture(event.pointerId);
+  updateTimelineFromPointer(event);
+  await captureManualFrameAt(timelineTime);
+});
+timelineRail.addEventListener('pointercancel', () => { isDraggingTimeline = false; });
+
+document.addEventListener('keydown', async (event) => {
+  const target = event.target as HTMLElement | null;
+  const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+  if (isTyping || workspaceView.hidden || event.key.toLowerCase() !== 'c') return;
+  event.preventDefault();
+  await captureManualFrameAt(timelineTime);
+});
+
+cropApplyBtn.addEventListener('click', async (event) => {
+  event.preventDefault();
+  await applyCrop();
+});
+
 function showWorkspace(): void {
   homeView.hidden = true;
   workspaceView.hidden = false;
@@ -263,11 +349,15 @@ function showWorkspace(): void {
 function selectFile(file: File | null): void {
   selectedFile = file;
   slides = [];
+  videoMeta = null;
+  timelineTime = 0;
   slidesEl.innerHTML = '';
   transcriptEl.value = '';
   summaryEl.value = '';
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
+  timelineMarkers.innerHTML = '';
+  updateTimelinePosition();
   fileLabel.textContent = file ? `已选择：${file.name}` : '选择或拖入视频文件';
   setHomeStatus(file ? `已选择：${file.name}` : '等待上传视频。');
   hideProgress();
@@ -317,6 +407,7 @@ function resetFrameOutputs(): void {
   summaryEl.value = '';
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
+  timelineMarkers.innerHTML = '';
   updateSelectionUI();
 }
 
@@ -344,6 +435,8 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
 
   try {
     const metadata = await readVideoMetadata(url);
+    videoMeta = metadata;
+    setupTimeline(metadata.duration);
     const times = buildFrameTimes(metadata.duration, settings.sampleEvery);
     const workerCount = Math.min(FRAME_CONCURRENCY, times.length || 1);
     for (let i = 0; i < workerCount; i += 1) extractors.push(await createFrameExtractor(url, metadata.width, metadata.height));
@@ -365,6 +458,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
           kept.push(slide);
           onKeep(slide);
           updateActionState();
+          updateTimelineMarkers();
         }
       }
     };
@@ -376,6 +470,8 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         const frame = await extractor.capture(index, times[index]);
         captured.set(index, frame);
         completed += 1;
+        timelineTime = frame.time;
+        updateTimelinePosition();
         commitReadyFrames();
         const percent = 3 + Math.round((completed / Math.max(times.length, 1)) * 53);
         setProgress(`抽帧保守去重：${completed} / ${times.length}，已保留 ${kept.length} 张`, percent);
@@ -393,7 +489,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
   }
 }
 
-async function readVideoMetadata(url: string): Promise<{ duration: number; width: number; height: number }> {
+async function readVideoMetadata(url: string): Promise<VideoMeta> {
   const video = document.createElement('video');
   video.src = url;
   video.muted = true;
@@ -435,6 +531,31 @@ async function createFrameExtractor(url: string, width: number, height: number):
       video.load();
     }
   };
+}
+
+async function captureManualFrameAt(time: number): Promise<void> {
+  if (!selectedFile || !videoMeta || isExtracting) return;
+  const url = URL.createObjectURL(selectedFile);
+  let extractor: FrameExtractor | null = null;
+  try {
+    setProgress(`正在补抓 ${formatClock(time)} 的 frame`, 50, true);
+    extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
+    const frame = await extractor.capture(slides.length, Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0)));
+    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true };
+    slides.push(slide);
+    sortAndReindexSlides();
+    renderSlides();
+    setPreview(slide);
+    setStatus(`已补抓 ${formatClock(frame.time)} 的 frame。`);
+    setProgress('补抓完成', 100);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : '补抓 frame 失败。');
+  } finally {
+    extractor?.dispose();
+    URL.revokeObjectURL(url);
+    updateActionState();
+  }
 }
 
 function isDuplicateSlide(slide: Slide, currentHash: bigint, currentTime: number, settings: Settings): boolean {
@@ -625,6 +746,10 @@ function appendSlideCard(slide: Slide): void {
   card.dataset.slideId = String(slide.id);
   card.innerHTML = `
     <label class="slide-select"><input class="frame-checkbox" type="checkbox" checked /><span>选入 PDF</span></label>
+    <div class="frame-tools">
+      <button class="crop-frame" title="裁剪" type="button">⌗</button>
+      <button class="delete-frame" title="删除" type="button">🗑</button>
+    </div>
     <img src="${slide.dataUrl}" alt="Slide ${slide.id}" />
     <figcaption>#${slide.id} · ${formatTime(slide.time)}</figcaption>
   `;
@@ -632,13 +757,113 @@ function appendSlideCard(slide: Slide): void {
   img?.addEventListener('click', () => setPreview(slide));
   const checkbox = card.querySelector<HTMLInputElement>('.frame-checkbox');
   checkbox?.addEventListener('change', () => { slide.selected = Boolean(checkbox.checked); updateActionState(); });
+  card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
+  card.querySelector<HTMLButtonElement>('.crop-frame')?.addEventListener('click', (event) => { event.stopPropagation(); openCropDialog(slide); });
   slidesEl.appendChild(card);
   if (slide.id === 1) setPreview(slide);
+}
+
+function renderSlides(): void {
+  slidesEl.innerHTML = '';
+  slides.forEach((slide) => appendSlideCard(slide));
+  updateTimelineMarkers();
+  updateActionState();
+}
+
+function deleteSlide(id: number): void {
+  slides = slides.filter((slide) => slide.id !== id);
+  sortAndReindexSlides();
+  renderSlides();
+  if (slides[0]) setPreview(slides[0]);
+  else {
+    previewImage.removeAttribute('src');
+    previewEmpty.hidden = false;
+  }
+  setStatus('已删除 frame。');
+}
+
+function sortAndReindexSlides(): void {
+  slides.sort((a, b) => a.time - b.time);
+  slides.forEach((slide, index) => { slide.id = index + 1; });
+}
+
+function openCropDialog(slide: Slide): void {
+  cropTargetSlideId = slide.id;
+  cropImage.src = slide.dataUrl;
+  cropLeft.value = '0';
+  cropTop.value = '0';
+  cropWidth.value = '100';
+  cropHeight.value = '100';
+  cropDialog.showModal();
+}
+
+async function applyCrop(): Promise<void> {
+  const slide = slides.find((item) => item.id === cropTargetSlideId);
+  if (!slide) return;
+  const left = clamp(Number(cropLeft.value || 0), 0, 99) / 100;
+  const top = clamp(Number(cropTop.value || 0), 0, 99) / 100;
+  const widthPct = clamp(Number(cropWidth.value || 100), 1, 100) / 100;
+  const heightPct = clamp(Number(cropHeight.value || 100), 1, 100) / 100;
+  const img = await loadImage(slide.dataUrl);
+  const sx = Math.floor(img.naturalWidth * left);
+  const sy = Math.floor(img.naturalHeight * top);
+  const sw = Math.max(1, Math.min(Math.floor(img.naturalWidth * widthPct), img.naturalWidth - sx));
+  const sh = Math.max(1, Math.min(Math.floor(img.naturalHeight * heightPct), img.naturalHeight - sy));
+  const canvas = document.createElement('canvas');
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  slide.dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  slide.width = sw;
+  slide.height = sh;
+  slide.hash = visualHash(ctx, sw, sh);
+  cropDialog.close();
+  renderSlides();
+  setPreview(slide);
+  setStatus('已裁剪 frame。');
 }
 
 function setPreview(slide: Slide): void {
   previewImage.src = slide.dataUrl;
   previewEmpty.hidden = true;
+}
+
+function setupTimeline(duration: number): void {
+  timelineTime = 0;
+  timelineDurationEl.textContent = formatClock(duration);
+  timelineMarkers.innerHTML = '';
+  updateTimelinePosition();
+}
+
+function updateTimelineFromPointer(event: PointerEvent): void {
+  if (!videoMeta) return;
+  const rect = timelineRail.getBoundingClientRect();
+  const ratio = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+  timelineTime = ratio * videoMeta.duration;
+  updateTimelinePosition();
+}
+
+function updateTimelinePosition(): void {
+  const duration = videoMeta?.duration ?? 0;
+  const percent = duration > 0 ? clamp(timelineTime / duration, 0, 1) * 100 : 0;
+  timelineHandle.style.left = `${percent}%`;
+  timelineTimeEl.textContent = formatClock(timelineTime);
+  timelineDurationEl.textContent = formatClock(duration);
+}
+
+function updateTimelineMarkers(): void {
+  const duration = videoMeta?.duration ?? 0;
+  timelineMarkers.innerHTML = '';
+  if (duration <= 0) return;
+  for (const slide of slides) {
+    const marker = document.createElement('span');
+    marker.className = 'timeline-marker';
+    marker.style.left = `${clamp(slide.time / duration, 0, 1) * 100}%`;
+    marker.title = `#${slide.id} · ${formatClock(slide.time)}`;
+    timelineMarkers.appendChild(marker);
+  }
 }
 
 function appendTranscript(line: string): void {
@@ -715,6 +940,15 @@ function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   });
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('图片加载失败。'));
+    img.src = src;
+  });
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -726,6 +960,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
 function baseName(filename: string): string { return filename.replace(/\.[^/.]+$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'vid2deck'; }
 function formatTime(seconds: number): string { return `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`; }
 function formatClock(seconds: number): string {
