@@ -26,7 +26,7 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Vid2Deck</p>
         <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-        <p class="subhead">支持一次上传多个视频；每次选择一个视频进入工作台处理。抽帧、去重、PDF 和转写都在浏览器本地完成。</p>
+        <p class="subhead">支持一次上传多个视频，也支持直接录制屏幕；每次选择一个视频进入工作台处理。抽帧、去重、PDF 和转写都在浏览器本地完成。</p>
       </div>
     </section>
 
@@ -34,8 +34,13 @@ app.innerHTML = `
       <label class="dropzone" id="dropzone" for="videoInput">
         <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
         <span id="fileLabel">选择或拖入一个或多个视频文件</span>
-        <small>可以一次选择多个文件，也可以多次追加。当前版本只处理本地文件。</small>
+        <small>可以一次选择多个文件，也可以多次追加。当前版本只处理本地文件和本机屏幕录制。</small>
       </label>
+
+      <div class="source-actions">
+        <button id="recordScreenBtn" type="button">录制屏幕</button>
+        <button id="stopRecordBtn" type="button" class="danger-btn" hidden>停止录制并加入队列</button>
+      </div>
 
       <div id="fileList" class="file-list" hidden></div>
 
@@ -47,7 +52,7 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">点击文件列表中的任意视频可切换当前处理对象。点击“处理当前视频”后进入工作台，可全选/取消全选、裁剪、删除，也可拖动时间轴补抓 frame。</div>
+      <div class="hint">多个文件会先进入队列，点击文件卡片切换当前处理对象。点击“处理当前视频”后进入工作台；Done 回到主页后可继续处理下一个视频。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>处理当前视频</button>
@@ -149,6 +154,8 @@ const dropzone = $<HTMLLabelElement>('#dropzone');
 const fileLabel = $<HTMLSpanElement>('#fileLabel');
 const fileList = $<HTMLDivElement>('#fileList');
 const videoInput = $<HTMLInputElement>('#videoInput');
+const recordScreenBtn = $<HTMLButtonElement>('#recordScreenBtn');
+const stopRecordBtn = $<HTMLButtonElement>('#stopRecordBtn');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
 const toggleSideBtn = $<HTMLButtonElement>('#toggleSideBtn');
@@ -190,12 +197,19 @@ let slides: Slide[] = [];
 let isExtracting = false;
 let isTranscribing = false;
 let isSummarizing = false;
+let isRecording = false;
+let mediaRecorder: MediaRecorder | null = null;
+let recordingStream: MediaStream | null = null;
+let recordedChunks: Blob[] = [];
+let currentRecordingMimeType = 'video/webm';
 let videoMeta: VideoMeta | null = null;
 let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
 let isDraggingTimeline = false;
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
+recordScreenBtn.addEventListener('click', () => startScreenRecording());
+stopRecordBtn.addEventListener('click', () => stopScreenRecording());
 transcriptEl.addEventListener('input', updateActionState);
 
 doneBtn.addEventListener('click', () => {
@@ -352,7 +366,7 @@ function showWorkspace(): void {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function addFiles(files: File[]): void {
+function addFiles(files: File[], selectAdded = false): void {
   const validFiles = files.filter(isSupportedMediaFile);
   if (validFiles.length === 0) {
     setHomeStatus('没有检测到可处理的视频/音频文件。');
@@ -360,16 +374,20 @@ function addFiles(files: File[]): void {
   }
 
   const existingKeys = new Set(selectedFiles.map(fileKey));
+  let firstAddedIndex = -1;
   for (const file of validFiles) {
     const key = fileKey(file);
     if (!existingKeys.has(key)) {
       selectedFiles.push(file);
       existingKeys.add(key);
+      if (firstAddedIndex < 0) firstAddedIndex = selectedFiles.length - 1;
     }
   }
 
   if (currentFileIndex < 0 && selectedFiles.length > 0) {
     chooseFile(0);
+  } else if (selectAdded && firstAddedIndex >= 0) {
+    chooseFile(firstAddedIndex);
   } else {
     renderFileList();
     updateHomeFileStatus();
@@ -457,6 +475,80 @@ function updateHomeFileStatus(): void {
   setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
 }
 
+async function startScreenRecording(): Promise<void> {
+  if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+    setHomeStatus('当前浏览器不支持屏幕录制。请使用最新版 Chrome / Edge / Safari。');
+    return;
+  }
+  try {
+    recordedChunks = [];
+    currentRecordingMimeType = getSupportedRecordingMimeType();
+    recordingStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    mediaRecorder = new MediaRecorder(recordingStream, currentRecordingMimeType ? { mimeType: currentRecordingMimeType } : undefined);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recordedChunks.push(event.data);
+    };
+    mediaRecorder.onstop = () => finishScreenRecording();
+    recordingStream.getTracks().forEach((track) => {
+      track.onended = () => {
+        if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+      };
+    });
+    mediaRecorder.start(1000);
+    isRecording = true;
+    setHomeStatus('正在录制屏幕。完成后点击“停止录制并加入队列”。');
+  } catch (error) {
+    console.error(error);
+    cleanupRecording();
+    setHomeStatus(error instanceof Error ? `屏幕录制未开始：${error.message}` : '屏幕录制未开始。');
+  } finally {
+    updateActionState();
+  }
+}
+
+function stopScreenRecording(): void {
+  if (mediaRecorder?.state === 'recording') {
+    mediaRecorder.stop();
+  } else {
+    finishScreenRecording();
+  }
+}
+
+function finishScreenRecording(): void {
+  const chunks = recordedChunks.slice();
+  cleanupRecording();
+  if (chunks.length === 0) {
+    setHomeStatus('录制结束，但没有生成有效视频。');
+    updateActionState();
+    return;
+  }
+  const mimeType = currentRecordingMimeType || chunks[0]?.type || 'video/webm';
+  const blob = new Blob(chunks, { type: mimeType });
+  const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], `screen-recording-${timestampForFilename()}.${extension}`, { type: mimeType });
+  addFiles([file], true);
+  setHomeStatus(`录制完成，已加入队列并切换到：${file.name}`);
+  updateActionState();
+}
+
+function cleanupRecording(): void {
+  recordingStream?.getTracks().forEach((track) => track.stop());
+  recordingStream = null;
+  mediaRecorder = null;
+  recordedChunks = [];
+  isRecording = false;
+}
+
+function getSupportedRecordingMimeType(): string {
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4'
+  ];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
 function isSupportedMediaFile(file: File): boolean {
   return file.type.startsWith('video/') || file.type.startsWith('audio/') || /\.(mkv|mov|mp4|webm|avi|m4v)$/i.test(file.name);
 }
@@ -478,13 +570,15 @@ function readSettings(): Settings {
 function updateActionState(): void {
   const hasFile = Boolean(selectedFile);
   const selectedCount = slides.filter((slide) => slide.selected).length;
-  extractBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing;
-  transcribeBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing;
-  downloadPdfBtn.disabled = selectedCount === 0 || isExtracting || isTranscribing || isSummarizing;
+  extractBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing || isRecording;
+  transcribeBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing || isRecording;
+  downloadPdfBtn.disabled = selectedCount === 0 || isExtracting || isTranscribing || isSummarizing || isRecording;
   downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing;
-  summarizeBtn.disabled = !transcriptEl.value.trim() || isExtracting || isTranscribing || isSummarizing;
+  summarizeBtn.disabled = !transcriptEl.value.trim() || isExtracting || isTranscribing || isSummarizing || isRecording;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing;
-  videoInput.disabled = isExtracting || isTranscribing || isSummarizing;
+  videoInput.disabled = isExtracting || isTranscribing || isSummarizing || isRecording;
+  recordScreenBtn.disabled = isExtracting || isTranscribing || isSummarizing || isRecording;
+  stopRecordBtn.hidden = !isRecording;
   updateSelectionUI();
 }
 
@@ -499,6 +593,11 @@ function setAllSlidesSelected(selected: boolean): void {
   slides.forEach((slide) => { slide.selected = selected; });
   slidesEl.querySelectorAll<HTMLInputElement>('.frame-checkbox').forEach((box) => { box.checked = selected; });
   updateActionState();
+}
+
+function getDefaultNewSlideSelected(): boolean {
+  if (slides.length === 0) return true;
+  return selectAllBox.checked;
 }
 
 function resetFrameOutputs(): void {
@@ -570,8 +669,6 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         const frame = await extractor.capture(index, times[index]);
         captured.set(index, frame);
         completed += 1;
-        timelineTime = frame.time;
-        updateTimelinePosition();
         commitReadyFrames();
         const percent = 3 + Math.round((completed / Math.max(times.length, 1)) * 53);
         setProgress(`抽帧保守去重：${completed} / ${times.length}，已保留 ${kept.length} 张`, percent);
@@ -641,7 +738,7 @@ async function captureManualFrameAt(time: number): Promise<void> {
     setProgress(`正在补抓 ${formatClock(time)} 的 frame`, 50, true);
     extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
     const frame = await extractor.capture(slides.length, Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0)));
-    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true };
+    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected() };
     slides.push(slide);
     sortAndReindexSlides();
     renderSlides();
@@ -845,7 +942,7 @@ function appendSlideCard(slide: Slide): void {
   card.className = 'slide-card';
   card.dataset.slideId = String(slide.id);
   card.innerHTML = `
-    <label class="slide-select"><input class="frame-checkbox" type="checkbox" checked /><span>选入 PDF</span></label>
+    <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入 PDF</span></label>
     <div class="frame-tools">
       <button class="crop-frame" title="裁剪" type="button">⌗</button>
       <button class="delete-frame" title="删除" type="button">🗑</button>
@@ -856,6 +953,7 @@ function appendSlideCard(slide: Slide): void {
   const img = card.querySelector<HTMLImageElement>('img');
   img?.addEventListener('click', () => setPreview(slide));
   const checkbox = card.querySelector<HTMLInputElement>('.frame-checkbox');
+  if (checkbox) checkbox.checked = slide.selected;
   checkbox?.addEventListener('change', () => { slide.selected = Boolean(checkbox.checked); updateActionState(); });
   card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
   card.querySelector<HTMLButtonElement>('.crop-frame')?.addEventListener('click', (event) => { event.stopPropagation(); openCropDialog(slide); });
@@ -1062,6 +1160,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
 function baseName(filename: string): string { return filename.replace(/\.[^/.]+$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'vid2deck'; }
+function timestampForFilename(): string { return new Date().toISOString().replace(/[:.]/g, '-'); }
 function formatTime(seconds: number): string { return `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`; }
 function formatClock(seconds: number): string {
   const total = Math.floor(seconds);
