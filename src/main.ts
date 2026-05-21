@@ -26,16 +26,18 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Vid2Deck</p>
         <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-        <p class="subhead">抽帧、去重、PDF 和转写都在浏览器本地完成；summary 通过 Vercel 后端安全读取 DeepSeek key。</p>
+        <p class="subhead">支持一次上传多个视频；每次选择一个视频进入工作台处理。抽帧、去重、PDF 和转写都在浏览器本地完成。</p>
       </div>
     </section>
 
     <section class="panel">
       <label class="dropzone" id="dropzone" for="videoInput">
-        <input id="videoInput" type="file" accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
-        <span id="fileLabel">选择或拖入视频文件</span>
-        <small>拖到这里松手即可上传。在线视频链接需要单独后端下载器，当前版本只处理本地文件。</small>
+        <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
+        <span id="fileLabel">选择或拖入一个或多个视频文件</span>
+        <small>可以一次选择多个文件，也可以多次追加。当前版本只处理本地文件。</small>
       </label>
+
+      <div id="fileList" class="file-list" hidden></div>
 
       <div class="grid">
         <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
@@ -45,10 +47,10 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">点击“抽帧进入工作台”后，会切换到类似相册的工作台：边抽边显示 frame，可全选/取消全选、裁剪、删除，也可拖动时间轴补抓 frame。</div>
+      <div class="hint">点击文件列表中的任意视频可切换当前处理对象。点击“处理当前视频”后进入工作台，可全选/取消全选、裁剪、删除，也可拖动时间轴补抓 frame。</div>
 
       <div class="actions">
-        <button id="extractBtn" disabled>抽帧进入工作台</button>
+        <button id="extractBtn" disabled>处理当前视频</button>
       </div>
 
       <div class="status" id="homeStatus">等待上传视频。</div>
@@ -145,6 +147,7 @@ const homeView = $<HTMLElement>('#homeView');
 const workspaceView = $<HTMLElement>('#workspaceView');
 const dropzone = $<HTMLLabelElement>('#dropzone');
 const fileLabel = $<HTMLSpanElement>('#fileLabel');
+const fileList = $<HTMLDivElement>('#fileList');
 const videoInput = $<HTMLInputElement>('#videoInput');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
@@ -180,6 +183,8 @@ const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 
+let selectedFiles: File[] = [];
+let currentFileIndex = -1;
 let selectedFile: File | null = null;
 let slides: Slide[] = [];
 let isExtracting = false;
@@ -190,14 +195,15 @@ let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
 let isDraggingTimeline = false;
 
-videoInput.addEventListener('change', () => selectFile(videoInput.files?.[0] ?? null));
+videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 transcriptEl.addEventListener('input', updateActionState);
 
 doneBtn.addEventListener('click', () => {
   workspaceView.hidden = true;
   homeView.hidden = false;
   hideProgress();
-  setHomeStatus(selectedFile ? `已选择：${selectedFile.name}` : '等待上传视频。');
+  renderFileList();
+  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
 });
 
 toggleSideBtn.addEventListener('click', () => {
@@ -225,7 +231,7 @@ dropzone.addEventListener('drop', (event) => {
   event.preventDefault();
   event.stopPropagation();
   dropzone.classList.remove('is-dragover');
-  selectFile(event.dataTransfer?.files?.[0] ?? null);
+  addFiles(Array.from(event.dataTransfer?.files ?? []));
 });
 
 extractBtn.addEventListener('click', async () => {
@@ -238,7 +244,7 @@ extractBtn.addEventListener('click', async () => {
     isExtracting = true;
     updateActionState();
     setProgress('开始抽帧', 2);
-    setStatus(`正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
+    setStatus(`正在处理：${selectedFile.name}。正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
     slides = await extractUniqueSlides(selectedFile, settings, setStatus, appendSlideCard);
     setProgress('抽帧完成', 100);
     setStatus(`抽帧完成：保留 ${slides.length} 张页面。可拖动底部蓝色时间轴补抓 frame，或逐张裁剪/删除。`);
@@ -259,7 +265,7 @@ transcribeBtn.addEventListener('click', async () => {
     updateActionState();
     transcriptEl.value = '';
     setProgress('准备本地分块转写音频', 0);
-    setStatus('正在本地转写音频，会按 30 秒一段流式输出。');
+    setStatus(`正在本地转写：${selectedFile.name}，会按 30 秒一段流式输出。`);
     const transcriptText = await transcribeLocally(selectedFile, setStatus);
     setProgress('转写完成', 100);
     setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
@@ -346,8 +352,58 @@ function showWorkspace(): void {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function selectFile(file: File | null): void {
-  selectedFile = file;
+function addFiles(files: File[]): void {
+  const validFiles = files.filter(isSupportedMediaFile);
+  if (validFiles.length === 0) {
+    setHomeStatus('没有检测到可处理的视频/音频文件。');
+    return;
+  }
+
+  const existingKeys = new Set(selectedFiles.map(fileKey));
+  for (const file of validFiles) {
+    const key = fileKey(file);
+    if (!existingKeys.has(key)) {
+      selectedFiles.push(file);
+      existingKeys.add(key);
+    }
+  }
+
+  if (currentFileIndex < 0 && selectedFiles.length > 0) {
+    chooseFile(0);
+  } else {
+    renderFileList();
+    updateHomeFileStatus();
+    updateActionState();
+  }
+  videoInput.value = '';
+}
+
+function chooseFile(index: number): void {
+  if (index < 0 || index >= selectedFiles.length) return;
+  currentFileIndex = index;
+  selectedFile = selectedFiles[index];
+  resetCurrentFileState();
+  renderFileList();
+  updateHomeFileStatus();
+  updateActionState();
+}
+
+function removeFile(index: number): void {
+  if (index < 0 || index >= selectedFiles.length) return;
+  selectedFiles.splice(index, 1);
+  if (selectedFiles.length === 0) {
+    currentFileIndex = -1;
+    selectedFile = null;
+    resetCurrentFileState();
+    renderFileList();
+    setHomeStatus('等待上传视频。');
+    updateActionState();
+    return;
+  }
+  chooseFile(Math.min(index, selectedFiles.length - 1));
+}
+
+function resetCurrentFileState(): void {
   slides = [];
   videoMeta = null;
   timelineTime = 0;
@@ -358,11 +414,55 @@ function selectFile(file: File | null): void {
   previewEmpty.hidden = false;
   timelineMarkers.innerHTML = '';
   updateTimelinePosition();
-  fileLabel.textContent = file ? `已选择：${file.name}` : '选择或拖入视频文件';
-  setHomeStatus(file ? `已选择：${file.name}` : '等待上传视频。');
   hideProgress();
   updateSelectionUI();
-  updateActionState();
+}
+
+function renderFileList(): void {
+  fileList.innerHTML = '';
+  fileList.hidden = selectedFiles.length === 0;
+  selectedFiles.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.className = `file-list-item${index === currentFileIndex ? ' is-active' : ''}`;
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'file-pick-btn';
+    main.addEventListener('click', () => chooseFile(index));
+
+    const title = document.createElement('strong');
+    title.textContent = file.name;
+    const meta = document.createElement('small');
+    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前处理' : ''}`;
+    main.append(title, meta);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'file-remove-btn';
+    remove.textContent = '移除';
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      removeFile(index);
+    });
+
+    item.append(main, remove);
+    fileList.appendChild(item);
+  });
+}
+
+function updateHomeFileStatus(): void {
+  fileLabel.textContent = selectedFiles.length > 0
+    ? `已选择 ${selectedFiles.length} 个文件`
+    : '选择或拖入一个或多个视频文件';
+  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+}
+
+function isSupportedMediaFile(file: File): boolean {
+  return file.type.startsWith('video/') || file.type.startsWith('audio/') || /\.(mkv|mov|mp4|webm|avi|m4v)$/i.test(file.name);
+}
+
+function fileKey(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
 function readSettings(): Settings {
@@ -969,5 +1069,16 @@ function formatClock(seconds: number): string {
   const minutes = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
   const secs = (total % 60).toString().padStart(2, '0');
   return `${hours}:${minutes}:${secs}`;
+}
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
