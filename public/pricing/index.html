@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vid2Deck 定价 | Pricing</title>
+  <meta name="description" content="Vid2Deck pricing plans for video-to-slide PDF, transcript and batch frame extraction." />
+  <style>
+    :root { color: #0f172a; background: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: inherit; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 44px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; text-decoration: none; }
+    .logo { width: 34px; height: 34px; display: grid; place-items: center; color: #fff; background: #0f172a; border-radius: 11px; }
+    .nav-links { display: flex; gap: 18px; color: #64748b; font-weight: 700; }
+    .nav-links a { text-decoration: none; }
+    .hero { text-align: center; margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 12px; color: #2563eb; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4.5rem); line-height: 1; letter-spacing: -.06em; }
+    .subhead { max-width: 760px; margin: 20px auto 0; color: #475569; font-size: 1.12rem; line-height: 1.75; }
+    .toggle { width: fit-content; display: flex; align-items: center; gap: 4px; margin: 28px auto 36px; padding: 6px; background: #eef2f7; border-radius: 18px; }
+    .toggle span { padding: 12px 42px; color: #64748b; border-radius: 14px; font-weight: 900; }
+    .toggle .active { color: #0f172a; background: #fff; box-shadow: 0 8px 22px rgba(15,23,42,.08); }
+    .toggle b { color: #16a34a; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+    .card { position: relative; display: flex; flex-direction: column; padding: 34px; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .card.featured { border: 3px solid #0f172a; box-shadow: 0 22px 60px rgba(15,23,42,.14); transform: translateY(-8px); }
+    .badge { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); padding: 10px 18px; color: #fff; background: #111827; border-radius: 999px; font-weight: 900; }
+    .card h2 { margin: 0; font-size: 2rem; letter-spacing: -.04em; }
+    .for { margin: 14px 0 28px; color: #64748b; font-size: 1.08rem; }
+    .price { display: flex; align-items: baseline; gap: 10px; margin: 0 0 28px; padding: 26px; background: #f8fafc; border-radius: 18px; }
+    .price strong { font-size: 3rem; letter-spacing: -.06em; }
+    .price span { color: #64748b; font-weight: 800; }
+    .price del { color: #94a3b8; font-weight: 700; }
+    ul { display: grid; gap: 14px; margin: 0 0 30px; padding: 0; list-style: none; }
+    li { display: flex; gap: 12px; color: #0f172a; line-height: 1.35; font-weight: 650; }
+    li::before { content: '✓'; color: #16a34a; font-weight: 900; }
+    li.muted { color: #94a3b8; }
+    li.muted::before { content: '×'; color: #94a3b8; }
+    .cta { margin-top: auto; display: block; width: 100%; padding: 15px 18px; color: #fff; background: #0f172a; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 900; }
+    .cta.secondary { color: #64748b; background: #fff; border: 1px solid #e2e8f0; }
+    .note { margin: 34px auto 0; text-align: center; color: #64748b; }
+    .note a { color: #0f172a; font-weight: 900; }
+    .footer { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 54px; color: #64748b; font-size: .95rem; }
+    .footer a { text-decoration: none; font-weight: 700; }
+    @media (max-width: 980px) { .cards { grid-template-columns: 1fr; } .card.featured { transform: none; } .toggle span { padding-inline: 22px; } .nav { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav">
+      <a class="brand" href="/"><span class="logo">V</span><span>Vid2Deck</span></a>
+      <div class="nav-links">
+        <a href="/">产品</a>
+        <a href="/pricing/">定价</a>
+        <a href="/terms-and-conditions/">条款</a>
+        <a href="/privacy/">隐私</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Pricing</p>
+      <h1>把视频快速整理成可下载的 PDF 和 Frames</h1>
+      <p class="subhead">本地抽帧、去重、PDF、批量 ZIP、屏幕录制和转写。免费版适合试用，专业版适合高频整理课程、会议和演示视频。</p>
+    </section>
+
+    <div class="toggle" aria-label="Billing period">
+      <span class="active">月付</span>
+      <span>年付 <b>省43%</b></span>
+    </div>
+
+    <section class="cards" aria-label="Pricing plans">
+      <article class="card">
+        <h2>免费版</h2>
+        <p class="for">适合入门用户</p>
+        <p class="price"><strong>¥0</strong><span>永久免费</span></p>
+        <ul>
+          <li>单个视频时长限制 10 分钟</li>
+          <li>每月 3 次视频转换</li>
+          <li>下载去重后的 PDF</li>
+          <li>屏幕录制支持</li>
+          <li class="muted">批量处理</li>
+          <li class="muted">去除水印</li>
+        </ul>
+        <a class="cta secondary" href="/">当前套餐</a>
+      </article>
+
+      <article class="card featured">
+        <span class="badge">推荐</span>
+        <h2>专业版</h2>
+        <p class="for">推荐专业用户使用</p>
+        <p class="price"><strong>¥39</strong><span>/ 月</span></p>
+        <ul>
+          <li>视频时长无限制</li>
+          <li>每月 100 次视频转换</li>
+          <li>每月 100 张可编辑幻灯片</li>
+          <li>每月 600 分钟视频转录</li>
+          <li>在线视频支持</li>
+          <li>屏幕录制支持</li>
+          <li>视频批量转换</li>
+          <li>去除视频水印</li>
+          <li>到期无自动续费</li>
+        </ul>
+        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2Deck%20Pro%20subscription">立即订阅</a>
+      </article>
+
+      <article class="card">
+        <span class="badge">超值推荐</span>
+        <h2>终身版</h2>
+        <p class="for">一次购买，终身使用</p>
+        <p class="price"><strong>¥498</strong><del>¥999</del></p>
+        <ul>
+          <li>视频时长无限制</li>
+          <li>视频转换次数无限制</li>
+          <li>总计 10,000 张可编辑幻灯片</li>
+          <li>不限时长视频转录</li>
+          <li>在线视频支持</li>
+          <li>屏幕录制支持</li>
+          <li>视频批量转换</li>
+          <li>去除视频水印</li>
+          <li>可使用未来所有功能</li>
+        </ul>
+        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2Deck%20Lifetime%20purchase">立即购买</a>
+      </article>
+    </section>
+
+    <p class="note">只需要临时使用吗？<a href="mailto:support@vid2deck.com?subject=Vid2Deck%20one-time%20pass">点这里</a>，低至 ¥9.9。</p>
+
+    <footer class="footer">
+      <a href="/terms-and-conditions/">Terms of Service</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/refund/">Refund Policy</a>
+      <span>© 2026 Vid2Deck</span>
+    </footer>
+  </div>
+</body>
+</html>
