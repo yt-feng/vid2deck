@@ -1,11 +1,52 @@
 import { jsPDF } from 'jspdf';
 import './style.css';
 
-type Slide = { id: number; time: number; hash: bigint; dataUrl: string; width: number; height: number; selected: boolean };
-type Settings = { sampleEvery: number; duplicateThreshold: number; minGap: number; summaryApiUrl: string; authCode: string };
-type CapturedFrame = { index: number; time: number; hash: bigint; dataUrl: string; width: number; height: number };
-type VideoMeta = { duration: number; width: number; height: number };
-type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
+type Slide = {
+  id: number;
+  time: number;
+  hash: bigint;
+  dataUrl: string;
+  width: number;
+  height: number;
+  selected: boolean;
+};
+
+type Settings = {
+  sampleEvery: number;
+  duplicateThreshold: number;
+  minGap: number;
+  summaryApiUrl: string;
+  authCode: string;
+};
+
+type CapturedFrame = {
+  index: number;
+  time: number;
+  hash: bigint;
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+type VideoMeta = {
+  duration: number;
+  width: number;
+  height: number;
+};
+
+type FrameExtractor = {
+  capture: (index: number, time: number) => Promise<CapturedFrame>;
+  dispose: () => void;
+};
+
+type FileJobState = {
+  slides: Slide[];
+  transcript: string;
+  summary: string;
+  videoMeta: VideoMeta | null;
+  processedAt?: string;
+};
+
 type WorkerResult =
   | { type: 'ready' }
   | { type: 'model-progress'; status: string; progress?: number }
@@ -16,6 +57,7 @@ const VISUAL_HASH_BITS = 320;
 const FRAME_CONCURRENCY = 3;
 const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
+const TIMELINE_PAINT_INTERVAL_MS = 180;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -52,7 +94,7 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">多个文件会先进入队列，点击文件卡片切换当前处理对象。点击“处理当前视频”后进入工作台；Done 回到主页后可继续处理下一个视频。</div>
+      <div class="hint">多个文件会先进入队列。处理结束后，主页文件卡片会出现“查看结果”和“下载 PDF”，可以回到之前的工作台继续裁剪、删除和补抓 frame。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>处理当前视频</button>
@@ -193,6 +235,7 @@ const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 let selectedFiles: File[] = [];
 let currentFileIndex = -1;
 let selectedFile: File | null = null;
+let fileStates = new Map<string, FileJobState>();
 let slides: Slide[] = [];
 let isExtracting = false;
 let isTranscribing = false;
@@ -206,13 +249,20 @@ let videoMeta: VideoMeta | null = null;
 let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
 let isDraggingTimeline = false;
+let extractionTimelineMax = 0;
+let lastTimelinePaint = 0;
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 recordScreenBtn.addEventListener('click', () => startScreenRecording());
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
-transcriptEl.addEventListener('input', updateActionState);
+transcriptEl.addEventListener('input', () => {
+  saveCurrentFileState();
+  updateActionState();
+});
+summaryEl.addEventListener('input', () => saveCurrentFileState());
 
 doneBtn.addEventListener('click', () => {
+  saveCurrentFileState({ markProcessed: slides.length > 0 });
   workspaceView.hidden = true;
   homeView.hidden = false;
   hideProgress();
@@ -260,8 +310,11 @@ extractBtn.addEventListener('click', async () => {
     setProgress('开始抽帧', 2);
     setStatus(`正在处理：${selectedFile.name}。正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
     slides = await extractUniqueSlides(selectedFile, settings, setStatus, appendSlideCard);
+    forceTimelineToEnd();
     setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面。可拖动底部蓝色时间轴补抓 frame，或逐张裁剪/删除。`);
+    setStatus(`抽帧完成：保留 ${slides.length} 张页面。Done 回主页后可直接下载 PDF，也可稍后回到这个工作台继续编辑。`);
+    saveCurrentFileState({ markProcessed: true });
+    renderFileList();
   } catch (error) {
     console.error(error);
     setProgress('抽帧失败', 100);
@@ -283,6 +336,7 @@ transcribeBtn.addEventListener('click', async () => {
     const transcriptText = await transcribeLocally(selectedFile, setStatus);
     setProgress('转写完成', 100);
     setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
+    saveCurrentFileState({ markProcessed: slides.length > 0 });
   } catch (error) {
     console.error(error);
     setProgress('转写失败', 100);
@@ -309,6 +363,7 @@ summarizeBtn.addEventListener('click', async () => {
     summaryEl.value = await summarizeWithApi(settings, transcriptForSummary);
     setProgress('Summary 完成', 100);
     setStatus('Summary 已生成。');
+    saveCurrentFileState({ markProcessed: slides.length > 0 });
   } catch (error) {
     console.error(error);
     setProgress('Summary 失败', 100);
@@ -398,9 +453,10 @@ function addFiles(files: File[], selectAdded = false): void {
 
 function chooseFile(index: number): void {
   if (index < 0 || index >= selectedFiles.length) return;
+  if (selectedFile && currentFileIndex !== index) saveCurrentFileState({ markProcessed: slides.length > 0 });
   currentFileIndex = index;
   selectedFile = selectedFiles[index];
-  resetCurrentFileState();
+  loadCurrentFileStateOrReset();
   renderFileList();
   updateHomeFileStatus();
   updateActionState();
@@ -408,6 +464,7 @@ function chooseFile(index: number): void {
 
 function removeFile(index: number): void {
   if (index < 0 || index >= selectedFiles.length) return;
+  fileStates.delete(fileKey(selectedFiles[index]));
   selectedFiles.splice(index, 1);
   if (selectedFiles.length === 0) {
     currentFileIndex = -1;
@@ -421,10 +478,53 @@ function removeFile(index: number): void {
   chooseFile(Math.min(index, selectedFiles.length - 1));
 }
 
+function saveCurrentFileState(options: { markProcessed?: boolean } = {}): void {
+  if (!selectedFile) return;
+  const key = fileKey(selectedFile);
+  const previous = fileStates.get(key);
+  fileStates.set(key, {
+    slides: cloneSlides(slides),
+    transcript: transcriptEl.value,
+    summary: summaryEl.value,
+    videoMeta: videoMeta ? { ...videoMeta } : null,
+    processedAt: options.markProcessed ? new Date().toISOString() : previous?.processedAt
+  });
+}
+
+function loadCurrentFileStateOrReset(): void {
+  if (!selectedFile) {
+    resetCurrentFileState();
+    return;
+  }
+  const state = fileStates.get(fileKey(selectedFile));
+  if (!state) {
+    resetCurrentFileState();
+    return;
+  }
+
+  slides = cloneSlides(state.slides);
+  videoMeta = state.videoMeta ? { ...state.videoMeta } : null;
+  timelineTime = slides[0]?.time ?? 0;
+  transcriptEl.value = state.transcript;
+  summaryEl.value = state.summary;
+  previewImage.removeAttribute('src');
+  previewEmpty.hidden = false;
+  hideProgress();
+  updateTimelinePosition();
+  renderSlides();
+  if (slides[0]) setPreview(slides[0]);
+}
+
+function cloneSlides(items: Slide[]): Slide[] {
+  return items.map((slide) => ({ ...slide }));
+}
+
 function resetCurrentFileState(): void {
   slides = [];
   videoMeta = null;
   timelineTime = 0;
+  extractionTimelineMax = 0;
+  lastTimelinePaint = 0;
   slidesEl.innerHTML = '';
   transcriptEl.value = '';
   summaryEl.value = '';
@@ -440,8 +540,12 @@ function renderFileList(): void {
   fileList.innerHTML = '';
   fileList.hidden = selectedFiles.length === 0;
   selectedFiles.forEach((file, index) => {
+    const key = fileKey(file);
+    const state = fileStates.get(key);
+    const selectedSlides = state?.slides.filter((slide) => slide.selected).length ?? 0;
+    const totalSlides = state?.slides.length ?? 0;
     const item = document.createElement('div');
-    item.className = `file-list-item${index === currentFileIndex ? ' is-active' : ''}`;
+    item.className = `file-list-item${index === currentFileIndex ? ' is-active' : ''}${totalSlides > 0 ? ' is-processed' : ''}`;
 
     const main = document.createElement('button');
     main.type = 'button';
@@ -451,8 +555,34 @@ function renderFileList(): void {
     const title = document.createElement('strong');
     title.textContent = file.name;
     const meta = document.createElement('small');
-    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前处理' : ''}`;
+    const statusText = totalSlides > 0 ? ` · 已处理 ${selectedSlides}/${totalSlides} 张` : '';
+    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前处理' : ''}${statusText}`;
     main.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'file-list-actions';
+
+    if (totalSlides > 0) {
+      const view = document.createElement('button');
+      view.type = 'button';
+      view.className = 'file-result-btn';
+      view.textContent = '查看结果';
+      view.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openProcessedFile(index);
+      });
+
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.className = 'file-result-btn primary';
+      download.textContent = '下载 PDF';
+      download.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await downloadProcessedPdf(index);
+      });
+
+      actions.append(view, download);
+    }
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -463,9 +593,36 @@ function renderFileList(): void {
       removeFile(index);
     });
 
-    item.append(main, remove);
+    actions.append(remove);
+    item.append(main, actions);
     fileList.appendChild(item);
   });
+}
+
+function openProcessedFile(index: number): void {
+  chooseFile(index);
+  showWorkspace();
+  setStatus('已回到上次处理结果，可继续勾选、裁剪、删除或补抓 frame。');
+}
+
+async function downloadProcessedPdf(index: number): Promise<void> {
+  const file = selectedFiles[index];
+  if (!file) return;
+  const state = fileStates.get(fileKey(file));
+  const selectedSlides = state?.slides.filter((slide) => slide.selected) ?? [];
+  if (selectedSlides.length === 0) {
+    setHomeStatus('这个视频还没有可下载的选中 frame。');
+    return;
+  }
+  try {
+    setHomeStatus(`正在生成 ${file.name} 的 PDF...`);
+    const pdfBlob = await makePdf(selectedSlides);
+    downloadBlob(pdfBlob, `${baseName(file.name)}.pdf`);
+    setHomeStatus(`已下载 ${file.name} 的 PDF。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
+  }
 }
 
 function updateHomeFileStatus(): void {
@@ -593,6 +750,7 @@ function updateSelectionUI(): void {
 function setAllSlidesSelected(selected: boolean): void {
   slides.forEach((slide) => { slide.selected = selected; });
   slidesEl.querySelectorAll<HTMLInputElement>('.frame-checkbox').forEach((box) => { box.checked = selected; });
+  saveCurrentFileState({ markProcessed: slides.length > 0 });
   updateActionState();
 }
 
@@ -652,6 +810,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         const frame = captured.get(nextCommit)!;
         captured.delete(nextCommit);
         nextCommit += 1;
+        updateExtractionTimeline(frame.time);
         const duplicate = kept.some((slide) => isDuplicateSlide(slide, frame.hash, frame.time, settings));
         if (!duplicate) {
           const slide: Slide = { id: kept.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true };
@@ -680,6 +839,7 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
 
     await Promise.all(extractors.map((extractor) => runCapture(extractor)));
     commitReadyFrames();
+    updateExtractionTimeline(metadata.duration, true);
     return kept;
   } finally {
     extractors.forEach((extractor) => extractor.dispose());
@@ -764,8 +924,10 @@ async function createFrameExtractor(url: string, width: number, height: number):
   return {
     capture: async (index: number, time: number) => {
       await seekVideo(video, time);
+      await waitForVideoFrame(video);
       ctx.drawImage(video, 0, 0, width, height);
-      return { index, time, hash: visualHash(ctx, width, height), dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height };
+      const actualTime = Number.isFinite(video.currentTime) ? video.currentTime : time;
+      return { index, time: actualTime, hash: visualHash(ctx, width, height), dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height };
     },
     dispose: () => {
       video.removeAttribute('src');
@@ -779,16 +941,20 @@ async function captureManualFrameAt(time: number): Promise<void> {
   const url = URL.createObjectURL(selectedFile);
   let extractor: FrameExtractor | null = null;
   try {
-    setProgress(`正在补抓 ${formatClock(time)} 的 frame`, 50, true);
+    const requestedTime = Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0));
+    setProgress(`正在补抓 ${formatClock(requestedTime)} 的 frame`, 50, true);
     extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
-    const frame = await extractor.capture(slides.length, Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0)));
+    const frame = await extractor.capture(slides.length, requestedTime);
     const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected() };
     slides.push(slide);
     sortAndReindexSlides();
+    timelineTime = frame.time;
+    updateTimelinePosition();
     renderSlides();
     setPreview(slide);
     setStatus(`已补抓 ${formatClock(frame.time)} 的 frame。`);
     setProgress('补抓完成', 100);
+    saveCurrentFileState({ markProcessed: slides.length > 0 });
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : '补抓 frame 失败。');
@@ -797,6 +963,24 @@ async function captureManualFrameAt(time: number): Promise<void> {
     URL.revokeObjectURL(url);
     updateActionState();
   }
+}
+
+function updateExtractionTimeline(time: number, force = false): void {
+  if (!videoMeta || isDraggingTimeline) return;
+  extractionTimelineMax = Math.max(extractionTimelineMax, time);
+  const now = performance.now();
+  if (!force && now - lastTimelinePaint < TIMELINE_PAINT_INTERVAL_MS) return;
+  timelineTime = Math.min(extractionTimelineMax, videoMeta.duration);
+  lastTimelinePaint = now;
+  updateTimelinePosition();
+}
+
+function forceTimelineToEnd(): void {
+  if (!videoMeta) return;
+  timelineTime = videoMeta.duration;
+  extractionTimelineMax = videoMeta.duration;
+  lastTimelinePaint = performance.now();
+  updateTimelinePosition();
 }
 
 function isDuplicateSlide(slide: Slide, currentHash: bigint, currentTime: number, settings: Settings): boolean {
@@ -998,7 +1182,11 @@ function appendSlideCard(slide: Slide): void {
   img?.addEventListener('click', () => setPreview(slide));
   const checkbox = card.querySelector<HTMLInputElement>('.frame-checkbox');
   if (checkbox) checkbox.checked = slide.selected;
-  checkbox?.addEventListener('change', () => { slide.selected = Boolean(checkbox.checked); updateActionState(); });
+  checkbox?.addEventListener('change', () => {
+    slide.selected = Boolean(checkbox.checked);
+    saveCurrentFileState({ markProcessed: slides.length > 0 });
+    updateActionState();
+  });
   card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
   card.querySelector<HTMLButtonElement>('.crop-frame')?.addEventListener('click', (event) => { event.stopPropagation(); openCropDialog(slide); });
   slidesEl.appendChild(card);
@@ -1022,6 +1210,7 @@ function deleteSlide(id: number): void {
     previewEmpty.hidden = false;
   }
   setStatus('已删除 frame。');
+  saveCurrentFileState({ markProcessed: slides.length > 0 });
 }
 
 function sortAndReindexSlides(): void {
@@ -1065,6 +1254,7 @@ async function applyCrop(): Promise<void> {
   renderSlides();
   setPreview(slide);
   setStatus('已裁剪 frame。');
+  saveCurrentFileState({ markProcessed: slides.length > 0 });
 }
 
 function setPreview(slide: Slide): void {
@@ -1074,6 +1264,8 @@ function setPreview(slide: Slide): void {
 
 function setupTimeline(duration: number): void {
   timelineTime = 0;
+  extractionTimelineMax = 0;
+  lastTimelinePaint = 0;
   timelineDurationEl.textContent = formatClock(duration);
   timelineMarkers.innerHTML = '';
   updateTimelinePosition();
@@ -1084,6 +1276,7 @@ function updateTimelineFromPointer(event: PointerEvent): void {
   const rect = timelineRail.getBoundingClientRect();
   const ratio = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
   timelineTime = ratio * videoMeta.duration;
+  extractionTimelineMax = Math.max(extractionTimelineMax, timelineTime);
   updateTimelinePosition();
 }
 
@@ -1104,6 +1297,12 @@ function updateTimelineMarkers(): void {
     marker.className = 'timeline-marker';
     marker.style.left = `${clamp(slide.time / duration, 0, 1) * 100}%`;
     marker.title = `#${slide.id} · ${formatClock(slide.time)}`;
+    marker.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+      timelineTime = slide.time;
+      updateTimelinePosition();
+      setPreview(slide);
+    });
     timelineMarkers.appendChild(marker);
   }
 }
@@ -1112,6 +1311,7 @@ function appendTranscript(line: string): void {
   transcriptEl.value = `${transcriptEl.value}${transcriptEl.value ? '\n' : ''}${line}`;
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
   updateActionState();
+  saveCurrentFileState({ markProcessed: slides.length > 0 });
 }
 
 function rms(audio: Float32Array): number { let sum = 0; for (const value of audio) sum += value * value; return Math.sqrt(sum / Math.max(audio.length, 1)); }
@@ -1173,12 +1373,27 @@ function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
 
 function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (Math.abs(video.currentTime - time) < 0.015) {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
     const cleanup = () => { video.removeEventListener('seeked', onSeeked); video.removeEventListener('error', onError); };
     const onSeeked = () => { cleanup(); resolve(); };
     const onError = () => { cleanup(); reject(new Error('视频 seek 失败。')); };
     video.addEventListener('seeked', onSeeked, { once: true });
     video.addEventListener('error', onError, { once: true });
     video.currentTime = time;
+  });
+}
+
+function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
+  return new Promise((resolve) => {
+    const withCallback = video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number };
+    if (typeof withCallback.requestVideoFrameCallback === 'function') {
+      withCallback.requestVideoFrameCallback(() => resolve());
+    } else {
+      requestAnimationFrame(() => resolve());
+    }
   });
 }
 
@@ -1207,7 +1422,7 @@ function baseName(filename: string): string { return filename.replace(/\.[^/.]+$
 function timestampForFilename(): string { return new Date().toISOString().replace(/[:.]/g, '-'); }
 function formatTime(seconds: number): string { return `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`; }
 function formatClock(seconds: number): string {
-  const total = Math.floor(seconds);
+  const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600).toString().padStart(2, '0');
   const minutes = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
   const secs = (total % 60).toString().padStart(2, '0');
