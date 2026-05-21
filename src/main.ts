@@ -508,6 +508,7 @@ async function startScreenRecording(): Promise<void> {
 
 function stopScreenRecording(): void {
   if (mediaRecorder?.state === 'recording') {
+    mediaRecorder.requestData();
     mediaRecorder.stop();
   } else {
     finishScreenRecording();
@@ -693,8 +694,51 @@ async function readVideoMetadata(url: string): Promise<VideoMeta> {
   video.preload = 'metadata';
   video.playsInline = true;
   await waitForEvent(video, 'loadedmetadata');
-  if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('无法读取视频时长。请尝试转成 H.264 mp4 或 WebM 后再上传。');
-  return { duration: video.duration, width: video.videoWidth || 1280, height: video.videoHeight || 720 };
+  const duration = await resolveVideoDuration(video);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('无法读取视频时长。浏览器录屏 WebM 可能还没写入可读 duration；请重新停止录制后再试，或转成 H.264 mp4/WebM 后上传。');
+  }
+  return { duration, width: video.videoWidth || 1280, height: video.videoHeight || 720 };
+}
+
+async function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {
+  if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener('durationchange', onMaybeResolved);
+      video.removeEventListener('timeupdate', onMaybeResolved);
+      video.removeEventListener('seeked', onMaybeResolved);
+      video.removeEventListener('error', onError);
+    };
+    const finish = (duration: number) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (Number.isFinite(duration) && duration > 0) {
+        try { video.currentTime = 0; } catch { /* ignore */ }
+      }
+      resolve(duration);
+    };
+    const onMaybeResolved = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) finish(video.duration);
+    };
+    const onError = () => finish(video.duration);
+    const timer = window.setTimeout(() => finish(video.duration), 3500);
+
+    video.addEventListener('durationchange', onMaybeResolved);
+    video.addEventListener('timeupdate', onMaybeResolved);
+    video.addEventListener('seeked', onMaybeResolved);
+    video.addEventListener('error', onError, { once: true });
+
+    try {
+      video.currentTime = 1e101;
+    } catch {
+      finish(video.duration);
+    }
+  });
 }
 
 function buildFrameTimes(duration: number, sampleEvery: number): number[] {
