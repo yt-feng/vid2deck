@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import JSZip from 'jszip';
 import './style.css';
 
 type Slide = {
@@ -28,22 +29,17 @@ type CapturedFrame = {
   height: number;
 };
 
-type VideoMeta = {
-  duration: number;
-  width: number;
-  height: number;
-};
-
-type FrameExtractor = {
-  capture: (index: number, time: number) => Promise<CapturedFrame>;
-  dispose: () => void;
-};
+type VideoMeta = { duration: number; width: number; height: number };
+type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
+type JobStatus = 'queued' | 'processing' | 'done' | 'error';
 
 type FileJobState = {
   slides: Slide[];
   transcript: string;
   summary: string;
   videoMeta: VideoMeta | null;
+  status: JobStatus;
+  error?: string;
   processedAt?: string;
 };
 
@@ -57,7 +53,7 @@ const VISUAL_HASH_BITS = 320;
 const FRAME_CONCURRENCY = 3;
 const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
-const TIMELINE_PAINT_INTERVAL_MS = 180;
+const TIMELINE_PAINT_INTERVAL_MS = 220;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -68,7 +64,7 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Vid2Deck</p>
         <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-        <p class="subhead">支持一次上传多个视频，也支持直接录制屏幕；每次选择一个视频进入工作台处理。抽帧、去重、PDF 和转写都在浏览器本地完成。</p>
+        <p class="subhead">支持一次上传多个视频，也支持直接录制屏幕。单个视频可进入工作台精修；批量上传后可一键抽帧并下载 frames zip。</p>
       </div>
     </section>
 
@@ -76,7 +72,7 @@ app.innerHTML = `
       <label class="dropzone" id="dropzone" for="videoInput">
         <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
         <span id="fileLabel">选择或拖入一个或多个视频文件</span>
-        <small>可以一次选择多个文件，也可以多次追加。当前版本只处理本地文件和本机屏幕录制。</small>
+        <small>可以一次选择多个文件，也可以多次追加。视频处理在浏览器本地完成。</small>
       </label>
 
       <div class="source-actions">
@@ -94,10 +90,12 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">多个文件会先进入队列。处理结束后，主页文件卡片会出现“查看结果”和“下载 PDF”，可以回到之前的工作台继续裁剪、删除和补抓 frame。</div>
+      <div class="hint">单文件：点“处理当前视频”进入工作台，可勾选、裁剪、删除、补抓 frame，再下载 PDF。多文件：点“批量抽帧并下载 ZIP”，会依次处理全部视频，只打包抽帧图片，不包含转写或 summary。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>处理当前视频</button>
+        <button id="batchZipBtn" disabled>批量抽帧并下载 ZIP</button>
+        <button id="downloadFramesZipBtn" disabled>下载已处理 Frames ZIP</button>
       </div>
 
       <div class="status" id="homeStatus">等待上传视频。</div>
@@ -199,6 +197,8 @@ const videoInput = $<HTMLInputElement>('#videoInput');
 const recordScreenBtn = $<HTMLButtonElement>('#recordScreenBtn');
 const stopRecordBtn = $<HTMLButtonElement>('#stopRecordBtn');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
+const batchZipBtn = $<HTMLButtonElement>('#batchZipBtn');
+const downloadFramesZipBtn = $<HTMLButtonElement>('#downloadFramesZipBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
 const toggleSideBtn = $<HTMLButtonElement>('#toggleSideBtn');
 const selectAllBox = $<HTMLInputElement>('#selectAllBox');
@@ -235,9 +235,16 @@ const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 let selectedFiles: File[] = [];
 let currentFileIndex = -1;
 let selectedFile: File | null = null;
-let fileStates = new Map<string, FileJobState>();
+const fileStates = new Map<string, FileJobState>();
 let slides: Slide[] = [];
+let videoMeta: VideoMeta | null = null;
+let timelineTime = 0;
+let cropTargetSlideId: number | null = null;
+let isDraggingTimeline = false;
+let extractionTimelineMax = 0;
+let lastTimelinePaint = 0;
 let isExtracting = false;
+let isBatchProcessing = false;
 let isTranscribing = false;
 let isSummarizing = false;
 let isRecording = false;
@@ -245,24 +252,18 @@ let mediaRecorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
 let recordedChunks: Blob[] = [];
 let currentRecordingMimeType = 'video/webm';
-let videoMeta: VideoMeta | null = null;
-let timelineTime = 0;
-let cropTargetSlideId: number | null = null;
-let isDraggingTimeline = false;
-let extractionTimelineMax = 0;
-let lastTimelinePaint = 0;
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 recordScreenBtn.addEventListener('click', () => startScreenRecording());
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
-transcriptEl.addEventListener('input', () => {
-  saveCurrentFileState();
-  updateActionState();
-});
-summaryEl.addEventListener('input', () => saveCurrentFileState());
+extractBtn.addEventListener('click', () => processCurrentFile());
+batchZipBtn.addEventListener('click', () => batchExtractAndDownloadZip());
+downloadFramesZipBtn.addEventListener('click', () => downloadProcessedFramesZip());
+transcriptEl.addEventListener('input', () => { persistWorkspaceToState(); updateActionState(); });
+summaryEl.addEventListener('input', () => persistWorkspaceToState());
 
 doneBtn.addEventListener('click', () => {
-  saveCurrentFileState({ markProcessed: slides.length > 0 });
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
   workspaceView.hidden = true;
   homeView.hidden = false;
   hideProgress();
@@ -298,93 +299,8 @@ dropzone.addEventListener('drop', (event) => {
   addFiles(Array.from(event.dataTransfer?.files ?? []));
 });
 
-extractBtn.addEventListener('click', async () => {
-  if (!selectedFile) return;
-  const settings = readSettings();
-  showWorkspace();
-  resetFrameOutputs();
-
-  try {
-    isExtracting = true;
-    updateActionState();
-    setProgress('开始抽帧', 2);
-    setStatus(`正在处理：${selectedFile.name}。正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
-    slides = await extractUniqueSlides(selectedFile, settings, setStatus, appendSlideCard);
-    forceTimelineToEnd();
-    setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面。Done 回主页后可直接下载 PDF，也可稍后回到这个工作台继续编辑。`);
-    saveCurrentFileState({ markProcessed: true });
-    renderFileList();
-  } catch (error) {
-    console.error(error);
-    setProgress('抽帧失败', 100);
-    setStatus(error instanceof Error ? error.message : '抽帧失败，请查看控制台。');
-  } finally {
-    isExtracting = false;
-    updateActionState();
-  }
-});
-
-transcribeBtn.addEventListener('click', async () => {
-  if (!selectedFile) return;
-  try {
-    isTranscribing = true;
-    updateActionState();
-    transcriptEl.value = '';
-    setProgress('准备本地分块转写音频', 0);
-    setStatus(`正在本地转写：${selectedFile.name}，会按 30 秒一段流式输出。`);
-    const transcriptText = await transcribeLocally(selectedFile, setStatus);
-    setProgress('转写完成', 100);
-    setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
-    saveCurrentFileState({ markProcessed: slides.length > 0 });
-  } catch (error) {
-    console.error(error);
-    setProgress('转写失败', 100);
-    setStatus(error instanceof Error ? error.message : '转写失败，请查看控制台。');
-  } finally {
-    isTranscribing = false;
-    updateActionState();
-  }
-});
-
-summarizeBtn.addEventListener('click', async () => {
-  const settings = readSettings();
-  const transcriptForSummary = transcriptEl.value.trim();
-  if (!transcriptForSummary) {
-    setStatus('没有逐字稿可总结。');
-    return;
-  }
-
-  try {
-    isSummarizing = true;
-    updateActionState();
-    setProgress('正在请求 DeepSeek summary', 50, true);
-    setStatus('正在请求 DeepSeek summary...');
-    summaryEl.value = await summarizeWithApi(settings, transcriptForSummary);
-    setProgress('Summary 完成', 100);
-    setStatus('Summary 已生成。');
-    saveCurrentFileState({ markProcessed: slides.length > 0 });
-  } catch (error) {
-    console.error(error);
-    setProgress('Summary 失败', 100);
-    setStatus(error instanceof Error ? error.message : 'Summary 失败，请查看控制台。');
-  } finally {
-    isSummarizing = false;
-    updateActionState();
-  }
-});
-
-downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
-downloadTranscriptBtn.addEventListener('click', () => {
-  if (!selectedFile) return;
-  downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), `${baseName(selectedFile.name)}-transcript.txt`);
-});
-downloadSummaryBtn.addEventListener('click', () => {
-  if (!selectedFile) return;
-  downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), `${baseName(selectedFile.name)}-summary.md`);
-});
-
 timelineRail.addEventListener('pointerdown', (event) => {
+  if (!videoMeta || isExtracting || isBatchProcessing) return;
   isDraggingTimeline = true;
   timelineRail.setPointerCapture(event.pointerId);
   updateTimelineFromPointer(event);
@@ -415,10 +331,8 @@ cropApplyBtn.addEventListener('click', async (event) => {
   await applyCrop();
 });
 
-function showWorkspace(): void {
-  homeView.hidden = true;
-  workspaceView.hidden = false;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function isBusy(): boolean {
+  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isRecording;
 }
 
 function addFiles(files: File[], selectAdded = false): void {
@@ -432,18 +346,16 @@ function addFiles(files: File[], selectAdded = false): void {
   let firstAddedIndex = -1;
   for (const file of validFiles) {
     const key = fileKey(file);
-    if (!existingKeys.has(key)) {
-      selectedFiles.push(file);
-      existingKeys.add(key);
-      if (firstAddedIndex < 0) firstAddedIndex = selectedFiles.length - 1;
-    }
+    if (existingKeys.has(key)) continue;
+    selectedFiles.push(file);
+    existingKeys.add(key);
+    ensureState(file);
+    if (firstAddedIndex < 0) firstAddedIndex = selectedFiles.length - 1;
   }
 
-  if (currentFileIndex < 0 && selectedFiles.length > 0) {
-    chooseFile(0);
-  } else if (selectAdded && firstAddedIndex >= 0) {
-    chooseFile(firstAddedIndex);
-  } else {
+  if (currentFileIndex < 0 && selectedFiles.length > 0) chooseFile(0);
+  else if (selectAdded && firstAddedIndex >= 0) chooseFile(firstAddedIndex);
+  else {
     renderFileList();
     updateHomeFileStatus();
     updateActionState();
@@ -453,18 +365,27 @@ function addFiles(files: File[], selectAdded = false): void {
 
 function chooseFile(index: number): void {
   if (index < 0 || index >= selectedFiles.length) return;
-  if (selectedFile && currentFileIndex !== index) saveCurrentFileState({ markProcessed: slides.length > 0 });
+  if (isBusy()) {
+    setHomeStatus('当前有任务正在运行，完成后再切换视频。');
+    return;
+  }
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
   currentFileIndex = index;
   selectedFile = selectedFiles[index];
-  loadCurrentFileStateOrReset();
+  loadStateIntoWorkspace(selectedFile);
   renderFileList();
   updateHomeFileStatus();
   updateActionState();
 }
 
 function removeFile(index: number): void {
-  if (index < 0 || index >= selectedFiles.length) return;
-  fileStates.delete(fileKey(selectedFiles[index]));
+  if (isBusy()) {
+    setHomeStatus('当前有任务正在运行，完成后再移除文件。');
+    return;
+  }
+  const file = selectedFiles[index];
+  if (!file) return;
+  fileStates.delete(fileKey(file));
   selectedFiles.splice(index, 1);
   if (selectedFiles.length === 0) {
     currentFileIndex = -1;
@@ -478,40 +399,405 @@ function removeFile(index: number): void {
   chooseFile(Math.min(index, selectedFiles.length - 1));
 }
 
-function saveCurrentFileState(options: { markProcessed?: boolean } = {}): void {
+async function processCurrentFile(): Promise<void> {
+  if (!selectedFile || isBusy()) return;
+  const file = selectedFile;
+  const settings = readSettings();
+  showWorkspace();
+  resetFrameOutputs();
+
+  isExtracting = true;
+  setStateStatus(file, 'processing');
+  updateActionState();
+  renderFileList();
+
+  try {
+    setProgress('开始抽帧', 2);
+    setStatus(`正在处理：${file.name}。正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
+    const result = await extractSlidesFromFile(file, settings, {
+      onMetadata: (meta) => {
+        videoMeta = meta;
+        setupTimeline(meta.duration);
+      },
+      onKeep: (slide) => {
+        slides.push(slide);
+        appendSlideCard(slide);
+        updateSelectionUI();
+        updateTimelineMarkers();
+      },
+      onProgress: ({ completed, total, time, duration, kept }) => {
+        setProgress(`抽帧保守去重：${completed} / ${total}，已保留 ${kept} 张`, 3 + Math.round((completed / Math.max(total, 1)) * 70));
+        setStatus(`抽帧中：${formatTime(time)} / ${formatTime(duration)}，已保留 ${kept} 张`);
+        updateExtractionTimeline(time);
+      }
+    });
+    slides = result.slides;
+    videoMeta = result.meta;
+    forceTimelineToEnd();
+    setProgress('抽帧完成', 100);
+    setStatus(`抽帧完成：保留 ${slides.length} 张页面。Done 回主页后可直接下载 PDF，也可稍后回到这个工作台继续编辑。`);
+    setStateForFile(file, {
+      slides,
+      transcript: transcriptEl.value,
+      summary: summaryEl.value,
+      videoMeta,
+      status: 'done',
+      processedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '抽帧失败，请查看控制台。';
+    console.error(error);
+    setProgress('抽帧失败', 100);
+    setStatus(message);
+    setStateStatus(file, 'error', message);
+  } finally {
+    isExtracting = false;
+    renderFileList();
+    updateActionState();
+  }
+}
+
+async function batchExtractAndDownloadZip(): Promise<void> {
+  if (selectedFiles.length === 0 || isBusy()) return;
+  const settings = readSettings();
+  const files = selectedFiles.slice();
+  const zip = new JSZip();
+  isBatchProcessing = true;
+  homeView.hidden = false;
+  workspaceView.hidden = true;
+  updateActionState();
+  renderFileList();
+
+  try {
+    for (const [index, file] of files.entries()) {
+      currentFileIndex = selectedFiles.indexOf(file);
+      selectedFile = file;
+      setStateStatus(file, 'processing');
+      renderFileList();
+      setHomeStatus(`批量抽帧 ${index + 1}/${files.length}：${file.name}`);
+
+      const result = await extractSlidesFromFile(file, settings, {
+        onMetadata: (meta) => {
+          videoMeta = meta;
+          setupTimeline(meta.duration);
+        },
+        onProgress: ({ completed, total, time, duration, kept }) => {
+          const filePercent = Math.round((completed / Math.max(total, 1)) * 100);
+          setHomeStatus(`批量抽帧 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 保留 ${kept} 张`);
+        }
+      });
+
+      setStateForFile(file, {
+        slides: result.slides,
+        transcript: getState(file).transcript,
+        summary: getState(file).summary,
+        videoMeta: result.meta,
+        status: 'done',
+        processedAt: new Date().toISOString()
+      });
+      addSlidesToZip(zip, file, result.slides);
+      renderFileList();
+      await yieldToBrowser();
+    }
+
+    setHomeStatus('正在生成 frames zip...');
+    const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+      setHomeStatus(`正在生成 frames zip：${Math.round(metadata.percent)}%`);
+    });
+    downloadBlob(blob, `vid2deck-frames-${timestampForFilename()}.zip`);
+    setHomeStatus(`批量完成：已处理 ${files.length} 个视频，并下载 frames zip。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : '批量抽帧失败。');
+  } finally {
+    isBatchProcessing = false;
+    if (selectedFile) loadStateIntoWorkspace(selectedFile);
+    renderFileList();
+    updateActionState();
+  }
+}
+
+async function downloadProcessedFramesZip(): Promise<void> {
+  if (isBusy()) return;
+  const processed = selectedFiles.filter((file) => getState(file).slides.length > 0);
+  if (processed.length === 0) {
+    setHomeStatus('还没有已处理的 frames 可以打包。');
+    return;
+  }
+  isBatchProcessing = true;
+  updateActionState();
+  try {
+    const zip = new JSZip();
+    processed.forEach((file) => addSlidesToZip(zip, file, getState(file).slides));
+    const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+      setHomeStatus(`正在打包已处理 frames：${Math.round(metadata.percent)}%`);
+    });
+    downloadBlob(blob, `vid2deck-processed-frames-${timestampForFilename()}.zip`);
+    setHomeStatus(`已下载 ${processed.length} 个已处理视频的 frames zip。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : 'Frames zip 生成失败。');
+  } finally {
+    isBatchProcessing = false;
+    updateActionState();
+  }
+}
+
+async function transcribeCurrentFile(): Promise<void> {
+  if (!selectedFile || isBusy()) return;
+  const file = selectedFile;
+  try {
+    isTranscribing = true;
+    updateActionState();
+    transcriptEl.value = '';
+    setProgress('准备本地分块转写音频', 0);
+    setStatus(`正在本地转写：${file.name}，会按 30 秒一段流式输出。`);
+    const transcriptText = await transcribeLocally(file, setStatus);
+    setProgress('转写完成', 100);
+    setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  } catch (error) {
+    console.error(error);
+    setProgress('转写失败', 100);
+    setStatus(error instanceof Error ? error.message : '转写失败，请查看控制台。');
+  } finally {
+    isTranscribing = false;
+    updateActionState();
+  }
+}
+
+transcribeBtn.addEventListener('click', () => transcribeCurrentFile());
+
+summarizeBtn.addEventListener('click', async () => {
+  const settings = readSettings();
+  const transcriptForSummary = transcriptEl.value.trim();
+  if (!transcriptForSummary || isBusy()) {
+    if (!transcriptForSummary) setStatus('没有逐字稿可总结。');
+    return;
+  }
+  try {
+    isSummarizing = true;
+    updateActionState();
+    setProgress('正在请求 DeepSeek summary', 50, true);
+    setStatus('正在请求 DeepSeek summary...');
+    summaryEl.value = await summarizeWithApi(settings, transcriptForSummary);
+    setProgress('Summary 完成', 100);
+    setStatus('Summary 已生成。');
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  } catch (error) {
+    console.error(error);
+    setProgress('Summary 失败', 100);
+    setStatus(error instanceof Error ? error.message : 'Summary 失败，请查看控制台。');
+  } finally {
+    isSummarizing = false;
+    updateActionState();
+  }
+});
+
+downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
+downloadTranscriptBtn.addEventListener('click', () => {
   if (!selectedFile) return;
-  const key = fileKey(selectedFile);
-  const previous = fileStates.get(key);
-  fileStates.set(key, {
-    slides: cloneSlides(slides),
-    transcript: transcriptEl.value,
-    summary: summaryEl.value,
-    videoMeta: videoMeta ? { ...videoMeta } : null,
-    processedAt: options.markProcessed ? new Date().toISOString() : previous?.processedAt
+  downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), `${baseName(selectedFile.name)}-transcript.txt`);
+});
+downloadSummaryBtn.addEventListener('click', () => {
+  if (!selectedFile) return;
+  downloadBlob(new Blob([summaryEl.value], { type: 'text/markdown;charset=utf-8' }), `${baseName(selectedFile.name)}-summary.md`);
+});
+
+function renderFileList(): void {
+  fileList.innerHTML = '';
+  fileList.hidden = selectedFiles.length === 0;
+  selectedFiles.forEach((file, index) => {
+    const state = getState(file);
+    const selectedSlides = state.slides.filter((slide) => slide.selected).length;
+    const totalSlides = state.slides.length;
+    const item = document.createElement('div');
+    item.className = `file-list-item${index === currentFileIndex ? ' is-active' : ''}${totalSlides > 0 ? ' is-processed' : ''}${state.status === 'processing' ? ' is-processing' : ''}`;
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'file-pick-btn';
+    main.disabled = isBusy();
+    main.addEventListener('click', () => chooseFile(index));
+
+    const title = document.createElement('strong');
+    title.textContent = file.name;
+    const meta = document.createElement('small');
+    const statusText = state.status === 'processing'
+      ? ' · 处理中'
+      : state.status === 'error'
+        ? ` · 失败：${state.error ?? '未知错误'}`
+        : totalSlides > 0
+          ? ` · 已处理 ${selectedSlides}/${totalSlides} 张`
+          : ' · 待处理';
+    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前' : ''}${statusText}`;
+    main.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'file-list-actions';
+
+    if (totalSlides > 0) {
+      const view = document.createElement('button');
+      view.type = 'button';
+      view.className = 'file-result-btn';
+      view.textContent = '查看结果';
+      view.disabled = isBusy();
+      view.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openProcessedFile(index);
+      });
+
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.className = 'file-result-btn primary';
+      download.textContent = '下载 PDF';
+      download.disabled = isBusy();
+      download.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await downloadProcessedPdf(index);
+      });
+
+      const frames = document.createElement('button');
+      frames.type = 'button';
+      frames.className = 'file-result-btn';
+      frames.textContent = '下载 Frames';
+      frames.disabled = isBusy();
+      frames.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await downloadSingleFramesZip(index);
+      });
+
+      actions.append(view, download, frames);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'file-remove-btn';
+    remove.textContent = '移除';
+    remove.disabled = isBusy();
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      removeFile(index);
+    });
+
+    actions.append(remove);
+    item.append(main, actions);
+    fileList.appendChild(item);
   });
 }
 
-function loadCurrentFileStateOrReset(): void {
-  if (!selectedFile) {
-    resetCurrentFileState();
-    return;
-  }
-  const state = fileStates.get(fileKey(selectedFile));
-  if (!state) {
-    resetCurrentFileState();
-    return;
-  }
+function openProcessedFile(index: number): void {
+  chooseFile(index);
+  showWorkspace();
+  setStatus('已回到上次处理结果，可继续勾选、裁剪、删除或补抓 frame。');
+}
 
+async function downloadProcessedPdf(index: number): Promise<void> {
+  const file = selectedFiles[index];
+  if (!file) return;
+  const selectedSlides = getState(file).slides.filter((slide) => slide.selected);
+  if (selectedSlides.length === 0) {
+    setHomeStatus('这个视频还没有可下载的选中 frame。');
+    return;
+  }
+  try {
+    setHomeStatus(`正在生成 ${file.name} 的 PDF...`);
+    const pdfBlob = await makePdf(selectedSlides);
+    downloadBlob(pdfBlob, `${baseName(file.name)}.pdf`);
+    setHomeStatus(`已下载 ${file.name} 的 PDF。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
+  }
+}
+
+async function downloadSingleFramesZip(index: number): Promise<void> {
+  const file = selectedFiles[index];
+  if (!file) return;
+  const state = getState(file);
+  if (state.slides.length === 0) return;
+  try {
+    const zip = new JSZip();
+    addSlidesToZip(zip, file, state.slides);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${baseName(file.name)}-frames.zip`);
+    setHomeStatus(`已下载 ${file.name} 的 frames zip。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : 'Frames zip 生成失败。');
+  }
+}
+
+function updateHomeFileStatus(): void {
+  fileLabel.textContent = selectedFiles.length > 0 ? `已选择 ${selectedFiles.length} 个文件` : '选择或拖入一个或多个视频文件';
+  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+}
+
+function showWorkspace(): void {
+  homeView.hidden = true;
+  workspaceView.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function getState(file: File): FileJobState {
+  return ensureState(file);
+}
+
+function ensureState(file: File): FileJobState {
+  const key = fileKey(file);
+  const existing = fileStates.get(key);
+  if (existing) return existing;
+  const created: FileJobState = { slides: [], transcript: '', summary: '', videoMeta: null, status: 'queued' };
+  fileStates.set(key, created);
+  return created;
+}
+
+function setStateStatus(file: File, status: JobStatus, error?: string): void {
+  const state = ensureState(file);
+  state.status = status;
+  state.error = error;
+}
+
+function setStateForFile(file: File, state: FileJobState): void {
+  fileStates.set(fileKey(file), {
+    slides: cloneSlides(state.slides),
+    transcript: state.transcript,
+    summary: state.summary,
+    videoMeta: state.videoMeta ? { ...state.videoMeta } : null,
+    status: state.status,
+    error: state.error,
+    processedAt: state.processedAt
+  });
+}
+
+function persistWorkspaceToState(options: { markProcessed?: boolean } = {}): void {
+  if (!selectedFile) return;
+  const previous = getState(selectedFile);
+  setStateForFile(selectedFile, {
+    slides,
+    transcript: transcriptEl.value,
+    summary: summaryEl.value,
+    videoMeta,
+    status: slides.length > 0 ? 'done' : previous.status,
+    error: previous.error,
+    processedAt: options.markProcessed ? new Date().toISOString() : previous.processedAt
+  });
+}
+
+function loadStateIntoWorkspace(file: File): void {
+  const state = getState(file);
   slides = cloneSlides(state.slides);
   videoMeta = state.videoMeta ? { ...state.videoMeta } : null;
   timelineTime = slides[0]?.time ?? 0;
+  extractionTimelineMax = timelineTime;
+  lastTimelinePaint = 0;
   transcriptEl.value = state.transcript;
   summaryEl.value = state.summary;
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
   hideProgress();
-  updateTimelinePosition();
   renderSlides();
+  updateTimelinePosition();
   if (slides[0]) setPreview(slides[0]);
 }
 
@@ -536,268 +822,35 @@ function resetCurrentFileState(): void {
   updateSelectionUI();
 }
 
-function renderFileList(): void {
-  fileList.innerHTML = '';
-  fileList.hidden = selectedFiles.length === 0;
-  selectedFiles.forEach((file, index) => {
-    const key = fileKey(file);
-    const state = fileStates.get(key);
-    const selectedSlides = state?.slides.filter((slide) => slide.selected).length ?? 0;
-    const totalSlides = state?.slides.length ?? 0;
-    const item = document.createElement('div');
-    item.className = `file-list-item${index === currentFileIndex ? ' is-active' : ''}${totalSlides > 0 ? ' is-processed' : ''}`;
-
-    const main = document.createElement('button');
-    main.type = 'button';
-    main.className = 'file-pick-btn';
-    main.addEventListener('click', () => chooseFile(index));
-
-    const title = document.createElement('strong');
-    title.textContent = file.name;
-    const meta = document.createElement('small');
-    const statusText = totalSlides > 0 ? ` · 已处理 ${selectedSlides}/${totalSlides} 张` : '';
-    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前处理' : ''}${statusText}`;
-    main.append(title, meta);
-
-    const actions = document.createElement('div');
-    actions.className = 'file-list-actions';
-
-    if (totalSlides > 0) {
-      const view = document.createElement('button');
-      view.type = 'button';
-      view.className = 'file-result-btn';
-      view.textContent = '查看结果';
-      view.addEventListener('click', (event) => {
-        event.stopPropagation();
-        openProcessedFile(index);
-      });
-
-      const download = document.createElement('button');
-      download.type = 'button';
-      download.className = 'file-result-btn primary';
-      download.textContent = '下载 PDF';
-      download.addEventListener('click', async (event) => {
-        event.stopPropagation();
-        await downloadProcessedPdf(index);
-      });
-
-      actions.append(view, download);
-    }
-
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'file-remove-btn';
-    remove.textContent = '移除';
-    remove.addEventListener('click', (event) => {
-      event.stopPropagation();
-      removeFile(index);
-    });
-
-    actions.append(remove);
-    item.append(main, actions);
-    fileList.appendChild(item);
-  });
-}
-
-function openProcessedFile(index: number): void {
-  chooseFile(index);
-  showWorkspace();
-  setStatus('已回到上次处理结果，可继续勾选、裁剪、删除或补抓 frame。');
-}
-
-async function downloadProcessedPdf(index: number): Promise<void> {
-  const file = selectedFiles[index];
-  if (!file) return;
-  const state = fileStates.get(fileKey(file));
-  const selectedSlides = state?.slides.filter((slide) => slide.selected) ?? [];
-  if (selectedSlides.length === 0) {
-    setHomeStatus('这个视频还没有可下载的选中 frame。');
-    return;
-  }
-  try {
-    setHomeStatus(`正在生成 ${file.name} 的 PDF...`);
-    const pdfBlob = await makePdf(selectedSlides);
-    downloadBlob(pdfBlob, `${baseName(file.name)}.pdf`);
-    setHomeStatus(`已下载 ${file.name} 的 PDF。`);
-  } catch (error) {
-    console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
-  }
-}
-
-function updateHomeFileStatus(): void {
-  fileLabel.textContent = selectedFiles.length > 0
-    ? `已选择 ${selectedFiles.length} 个文件`
-    : '选择或拖入一个或多个视频文件';
-  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
-}
-
-async function startScreenRecording(): Promise<void> {
-  if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
-    setHomeStatus('当前浏览器不支持屏幕录制。请使用最新版 Chrome / Edge / Safari。');
-    return;
-  }
-  try {
-    recordedChunks = [];
-    currentRecordingMimeType = getSupportedRecordingMimeType();
-    recordingStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    mediaRecorder = new MediaRecorder(recordingStream, currentRecordingMimeType ? { mimeType: currentRecordingMimeType } : undefined);
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) recordedChunks.push(event.data);
-    };
-    mediaRecorder.onstop = () => finishScreenRecording();
-    recordingStream.getTracks().forEach((track) => {
-      track.onended = () => {
-        if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
-      };
-    });
-    mediaRecorder.start(1000);
-    isRecording = true;
-    setHomeStatus('正在录制屏幕。完成后点击“停止录制并加入队列”。');
-  } catch (error) {
-    console.error(error);
-    cleanupRecording();
-    setHomeStatus(error instanceof Error ? `屏幕录制未开始：${error.message}` : '屏幕录制未开始。');
-  } finally {
-    updateActionState();
-  }
-}
-
-function stopScreenRecording(): void {
-  if (mediaRecorder?.state === 'recording') {
-    mediaRecorder.requestData();
-    mediaRecorder.stop();
-  } else {
-    finishScreenRecording();
-  }
-}
-
-function finishScreenRecording(): void {
-  const chunks = recordedChunks.slice();
-  cleanupRecording();
-  if (chunks.length === 0) {
-    setHomeStatus('录制结束，但没有生成有效视频。');
-    updateActionState();
-    return;
-  }
-  const mimeType = currentRecordingMimeType || chunks[0]?.type || 'video/webm';
-  const blob = new Blob(chunks, { type: mimeType });
-  const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([blob], `screen-recording-${timestampForFilename()}.${extension}`, { type: mimeType });
-  addFiles([file], true);
-  setHomeStatus(`录制完成，已加入队列并切换到：${file.name}`);
-  updateActionState();
-}
-
-function cleanupRecording(): void {
-  recordingStream?.getTracks().forEach((track) => track.stop());
-  recordingStream = null;
-  mediaRecorder = null;
-  recordedChunks = [];
-  isRecording = false;
-}
-
-function getSupportedRecordingMimeType(): string {
-  const candidates = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-    'video/mp4'
-  ];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
-}
-
-function isSupportedMediaFile(file: File): boolean {
-  return file.type.startsWith('video/') || file.type.startsWith('audio/') || /\.(mkv|mov|mp4|webm|avi|m4v)$/i.test(file.name);
-}
-
-function fileKey(file: File): string {
-  return `${file.name}:${file.size}:${file.lastModified}`;
-}
-
-function readSettings(): Settings {
-  return {
-    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
-    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
-    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
-    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim(),
-    authCode: $<HTMLInputElement>('#authCode').value
-  };
-}
-
-function updateActionState(): void {
-  const hasFile = Boolean(selectedFile);
-  const selectedCount = slides.filter((slide) => slide.selected).length;
-  extractBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing || isRecording;
-  transcribeBtn.disabled = !hasFile || isExtracting || isTranscribing || isSummarizing || isRecording;
-  downloadPdfBtn.disabled = selectedCount === 0 || isExtracting || isTranscribing || isSummarizing || isRecording;
-  downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing;
-  summarizeBtn.disabled = !transcriptEl.value.trim() || isExtracting || isTranscribing || isSummarizing || isRecording;
-  downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing;
-  videoInput.disabled = isExtracting || isTranscribing || isSummarizing || isRecording;
-  recordScreenBtn.disabled = isExtracting || isTranscribing || isSummarizing || isRecording;
-  stopRecordBtn.hidden = !isRecording;
-  updateSelectionUI();
-}
-
-function updateSelectionUI(): void {
-  const selectedCount = slides.filter((slide) => slide.selected).length;
-  selectCount.textContent = `${selectedCount}/${slides.length}`;
-  selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
-  selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
-}
-
-function setAllSlidesSelected(selected: boolean): void {
-  slides.forEach((slide) => { slide.selected = selected; });
-  slidesEl.querySelectorAll<HTMLInputElement>('.frame-checkbox').forEach((box) => { box.checked = selected; });
-  saveCurrentFileState({ markProcessed: slides.length > 0 });
-  updateActionState();
-}
-
-function getDefaultNewSlideSelected(): boolean {
-  if (slides.length === 0) return true;
-  return selectAllBox.checked;
-}
-
 function resetFrameOutputs(): void {
   slides = [];
   slidesEl.innerHTML = '';
-  summaryEl.value = '';
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
   timelineMarkers.innerHTML = '';
+  timelineTime = 0;
+  extractionTimelineMax = 0;
+  updateTimelinePosition();
   updateSelectionUI();
 }
 
-async function downloadSelectedPdf(): Promise<void> {
-  const selectedSlides = slides.filter((slide) => slide.selected);
-  if (!selectedFile || selectedSlides.length === 0) {
-    setStatus('请至少勾选一张 frame。');
-    return;
-  }
-  try {
-    setProgress('正在生成选中页面 PDF', 50, true);
-    const pdfBlob = await makePdf(selectedSlides);
-    downloadBlob(pdfBlob, `${baseName(selectedFile.name)}.pdf`);
-    setProgress('PDF 已生成', 100);
-    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 PDF。`);
-  } catch (error) {
-    console.error(error);
-    setStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
-  }
-}
-
-async function extractUniqueSlides(file: File, settings: Settings, onProgress: (message: string) => void, onKeep: (slide: Slide) => void): Promise<Slide[]> {
+async function extractSlidesFromFile(
+  file: File,
+  settings: Settings,
+  hooks: {
+    onMetadata?: (meta: VideoMeta) => void;
+    onKeep?: (slide: Slide) => void;
+    onProgress?: (data: { completed: number; total: number; time: number; duration: number; kept: number }) => void;
+  } = {}
+): Promise<{ slides: Slide[]; meta: VideoMeta }> {
   const url = URL.createObjectURL(file);
   const extractors: FrameExtractor[] = [];
-
   try {
-    const metadata = await readVideoMetadata(url);
-    videoMeta = metadata;
-    setupTimeline(metadata.duration);
-    const times = buildFrameTimes(metadata.duration, settings.sampleEvery);
+    const meta = await readVideoMetadata(url);
+    hooks.onMetadata?.(meta);
+    const times = buildFrameTimes(meta.duration, settings.sampleEvery);
     const workerCount = Math.min(FRAME_CONCURRENCY, times.length || 1);
-    for (let i = 0; i < workerCount; i += 1) extractors.push(await createFrameExtractor(url, metadata.width, metadata.height));
+    for (let i = 0; i < workerCount; i += 1) extractors.push(await createFrameExtractor(url, meta.width, meta.height));
 
     const kept: Slide[] = [];
     const captured = new Map<number, CapturedFrame>();
@@ -810,15 +863,13 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         const frame = captured.get(nextCommit)!;
         captured.delete(nextCommit);
         nextCommit += 1;
-        updateExtractionTimeline(frame.time);
         const duplicate = kept.some((slide) => isDuplicateSlide(slide, frame.hash, frame.time, settings));
         if (!duplicate) {
           const slide: Slide = { id: kept.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true };
           kept.push(slide);
-          onKeep(slide);
-          updateActionState();
-          updateTimelineMarkers();
+          hooks.onKeep?.({ ...slide });
         }
+        hooks.onProgress?.({ completed, total: times.length, time: frame.time, duration: meta.duration, kept: kept.length });
       }
     };
 
@@ -830,17 +881,13 @@ async function extractUniqueSlides(file: File, settings: Settings, onProgress: (
         captured.set(index, frame);
         completed += 1;
         commitReadyFrames();
-        const percent = 3 + Math.round((completed / Math.max(times.length, 1)) * 53);
-        setProgress(`抽帧保守去重：${completed} / ${times.length}，已保留 ${kept.length} 张`, percent);
-        onProgress(`抽帧中：${formatTime(frame.time)} / ${formatTime(metadata.duration)}，已保留 ${kept.length} 张`);
         await yieldToBrowser();
       }
     };
 
     await Promise.all(extractors.map((extractor) => runCapture(extractor)));
     commitReadyFrames();
-    updateExtractionTimeline(metadata.duration, true);
-    return kept;
+    return { slides: kept, meta };
   } finally {
     extractors.forEach((extractor) => extractor.dispose());
     URL.revokeObjectURL(url);
@@ -853,7 +900,7 @@ async function readVideoMetadata(url: string): Promise<VideoMeta> {
   video.muted = true;
   video.preload = 'metadata';
   video.playsInline = true;
-  await waitForEvent(video, 'loadedmetadata');
+  await waitForEvent(video, 'loadedmetadata', 5000);
   const duration = await resolveVideoDuration(video);
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error('无法读取视频时长。浏览器录屏 WebM 可能还没写入可读 duration；请重新停止录制后再试，或转成 H.264 mp4/WebM 后上传。');
@@ -863,16 +910,8 @@ async function readVideoMetadata(url: string): Promise<VideoMeta> {
 
 async function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {
   if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
-
   return new Promise((resolve) => {
     let settled = false;
-    const cleanup = () => {
-      clearTimeout(timer);
-      video.removeEventListener('durationchange', onMaybeResolved);
-      video.removeEventListener('timeupdate', onMaybeResolved);
-      video.removeEventListener('seeked', onMaybeResolved);
-      video.removeEventListener('error', onError);
-    };
     const finish = (duration: number) => {
       if (settled) return;
       settled = true;
@@ -886,18 +925,19 @@ async function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {
       if (Number.isFinite(video.duration) && video.duration > 0) finish(video.duration);
     };
     const onError = () => finish(video.duration);
-    const timer = window.setTimeout(() => finish(video.duration), 3500);
-
+    const timer = window.setTimeout(() => finish(video.duration), 4500);
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener('durationchange', onMaybeResolved);
+      video.removeEventListener('timeupdate', onMaybeResolved);
+      video.removeEventListener('seeked', onMaybeResolved);
+      video.removeEventListener('error', onError);
+    };
     video.addEventListener('durationchange', onMaybeResolved);
     video.addEventListener('timeupdate', onMaybeResolved);
     video.addEventListener('seeked', onMaybeResolved);
     video.addEventListener('error', onError, { once: true });
-
-    try {
-      video.currentTime = 1e101;
-    } catch {
-      finish(video.duration);
-    }
+    try { video.currentTime = 1e101; } catch { finish(video.duration); }
   });
 }
 
@@ -914,7 +954,7 @@ async function createFrameExtractor(url: string, width: number, height: number):
   video.muted = true;
   video.preload = 'auto';
   video.playsInline = true;
-  await waitForEvent(video, 'loadedmetadata');
+  await waitForEvent(video, 'loadedmetadata', 5000);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -937,8 +977,9 @@ async function createFrameExtractor(url: string, width: number, height: number):
 }
 
 async function captureManualFrameAt(time: number): Promise<void> {
-  if (!selectedFile || !videoMeta || isExtracting) return;
-  const url = URL.createObjectURL(selectedFile);
+  if (!selectedFile || !videoMeta || isBusy()) return;
+  const file = selectedFile;
+  const url = URL.createObjectURL(file);
   let extractor: FrameExtractor | null = null;
   try {
     const requestedTime = Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0));
@@ -954,7 +995,8 @@ async function captureManualFrameAt(time: number): Promise<void> {
     setPreview(slide);
     setStatus(`已补抓 ${formatClock(frame.time)} 的 frame。`);
     setProgress('补抓完成', 100);
-    saveCurrentFileState({ markProcessed: slides.length > 0 });
+    persistWorkspaceToState({ markProcessed: true });
+    renderFileList();
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : '补抓 frame 失败。');
@@ -963,24 +1005,6 @@ async function captureManualFrameAt(time: number): Promise<void> {
     URL.revokeObjectURL(url);
     updateActionState();
   }
-}
-
-function updateExtractionTimeline(time: number, force = false): void {
-  if (!videoMeta || isDraggingTimeline) return;
-  extractionTimelineMax = Math.max(extractionTimelineMax, time);
-  const now = performance.now();
-  if (!force && now - lastTimelinePaint < TIMELINE_PAINT_INTERVAL_MS) return;
-  timelineTime = Math.min(extractionTimelineMax, videoMeta.duration);
-  lastTimelinePaint = now;
-  updateTimelinePosition();
-}
-
-function forceTimelineToEnd(): void {
-  if (!videoMeta) return;
-  timelineTime = videoMeta.duration;
-  extractionTimelineMax = videoMeta.duration;
-  lastTimelinePaint = performance.now();
-  updateTimelinePosition();
 }
 
 function isDuplicateSlide(slide: Slide, currentHash: bigint, currentTime: number, settings: Settings): boolean {
@@ -996,7 +1020,7 @@ function visualHash(ctx: CanvasRenderingContext2D, width: number, height: number
 
 function averageHashBits(ctx: CanvasRenderingContext2D, width: number, height: number, size: number): bigint {
   const grays = grayscaleThumbnail(ctx, width, height, size, size);
-  const avg = grays.reduce((sum, value) => sum + value, 0) / grays.length;
+  const avg = grays.reduce((sum, value) => sum + value, 0) / Math.max(grays.length, 1);
   return grays.reduce((hash, value, index) => value >= avg ? hash | (1n << BigInt(index)) : hash, 0n);
 }
 
@@ -1026,7 +1050,10 @@ function grayscaleThumbnail(ctx: CanvasRenderingContext2D, width: number, height
   return grays;
 }
 
-function normalizedHashDistance(a: bigint, b: bigint): number { return (hammingDistance(a, b) / VISUAL_HASH_BITS) * 100; }
+function normalizedHashDistance(a: bigint, b: bigint): number {
+  return (hammingDistance(a, b) / VISUAL_HASH_BITS) * 100;
+}
+
 function hammingDistance(a: bigint, b: bigint): number {
   let x = a ^ b;
   let count = 0;
@@ -1048,6 +1075,37 @@ async function makePdf(items: Slide[]): Promise<Blob> {
     await yieldToBrowser();
   }
   return pdf.output('blob');
+}
+
+async function downloadSelectedPdf(): Promise<void> {
+  const selectedSlides = slides.filter((slide) => slide.selected);
+  if (!selectedFile || selectedSlides.length === 0) {
+    setStatus('请至少勾选一张 frame。');
+    return;
+  }
+  try {
+    setProgress('正在生成选中页面 PDF', 50, true);
+    const pdfBlob = await makePdf(selectedSlides);
+    downloadBlob(pdfBlob, `${baseName(selectedFile.name)}.pdf`);
+    setProgress('PDF 已生成', 100);
+    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 PDF。`);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
+  }
+}
+
+function addSlidesToZip(zip: JSZip, file: File, items: Slide[]): void {
+  const folder = zip.folder(baseName(file.name)) ?? zip;
+  items.forEach((slide, index) => {
+    const safeTime = formatClock(slide.time).replace(/:/g, '-');
+    folder.file(`${String(index + 1).padStart(4, '0')}_${safeTime}.jpg`, dataUrlToBase64(slide.dataUrl), { base64: true });
+  });
+}
+
+function dataUrlToBase64(dataUrl: string): string {
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
 async function transcribeLocally(file: File, onProgress: (message: string) => void): Promise<string> {
@@ -1184,7 +1242,10 @@ function appendSlideCard(slide: Slide): void {
   if (checkbox) checkbox.checked = slide.selected;
   checkbox?.addEventListener('change', () => {
     slide.selected = Boolean(checkbox.checked);
-    saveCurrentFileState({ markProcessed: slides.length > 0 });
+    const original = slides.find((item) => item.id === slide.id);
+    if (original) original.selected = slide.selected;
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+    renderFileList();
     updateActionState();
   });
   card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
@@ -1210,7 +1271,8 @@ function deleteSlide(id: number): void {
     previewEmpty.hidden = false;
   }
   setStatus('已删除 frame。');
-  saveCurrentFileState({ markProcessed: slides.length > 0 });
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  renderFileList();
 }
 
 function sortAndReindexSlides(): void {
@@ -1254,7 +1316,8 @@ async function applyCrop(): Promise<void> {
   renderSlides();
   setPreview(slide);
   setStatus('已裁剪 frame。');
-  saveCurrentFileState({ markProcessed: slides.length > 0 });
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  renderFileList();
 }
 
 function setPreview(slide: Slide): void {
@@ -1278,6 +1341,21 @@ function updateTimelineFromPointer(event: PointerEvent): void {
   timelineTime = ratio * videoMeta.duration;
   extractionTimelineMax = Math.max(extractionTimelineMax, timelineTime);
   updateTimelinePosition();
+}
+
+function updateExtractionTimeline(time: number, force = false): void {
+  if (!videoMeta || isDraggingTimeline) return;
+  extractionTimelineMax = Math.max(extractionTimelineMax, time);
+  const now = performance.now();
+  if (!force && now - lastTimelinePaint < TIMELINE_PAINT_INTERVAL_MS) return;
+  timelineTime = Math.min(extractionTimelineMax, videoMeta.duration);
+  lastTimelinePaint = now;
+  updateTimelinePosition();
+}
+
+function forceTimelineToEnd(): void {
+  if (!videoMeta) return;
+  updateExtractionTimeline(videoMeta.duration, true);
 }
 
 function updateTimelinePosition(): void {
@@ -1307,11 +1385,115 @@ function updateTimelineMarkers(): void {
   }
 }
 
+function updateActionState(): void {
+  const busy = isBusy();
+  const hasFile = Boolean(selectedFile);
+  const selectedCount = slides.filter((slide) => slide.selected).length;
+  extractBtn.disabled = !hasFile || busy;
+  batchZipBtn.disabled = selectedFiles.length === 0 || busy;
+  downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
+  transcribeBtn.disabled = !hasFile || busy;
+  downloadPdfBtn.disabled = selectedCount === 0 || busy;
+  downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing;
+  summarizeBtn.disabled = !transcriptEl.value.trim() || busy;
+  downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing;
+  videoInput.disabled = busy;
+  recordScreenBtn.disabled = busy;
+  stopRecordBtn.hidden = !isRecording;
+  updateSelectionUI();
+}
+
+function updateSelectionUI(): void {
+  const selectedCount = slides.filter((slide) => slide.selected).length;
+  selectCount.textContent = `${selectedCount}/${slides.length}`;
+  selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
+  selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
+}
+
+function setAllSlidesSelected(selected: boolean): void {
+  slides.forEach((slide) => { slide.selected = selected; });
+  slidesEl.querySelectorAll<HTMLInputElement>('.frame-checkbox').forEach((box) => { box.checked = selected; });
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  renderFileList();
+  updateActionState();
+}
+
+function getDefaultNewSlideSelected(): boolean {
+  if (slides.length === 0) return true;
+  return selectAllBox.checked;
+}
+
+async function startScreenRecording(): Promise<void> {
+  if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+    setHomeStatus('当前浏览器不支持屏幕录制。请使用最新版 Chrome / Edge / Safari。');
+    return;
+  }
+  try {
+    recordedChunks = [];
+    currentRecordingMimeType = getSupportedRecordingMimeType();
+    recordingStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    mediaRecorder = new MediaRecorder(recordingStream, currentRecordingMimeType ? { mimeType: currentRecordingMimeType } : undefined);
+    mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunks.push(event.data); };
+    mediaRecorder.onstop = () => finishScreenRecording();
+    recordingStream.getTracks().forEach((track) => {
+      track.onended = () => { if (mediaRecorder?.state === 'recording') mediaRecorder.stop(); };
+    });
+    mediaRecorder.start(1000);
+    isRecording = true;
+    setHomeStatus('正在录制屏幕。完成后点击“停止录制并加入队列”。');
+  } catch (error) {
+    console.error(error);
+    cleanupRecording();
+    setHomeStatus(error instanceof Error ? `屏幕录制未开始：${error.message}` : '屏幕录制未开始。');
+  } finally {
+    updateActionState();
+  }
+}
+
+function stopScreenRecording(): void {
+  if (mediaRecorder?.state === 'recording') {
+    mediaRecorder.requestData();
+    mediaRecorder.stop();
+  } else {
+    finishScreenRecording();
+  }
+}
+
+function finishScreenRecording(): void {
+  const chunks = recordedChunks.slice();
+  cleanupRecording();
+  if (chunks.length === 0) {
+    setHomeStatus('录制结束，但没有生成有效视频。');
+    updateActionState();
+    return;
+  }
+  const mimeType = currentRecordingMimeType || chunks[0]?.type || 'video/webm';
+  const blob = new Blob(chunks, { type: mimeType });
+  const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], `screen-recording-${timestampForFilename()}.${extension}`, { type: mimeType });
+  addFiles([file], true);
+  setHomeStatus(`录制完成，已加入队列并切换到：${file.name}`);
+  updateActionState();
+}
+
+function cleanupRecording(): void {
+  recordingStream?.getTracks().forEach((track) => track.stop());
+  recordingStream = null;
+  mediaRecorder = null;
+  recordedChunks = [];
+  isRecording = false;
+}
+
+function getSupportedRecordingMimeType(): string {
+  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
 function appendTranscript(line: string): void {
   transcriptEl.value = `${transcriptEl.value}${transcriptEl.value ? '\n' : ''}${line}`;
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
   updateActionState();
-  saveCurrentFileState({ markProcessed: slides.length > 0 });
 }
 
 function rms(audio: Float32Array): number { let sum = 0; for (const value of audio) sum += value * value; return Math.sqrt(sum / Math.max(audio.length, 1)); }
@@ -1334,6 +1516,16 @@ async function summarizeWithApi(settings: Settings, transcript: string): Promise
   if (!response.ok) throw new Error(`Summary API 请求失败：${response.status} ${await response.text()}`);
   const data = await response.json() as { summary?: string };
   return data.summary ?? '';
+}
+
+function readSettings(): Settings {
+  return {
+    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
+    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
+    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
+    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim(),
+    authCode: $<HTMLInputElement>('#authCode').value
+  };
 }
 
 function setProgress(label: string, percent?: number, indeterminate = false): void {
@@ -1361,9 +1553,10 @@ function hideProgress(): void {
 function setStatus(message: string): void { statusEl.textContent = message; }
 function setHomeStatus(message: string): void { homeStatus.textContent = message; }
 
-function waitForEvent(target: EventTarget, eventName: string): Promise<void> {
+function waitForEvent(target: EventTarget, eventName: string, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const cleanup = () => { target.removeEventListener(eventName, onSuccess); target.removeEventListener('error', onError); };
+    const timer = window.setTimeout(() => { cleanup(); reject(new Error(`等待 ${eventName} 超时。`)); }, timeoutMs);
+    const cleanup = () => { clearTimeout(timer); target.removeEventListener(eventName, onSuccess); target.removeEventListener('error', onError); };
     const onSuccess = () => { cleanup(); resolve(); };
     const onError = () => { cleanup(); reject(new Error('视频读取失败。浏览器可能不支持该编码。')); };
     target.addEventListener(eventName, onSuccess, { once: true });
@@ -1377,9 +1570,12 @@ function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
       requestAnimationFrame(() => resolve());
       return;
     }
-    const cleanup = () => { video.removeEventListener('seeked', onSeeked); video.removeEventListener('error', onError); };
-    const onSeeked = () => { cleanup(); resolve(); };
-    const onError = () => { cleanup(); reject(new Error('视频 seek 失败。')); };
+    let settled = false;
+    const cleanup = () => { clearTimeout(timer); video.removeEventListener('seeked', onSeeked); video.removeEventListener('error', onError); };
+    const finish = () => { if (settled) return; settled = true; cleanup(); resolve(); };
+    const onSeeked = () => finish();
+    const onError = () => { if (settled) return; settled = true; cleanup(); reject(new Error('视频 seek 失败。')); };
+    const timer = window.setTimeout(() => finish(), 2200);
     video.addEventListener('seeked', onSeeked, { once: true });
     video.addEventListener('error', onError, { once: true });
     video.currentTime = time;
@@ -1390,7 +1586,8 @@ function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
   return new Promise((resolve) => {
     const withCallback = video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number };
     if (typeof withCallback.requestVideoFrameCallback === 'function') {
-      withCallback.requestVideoFrameCallback(() => resolve());
+      const timer = window.setTimeout(() => resolve(), 160);
+      withCallback.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
     } else {
       requestAnimationFrame(() => resolve());
     }
@@ -1417,6 +1614,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function isSupportedMediaFile(file: File): boolean {
+  return file.type.startsWith('video/') || file.type.startsWith('audio/') || /\.(mkv|mov|mp4|webm|avi|m4v)$/i.test(file.name);
+}
+function fileKey(file: File): string { return `${file.name}:${file.size}:${file.lastModified}`; }
 function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
 function baseName(filename: string): string { return filename.replace(/\.[^/.]+$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'vid2deck'; }
 function timestampForFilename(): string { return new Date().toISOString().replace(/[:.]/g, '-'); }
@@ -1433,10 +1634,7 @@ function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
   let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
