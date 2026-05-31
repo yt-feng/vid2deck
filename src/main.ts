@@ -62,9 +62,9 @@ app.innerHTML = `
   <main id="homeView">
     <section class="hero">
       <div>
-        <p class="eyebrow">Vid2Deck</p>
-        <h1>上传视频，生成去重后的 PPT PDF、逐字稿和 summary</h1>
-        <p class="subhead">支持一次上传多个视频，也支持直接录制屏幕。单个视频可进入工作台精修；批量上传后可一键抽帧并下载 frames zip。</p>
+        <p class="eyebrow">Vid2PPT Deck</p>
+        <h1>视频一键生成去重版PPT、PDF、逐字稿与Summary</h1>
+        <p class="subhead">支持批量上传视频或直接录制屏幕。单个视频可进入工作台精修；批量上传后，一键抽帧即可下载所有帧图片压缩包（Frames ZIP）。</p>
       </div>
     </section>
 
@@ -90,7 +90,7 @@ app.innerHTML = `
         <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
-      <div class="hint">单文件：点“处理当前视频”进入工作台，可勾选、裁剪、删除、补抓 frame，再下载 PDF。多文件：点“批量抽帧并下载 ZIP”，会依次处理全部视频，只打包抽帧图片，不包含转写或 summary。</div>
+      <div class="hint">单文件：点击“处理当前视频”进入工作台，支持勾选、裁剪、删除、补抓帧，最后下载 PDF。多文件：点击“批量抽帧并下载 ZIP”，自动逐个处理全部视频，仅打包输出抽帧图片（不含转写与 Summary）。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>处理当前视频</button>

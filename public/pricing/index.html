@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vid2Deck 定价 | Pricing</title>
-  <meta name="description" content="Vid2Deck pricing plans for video-to-slide PDF, transcript and batch frame extraction." />
+  <title>Vid2PPT Deck 定价 | Pricing</title>
+  <meta name="description" content="Vid2PPT Deck pricing plans for video-to-slide PDF, transcript and batch frame extraction." />
   <style>
     :root { color: #0f172a; background: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     * { box-sizing: border-box; }
@@ -41,6 +41,14 @@
     li.muted::before { content: '×'; color: #94a3b8; }
     .cta { margin-top: auto; display: block; width: 100%; padding: 15px 18px; color: #fff; background: #0f172a; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 900; }
     .cta.secondary { color: #64748b; background: #fff; border: 1px solid #e2e8f0; }
+    .comparison { margin-top: 42px; overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .comparison table { width: 100%; min-width: 760px; border-collapse: collapse; }
+    .comparison th, .comparison td { padding: 18px 24px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 1rem; }
+    .comparison th { color: #0f172a; font-size: 1.05rem; font-weight: 900; }
+    .comparison tr:last-child td { border-bottom: 0; }
+    .comparison td:not(:first-child), .comparison th:not(:first-child) { width: 21%; }
+    .comparison .yes { color: #0f172a; font-weight: 900; }
+    .comparison .no { color: #0f172a; font-weight: 800; }
     .note { margin: 34px auto 0; text-align: center; color: #64748b; }
     .note a { color: #0f172a; font-weight: 900; }
     .footer { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 54px; color: #64748b; font-size: .95rem; }
@@ -51,7 +59,7 @@
 <body>
   <div class="wrap">
     <nav class="nav">
-      <a class="brand" href="/"><span class="logo">V</span><span>Vid2Deck</span></a>
+      <a class="brand" href="/"><span class="logo">V</span><span>Vid2PPT Deck</span></a>
       <div class="nav-links">
         <a href="/">产品</a>
         <a href="/pricing/">定价</a>
@@ -61,7 +69,7 @@
     <section class="hero">
       <p class="eyebrow">Pricing</p>
       <h1>把视频快速整理成可下载的 PDF 和 Frames</h1>
-      <p class="subhead">本地抽帧、去重、PDF、批量 ZIP、屏幕录制和转写。免费版适合试用，专业版适合高频整理课程、会议和演示视频。</p>
+      <p class="subhead">本地抽帧、去重、PDF、批量 ZIP、屏幕录制和转写。</p>
     </section>
 
     <div class="toggle" aria-label="Billing period">
@@ -74,14 +82,6 @@
         <h2>免费版</h2>
         <p class="for">适合入门用户</p>
         <p class="price"><strong>¥0</strong><span>永久免费</span></p>
-        <ul>
-          <li>单个视频时长限制 10 分钟</li>
-          <li>每月 3 次视频转换</li>
-          <li>下载去重后的 PDF</li>
-          <li>屏幕录制支持</li>
-          <li class="muted">批量处理</li>
-          <li class="muted">去除水印</li>
-        </ul>
         <a class="cta secondary" href="/">当前套餐</a>
       </article>
 
@@ -90,18 +90,7 @@
         <h2>专业版</h2>
         <p class="for">推荐专业用户使用</p>
         <p class="price"><strong>¥39</strong><span>/ 月</span></p>
-        <ul>
-          <li>视频时长无限制</li>
-          <li>每月 100 次视频转换</li>
-          <li>每月 100 张可编辑幻灯片</li>
-          <li>每月 600 分钟视频转录</li>
-          <li>在线视频支持</li>
-          <li>屏幕录制支持</li>
-          <li>视频批量转换</li>
-          <li>去除视频水印</li>
-          <li>到期无自动续费</li>
-        </ul>
-        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2Deck%20Pro%20subscription">立即订阅</a>
+        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20Pro%20subscription">立即订阅</a>
       </article>
 
       <article class="card">
@@ -109,28 +98,43 @@
         <h2>终身版</h2>
         <p class="for">一次购买，终身使用</p>
         <p class="price"><strong>¥498</strong><del>¥999</del></p>
-        <ul>
-          <li>视频时长无限制</li>
-          <li>视频转换次数无限制</li>
-          <li>总计 10,000 张可编辑幻灯片</li>
-          <li>不限时长视频转录</li>
-          <li>在线视频支持</li>
-          <li>屏幕录制支持</li>
-          <li>视频批量转换</li>
-          <li>去除视频水印</li>
-          <li>可使用未来所有功能</li>
-        </ul>
-        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2Deck%20Lifetime%20purchase">立即购买</a>
+        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20Lifetime%20purchase">立即购买</a>
       </article>
     </section>
 
-    <p class="note">只需要临时使用吗？<a href="mailto:support@vid2deck.com?subject=Vid2Deck%20one-time%20pass">点这里</a>，低至 ¥9.9。</p>
+    <section class="comparison" aria-label="套餐功能对比">
+      <table>
+        <thead>
+          <tr>
+            <th>功能</th>
+            <th>免费版</th>
+            <th>专业版</th>
+            <th>终身版</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>单个视频时长限制</td><td>10分钟</td><td>无限制</td><td>无限制</td></tr>
+          <tr><td>视频转换次数</td><td>每月3次</td><td>每月100次</td><td>无限制</td></tr>
+          <tr><td>下载去重后的 PDF</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>可编辑幻灯片</td><td>每月100张</td><td>总计10,000张</td><td class="no">—</td></tr>
+          <tr><td>屏幕录制支持</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>视频转录时长</td><td>每月600分钟</td><td>无限制</td><td>无限制</td></tr>
+          <tr><td>批量处理（视频批量转换）</td><td class="no">X</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>在线视频支持</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>去除视频水印</td><td class="no">X</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>到期无自动续费</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+          <tr><td>可使用未来所有功能</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="note">只需要临时使用吗？<a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20one-time%20pass">点这里</a>，低至 ¥9.9。</p>
 
     <footer class="footer">
       <a href="/terms-and-conditions/">Terms of Service</a>
       <a href="/privacy/">Privacy Policy</a>
       <a href="/refund/">Refund Policy</a>
-      <span>© 2026 Vid2Deck</span>
+      <span>© 2026 Vid2PPT Deck</span>
     </footer>
   </div>
 </body>
