@@ -26,6 +26,21 @@ type SlideTextBox = {
   align: 'left' | 'center' | 'right';
 };
 
+type OcrBBox = { x0: number; y0: number; x1: number; y1: number };
+type OcrLine = { text: string; confidence: number; bbox: OcrBBox };
+type OcrParagraph = { lines?: OcrLine[]; text: string; confidence: number; bbox: OcrBBox };
+type OcrBlock = { paragraphs?: OcrParagraph[]; text: string; confidence: number; bbox: OcrBBox };
+type OcrPage = { blocks?: OcrBlock[] | null; text?: string; confidence?: number };
+type OcrWorker = {
+  recognize: (image: HTMLCanvasElement, options?: unknown, output?: { text?: boolean; blocks?: boolean }) => Promise<{ data: OcrPage }>;
+  setParameters: (params: Record<string, string>) => Promise<unknown>;
+  terminate: () => Promise<unknown>;
+};
+type TesseractApi = {
+  createWorker: (langs: string[] | string, oem?: number, options?: Record<string, unknown>) => Promise<OcrWorker>;
+  PSM?: { SPARSE_TEXT?: string; AUTO?: string };
+};
+
 type Settings = {
   sampleEvery: number;
   duplicateThreshold: number;
@@ -73,6 +88,10 @@ const TIMELINE_PAINT_INTERVAL_MS = 220;
 const IMAGE_DECK_MAX_EDGE = 2400;
 const PPTX_SLIDE_WIDTH_EMU = 12192000;
 const PPTX_SLIDE_HEIGHT_EMU = 6858000;
+const TESSERACT_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+const OCR_LANGUAGES = ['eng', 'chi_sim'];
+const OCR_MAX_EDGE = 2800;
+const OCR_MIN_CONFIDENCE = 35;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -205,9 +224,12 @@ app.innerHTML = `
           <div class="text-layer-heading">
             <div>
               <strong>可编辑文本框</strong>
-              <small id="textLayerHint">选择一页后添加文本框；导出 PPTX 时会变成真实 PowerPoint 文本对象。</small>
+              <small id="textLayerHint">进入编辑模式后会自动 OCR；也可以对勾选页重新 OCR。</small>
             </div>
-            <button id="addTextBoxBtn" type="button" disabled>添加文本框</button>
+            <div class="text-layer-buttons">
+              <button id="runOcrBtn" type="button" disabled>自动 OCR 勾选页</button>
+              <button id="addTextBoxBtn" type="button" disabled>手动补文本框</button>
+            </div>
           </div>
           <textarea id="textBoxContent" placeholder="选择或添加文本框后，在这里输入文字。" disabled></textarea>
           <div class="text-box-grid">
@@ -353,6 +375,7 @@ const cropTop = $<HTMLInputElement>('#cropTop');
 const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
+const runOcrBtn = $<HTMLButtonElement>('#runOcrBtn');
 const addTextBoxBtn = $<HTMLButtonElement>('#addTextBoxBtn');
 const deleteTextBoxBtn = $<HTMLButtonElement>('#deleteTextBoxBtn');
 const textLayerHint = $<HTMLElement>('#textLayerHint');
@@ -385,11 +408,13 @@ let isExtracting = false;
 let isBatchProcessing = false;
 let isTranscribing = false;
 let isSummarizing = false;
+let isOcrRunning = false;
 let isRecording = false;
 let mediaRecorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
 let recordedChunks: Blob[] = [];
 let currentRecordingMimeType = 'video/webm';
+let tesseractLoadPromise: Promise<TesseractApi> | null = null;
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
@@ -418,6 +443,7 @@ toggleSideBtn.addEventListener('click', () => {
 });
 
 selectAllBox.addEventListener('change', () => setAllSlidesSelected(selectAllBox.checked));
+runOcrBtn.addEventListener('click', () => runOcrForSelectedSlides());
 addTextBoxBtn.addEventListener('click', () => addTextBoxToActiveSlide());
 deleteTextBoxBtn.addEventListener('click', () => deleteActiveTextBox());
 textBoxContent.addEventListener('input', () => updateActiveTextBoxFromControls());
@@ -501,7 +527,7 @@ cropApplyBtn.addEventListener('click', async (event) => {
 });
 
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isRecording;
+  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording;
 }
 
 function addFiles(files: File[], selectAdded = false): void {
@@ -1043,8 +1069,20 @@ async function openImagesInWorkspace(): Promise<void> {
     videoMeta = null;
     renderSlides();
     if (slides[0]) setPreview(slides[0]);
-    setProgress('图片页已准备好', 100);
-    setStatus(`已生成 ${slides.length} 张图片页。可在左侧添加文本框，顶部导出栏会输出包含真实文本框的 PPTX。`);
+    setProgress('图片页已准备，正在自动 OCR', 84, true);
+    setStatus('正在自动 OCR 图片文字，并按位置生成可编辑文本框。首次使用会下载 OCR 引擎和中英文语言包。');
+    const textBoxCount = await recognizeSlidesToTextBoxes(slides, {
+      replaceExisting: true,
+      onProgress: (index, total, message) => {
+        const base = 84;
+        const span = 15;
+        setProgress(`自动 OCR：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
+      }
+    });
+    renderSlides();
+    if (slides[0]) setPreview(slides[0]);
+    setProgress('OCR 完成', 100);
+    setStatus(`已生成 ${slides.length} 张图片页，并自动识别出 ${textBoxCount} 个可编辑文本框。顶部导出 PPTX 后可直接编辑文字。`);
     persistWorkspaceToState({ markProcessed: true });
   } catch (error) {
     console.error(error);
@@ -1472,6 +1510,263 @@ async function imageFileToSlide(file: File, index: number): Promise<Slide> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+async function runOcrForSelectedSlides(): Promise<void> {
+  if (isBusy()) return;
+  const targets = slides.filter((slide) => slide.selected);
+  const fallback = getActiveSlide();
+  const targetSlides = targets.length > 0 ? targets : fallback ? [fallback] : [];
+  if (targetSlides.length === 0) {
+    setStatus('请先选择至少一页再运行 OCR。');
+    return;
+  }
+  try {
+    setProgress('正在准备 OCR', 5, true);
+    setStatus('正在自动 OCR 勾选页面。识别结果会替换这些页面现有文本框。');
+    const textBoxCount = await recognizeSlidesToTextBoxes(targetSlides, {
+      replaceExisting: true,
+      onProgress: (index, total, message) => {
+        setProgress(`自动 OCR：${index} / ${total} · ${message}`, 5 + Math.round((index / Math.max(total, 1)) * 90), true);
+      }
+    });
+    renderSlides();
+    if (targetSlides[0]) setPreview(targetSlides[0]);
+    setProgress('OCR 完成', 100);
+    setStatus(`OCR 完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : 'OCR 失败。');
+  } finally {
+    updateActionState();
+  }
+}
+
+async function recognizeSlidesToTextBoxes(
+  targetSlides: Slide[],
+  options: {
+    replaceExisting: boolean;
+    onProgress?: (index: number, total: number, message: string) => void;
+  }
+): Promise<number> {
+  if (targetSlides.length === 0) return 0;
+  isOcrRunning = true;
+  updateActionState();
+  let currentIndex = 0;
+  let totalTextBoxes = 0;
+  let worker: OcrWorker | null = null;
+  try {
+    options.onProgress?.(0, targetSlides.length, '加载 OCR 引擎');
+    const tesseract = await loadTesseract();
+    worker = await tesseract.createWorker(OCR_LANGUAGES, 1, {
+      logger: (message: { status?: string; progress?: number }) => {
+        const label = formatOcrLoggerMessage(message);
+        if (label) options.onProgress?.(currentIndex, targetSlides.length, label);
+      }
+    });
+    await worker.setParameters({
+      preserve_interword_spaces: '1',
+      tessedit_pageseg_mode: tesseract.PSM?.SPARSE_TEXT ?? '11'
+    });
+
+    for (const [index, slide] of targetSlides.entries()) {
+      currentIndex = index + 1;
+      options.onProgress?.(currentIndex, targetSlides.length, `识别第 ${slide.id} 页`);
+      const prepared = await prepareSlideForOcr(slide);
+      const result = await worker.recognize(prepared.canvas, undefined, { text: true, blocks: true });
+      const boxes = ocrPageToTextBoxes(result.data, prepared.canvas, slide.id);
+      if (options.replaceExisting) slide.textBoxes = boxes;
+      else slide.textBoxes.push(...boxes);
+      totalTextBoxes += boxes.length;
+      activeSlideId = slide.id;
+      activeTextBoxId = slide.textBoxes[0]?.id ?? null;
+      options.onProgress?.(currentIndex, targetSlides.length, `第 ${slide.id} 页识别出 ${boxes.length} 个文本框`);
+      await yieldToBrowser();
+    }
+    return totalTextBoxes;
+  } catch (error) {
+    throw new Error(error instanceof Error
+      ? `OCR 失败：${error.message}`
+      : 'OCR 失败：无法加载或运行 OCR 引擎。');
+  } finally {
+    if (worker) await worker.terminate().catch(() => undefined);
+    isOcrRunning = false;
+    updateActionState();
+  }
+}
+
+function loadTesseract(): Promise<TesseractApi> {
+  const existing = (window as Window & { Tesseract?: TesseractApi }).Tesseract;
+  if (existing) return Promise.resolve(existing);
+  if (tesseractLoadPromise) return tesseractLoadPromise;
+  tesseractLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = TESSERACT_SCRIPT_URL;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => {
+      const api = (window as Window & { Tesseract?: TesseractApi }).Tesseract;
+      if (api) resolve(api);
+      else {
+        tesseractLoadPromise = null;
+        reject(new Error('OCR 脚本已加载，但没有找到 Tesseract API。'));
+      }
+    };
+    script.onerror = () => {
+      tesseractLoadPromise = null;
+      reject(new Error('无法加载 OCR 引擎。请检查网络或稍后重试。'));
+    };
+    document.head.appendChild(script);
+  });
+  return tesseractLoadPromise;
+}
+
+async function prepareSlideForOcr(slide: Slide): Promise<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }> {
+  const img = await loadImage(slide.dataUrl);
+  const scale = Math.max(1, Math.min(2, OCR_MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight)));
+  const width = Math.max(1, Math.round(img.naturalWidth * scale));
+  const height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('浏览器不支持 Canvas OCR。');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+  return { canvas, ctx };
+}
+
+function ocrPageToTextBoxes(page: OcrPage, canvas: HTMLCanvasElement, slideId: number): SlideTextBox[] {
+  const boxes: SlideTextBox[] = [];
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return boxes;
+  const candidates = ocrTextCandidates(page);
+  if (candidates.length === 0 && page.text?.trim()) {
+    candidates.push({
+      text: page.text,
+      confidence: page.confidence ?? OCR_MIN_CONFIDENCE,
+      bbox: {
+        x0: canvas.width * 0.06,
+        y0: canvas.height * 0.08,
+        x1: canvas.width * 0.94,
+        y1: canvas.height * 0.92
+      }
+    });
+  }
+  candidates.forEach((candidate, index) => {
+    const text = cleanOcrText(candidate.text);
+    if (!text) return;
+    if (candidate.confidence < OCR_MIN_CONFIDENCE && text.length < 8) return;
+    const bbox = padOcrBBox(candidate.bbox, canvas.width, canvas.height, 4);
+    const widthPx = bbox.x1 - bbox.x0;
+    const heightPx = bbox.y1 - bbox.y0;
+    if (widthPx < 8 || heightPx < 6) return;
+    const x = clamp((bbox.x0 / canvas.width) * 100, 0, 98);
+    const y = clamp((bbox.y0 / canvas.height) * 100, 0, 98);
+    const width = clamp((widthPx / canvas.width) * 100, 5, 100 - x);
+    const height = clamp((heightPx / canvas.height) * 100, 5, 100 - y);
+    const lineCount = Math.max(1, text.split('\n').length);
+    boxes.push({
+      id: `ocr-${slideId}-${index}-${Date.now().toString(36)}`,
+      text,
+      x,
+      y,
+      width,
+      height,
+      fontSize: estimateFontSize(height, lineCount),
+      color: estimateReadableTextColor(ctx, bbox),
+      bold: height / lineCount > 8 || text.length < 28,
+      align: 'left'
+    });
+  });
+  return mergeNearbyOcrBoxes(boxes);
+}
+
+function ocrTextCandidates(page: OcrPage): Array<{ text: string; confidence: number; bbox: OcrBBox }> {
+  const candidates: Array<{ text: string; confidence: number; bbox: OcrBBox }> = [];
+  for (const block of page.blocks ?? []) {
+    for (const paragraph of block.paragraphs ?? []) {
+      const lines = paragraph.lines ?? [];
+      const text = lines.length > 0 ? lines.map((line) => line.text).join('\n') : paragraph.text;
+      candidates.push({ text, confidence: paragraph.confidence, bbox: paragraph.bbox });
+    }
+    if ((block.paragraphs ?? []).length === 0) {
+      candidates.push({ text: block.text, confidence: block.confidence, bbox: block.bbox });
+    }
+  }
+  return candidates;
+}
+
+function mergeNearbyOcrBoxes(items: SlideTextBox[]): SlideTextBox[] {
+  const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+  const merged: SlideTextBox[] = [];
+  for (const item of sorted) {
+    const previous = merged[merged.length - 1];
+    const sameColumn = previous && Math.abs(previous.x - item.x) < 3 && Math.abs(previous.width - item.width) < 8;
+    const closeVertical = previous && item.y - (previous.y + previous.height) < 2.2;
+    const compatibleSize = previous && Math.abs(previous.fontSize - item.fontSize) < 3;
+    if (previous && sameColumn && closeVertical && compatibleSize && previous.text.length + item.text.length < 500) {
+      previous.text = `${previous.text}\n${item.text}`;
+      const bottom = Math.max(previous.y + previous.height, item.y + item.height);
+      previous.height = bottom - previous.y;
+      previous.width = Math.max(previous.width, item.width);
+      continue;
+    }
+    merged.push({ ...item });
+  }
+  return merged;
+}
+
+function padOcrBBox(bbox: OcrBBox, width: number, height: number, pad: number): OcrBBox {
+  return {
+    x0: clamp(bbox.x0 - pad, 0, width),
+    y0: clamp(bbox.y0 - pad, 0, height),
+    x1: clamp(bbox.x1 + pad, 0, width),
+    y1: clamp(bbox.y1 + pad, 0, height)
+  };
+}
+
+function cleanOcrText(text: string): string {
+  return text
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function estimateFontSize(heightPercent: number, lineCount: number): number {
+  const pointHeight = (heightPercent / 100) * 540;
+  return Math.round(clamp((pointHeight / Math.max(lineCount, 1)) * 0.78, 9, 44));
+}
+
+function estimateReadableTextColor(ctx: CanvasRenderingContext2D, bbox: OcrBBox): string {
+  const width = Math.max(1, bbox.x1 - bbox.x0);
+  const height = Math.max(1, bbox.y1 - bbox.y0);
+  const stepX = Math.max(1, Math.floor(width / 8));
+  const stepY = Math.max(1, Math.floor(height / 8));
+  let total = 0;
+  let count = 0;
+  for (let y = bbox.y0; y < bbox.y1; y += stepY) {
+    for (let x = bbox.x0; x < bbox.x1; x += stepX) {
+      const [r, g, b, a] = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      if (a < 20) continue;
+      total += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      count += 1;
+    }
+  }
+  const avg = count > 0 ? total / count : 255;
+  return avg < 115 ? '#ffffff' : '#111827';
+}
+
+function formatOcrLoggerMessage(message: { status?: string; progress?: number }): string {
+  const status = message.status ? message.status.replace(/_/g, ' ') : '';
+  if (!status) return '';
+  const progress = typeof message.progress === 'number' ? ` ${Math.round(message.progress * 100)}%` : '';
+  return `${status}${progress}`;
 }
 
 async function downloadSelectedPdf(): Promise<void> {
@@ -2122,6 +2417,7 @@ function updateTextBoxPanel(syncValues = true): void {
   const box = getActiveTextBox();
   const hasSlide = Boolean(slide);
   const hasBox = Boolean(box);
+  runOcrBtn.disabled = !hasSlide || isBusy();
   addTextBoxBtn.disabled = !hasSlide || isBusy();
   deleteTextBoxBtn.disabled = !hasBox || isBusy();
   [textBoxContent, textBoxX, textBoxY, textBoxWidth, textBoxHeight, textBoxFontSize, textBoxColor, textBoxBold, textBoxAlign].forEach((control) => {
@@ -2130,8 +2426,8 @@ function updateTextBoxPanel(syncValues = true): void {
   textLayerHint.textContent = hasBox
     ? `正在编辑第 ${slide?.id ?? '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
     : hasSlide
-      ? `当前选中第 ${slide?.id ?? '-'} 页；添加文本框后导出 PPTX 即为真实文本对象。`
-      : '选择一页后添加文本框；导出 PPTX 时会变成真实 PowerPoint 文本对象。';
+      ? `当前选中第 ${slide?.id ?? '-'} 页；可自动 OCR 勾选页，也可手动补文本框。`
+      : '进入编辑模式后会自动 OCR；也可以对勾选页重新 OCR。';
 
   if (!syncValues) return;
   if (!box) {
