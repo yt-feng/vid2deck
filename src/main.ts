@@ -142,9 +142,24 @@ app.innerHTML = `
         <small id="selectCount">0/0</small>
       </label>
       <div class="workspace-spacer"></div>
-      <button id="downloadPdfBtn" disabled>下载 PDF</button>
-      <button id="downloadPptxBtn" disabled>下载 PPTX</button>
+      <button id="downloadPdfBtn" disabled>导出 PDF</button>
+      <button id="downloadPptxBtn" disabled>导出 PPTX</button>
     </header>
+
+    <section class="result-dock" id="resultDock" aria-live="polite">
+      <div class="result-summary">
+        <span id="resultBadge" class="result-badge">等待处理</span>
+        <div>
+          <strong id="resultTitle">等待生成页面</strong>
+          <small id="resultSubtitle">上传并处理视频后，下载入口会固定显示在这里。</small>
+        </div>
+      </div>
+      <div class="result-actions">
+        <button id="dockDownloadPdfBtn" class="primary-download" disabled>立即下载 PDF</button>
+        <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
+        <button id="dockDownloadFramesBtn" disabled>导出 Frames ZIP</button>
+      </div>
+    </section>
 
     <section class="workspace-body">
       <aside class="workspace-side">
@@ -162,8 +177,8 @@ app.innerHTML = `
 
         <section class="export-panel" aria-label="导出选中页面">
           <div>
-            <strong>导出选中页面</strong>
-            <small id="exportHint">抽帧完成后，选中的页面会在这里下载。</small>
+            <strong>备用导出</strong>
+            <small id="exportHint">抽帧完成后，也可以从这里下载选中页面。</small>
           </div>
           <div class="export-actions">
             <button id="sideDownloadPdfBtn" disabled>下载 PDF</button>
@@ -195,7 +210,7 @@ app.innerHTML = `
     <section class="capture-timeline">
       <div class="timeline-meta">
         <span id="timelineTime">00:00:00</span>
-        <strong>Drag to capture frame or Press C</strong>
+        <strong>拖动时间轴补抓页面 / 按 C</strong>
         <span id="timelineDuration">00:00:00</span>
       </div>
       <div id="timelineRail" class="timeline-rail" role="slider" aria-label="拖动选择时间并补抓 frame">
@@ -256,6 +271,13 @@ const transcribeBtn = $<HTMLButtonElement>('#transcribeBtn');
 const summarizeBtn = $<HTMLButtonElement>('#summarizeBtn');
 const downloadPdfBtn = $<HTMLButtonElement>('#downloadPdfBtn');
 const downloadPptxBtn = $<HTMLButtonElement>('#downloadPptxBtn');
+const dockDownloadPdfBtn = $<HTMLButtonElement>('#dockDownloadPdfBtn');
+const dockDownloadPptxBtn = $<HTMLButtonElement>('#dockDownloadPptxBtn');
+const dockDownloadFramesBtn = $<HTMLButtonElement>('#dockDownloadFramesBtn');
+const resultDock = $<HTMLElement>('#resultDock');
+const resultBadge = $<HTMLElement>('#resultBadge');
+const resultTitle = $<HTMLElement>('#resultTitle');
+const resultSubtitle = $<HTMLElement>('#resultSubtitle');
 const sideDownloadPdfBtn = $<HTMLButtonElement>('#sideDownloadPdfBtn');
 const sideDownloadPptxBtn = $<HTMLButtonElement>('#sideDownloadPptxBtn');
 const sideDownloadFramesBtn = $<HTMLButtonElement>('#sideDownloadFramesBtn');
@@ -553,7 +575,7 @@ async function processCurrentFile(): Promise<void> {
     videoMeta = result.meta;
     forceTimelineToEnd();
     setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面。左侧“导出选中页面”可直接下载 PDF、PPTX 或 Frames ZIP。`);
+    setStatus(`抽帧完成：保留 ${slides.length} 张页面。顶部导出栏可直接下载 PDF、PPTX 或 Frames ZIP。`);
     setStateForFile(file, {
       slides,
       transcript: transcriptEl.value,
@@ -714,6 +736,9 @@ summarizeBtn.addEventListener('click', async () => {
 
 downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
 downloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
+dockDownloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
+dockDownloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
+dockDownloadFramesBtn.addEventListener('click', () => downloadSelectedFramesZip());
 sideDownloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
 sideDownloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
 sideDownloadFramesBtn.addEventListener('click', () => downloadSelectedFramesZip());
@@ -954,7 +979,7 @@ async function openImagesInWorkspace(): Promise<void> {
     renderSlides();
     if (slides[0]) setPreview(slides[0]);
     setProgress('图片页已准备好', 100);
-    setStatus(`已生成 ${slides.length} 张图片页。可勾选、裁剪、删除后下载 PPTX 或 PDF。`);
+    setStatus(`已生成 ${slides.length} 张图片页。顶部导出栏可直接下载 PPTX、PDF 或 Frames ZIP。`);
     persistWorkspaceToState({ markProcessed: true });
   } catch (error) {
     console.error(error);
@@ -1941,6 +1966,9 @@ function updateActionState(): void {
   transcribeBtn.disabled = !hasVideoFile || busy || imageMode;
   downloadPdfBtn.disabled = selectedCount === 0 || busy;
   downloadPptxBtn.disabled = selectedCount === 0 || busy;
+  dockDownloadPdfBtn.disabled = selectedCount === 0 || busy;
+  dockDownloadPptxBtn.disabled = selectedCount === 0 || busy;
+  dockDownloadFramesBtn.disabled = selectedCount === 0 || busy;
   sideDownloadPdfBtn.disabled = selectedCount === 0 || busy;
   sideDownloadPptxBtn.disabled = selectedCount === 0 || busy;
   sideDownloadFramesBtn.disabled = selectedCount === 0 || busy;
@@ -1959,9 +1987,43 @@ function updateSelectionUI(): void {
   selectCount.textContent = `${selectedCount}/${slides.length}`;
   exportHint.textContent = slides.length > 0
     ? `已选 ${selectedCount} / ${slides.length} 张。默认全选；取消勾选可排除页面。`
-    : '抽帧完成后，选中的页面会在这里下载。';
+    : '抽帧完成后，也可以从这里下载选中页面。';
   selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
   selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
+  updateResultDock(selectedCount);
+}
+
+function updateResultDock(selectedCount: number): void {
+  const busy = isBusy();
+  const hasSlides = slides.length > 0;
+  resultDock.classList.toggle('is-ready', hasSlides && selectedCount > 0 && !busy);
+  resultDock.classList.toggle('is-empty', !hasSlides);
+  resultDock.classList.toggle('is-busy', busy);
+
+  if (busy) {
+    resultBadge.textContent = '正在处理';
+    resultTitle.textContent = hasSlides ? `已生成 ${slides.length} 页，继续处理中` : '正在生成页面';
+    resultSubtitle.textContent = '处理完成后，立即下载按钮会自动可用。';
+    return;
+  }
+
+  if (!hasSlides) {
+    resultBadge.textContent = '等待处理';
+    resultTitle.textContent = '等待生成页面';
+    resultSubtitle.textContent = '上传并处理视频后，下载入口会固定显示在这里。';
+    return;
+  }
+
+  if (selectedCount === 0) {
+    resultBadge.textContent = '需要选择';
+    resultTitle.textContent = `已生成 ${slides.length} 页`;
+    resultSubtitle.textContent = '请至少勾选 1 页，之后即可下载 PDF、PPTX 或 Frames ZIP。';
+    return;
+  }
+
+  resultBadge.textContent = '可以导出';
+  resultTitle.textContent = `已生成 ${slides.length} 页，已选 ${selectedCount} 页`;
+  resultSubtitle.textContent = '默认全选。取消勾选会从导出文件中排除对应页面。';
 }
 
 function setAllSlidesSelected(selected: boolean): void {
