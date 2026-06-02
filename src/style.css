@@ -96,6 +96,12 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .preview-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; }
 .preview-card img:not([src]) { display: none; }
 .preview-empty { display: grid; place-items: center; min-height: 230px; padding: 24px; color: #cbd5e1; text-align: center; }
+.export-panel { display: grid; gap: 12px; margin-top: 16px; padding: 16px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 18px; box-shadow: 0 10px 28px rgba(15,23,42,0.06); }
+.export-panel strong { display: block; color: #0f172a; font-size: 1.05rem; letter-spacing: -0.02em; }
+.export-panel small { display: block; margin-top: 4px; color: #64748b; font-weight: 700; line-height: 1.55; }
+.export-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.export-actions button { min-height: 44px; padding: 10px 12px; border-radius: 12px; white-space: nowrap; }
+.export-actions button:first-child { background: #2563eb; }
 .workspace-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .workspace.image-mode .workspace-actions, .workspace.image-mode .workspace-text-label { display: none; }
 .workspace-text-label { display: block; margin-top: 16px; }
@@ -149,5 +155,6 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
   .workspace.side-collapsed .workspace-side { display: none; }
   .workspace-bar { gap: 10px; padding: 10px 12px; overflow-x: auto; }
   .workspace-bar button { padding: 10px 12px; white-space: nowrap; }
+  .export-actions { grid-template-columns: 1fr; }
   .capture-timeline { padding-inline: 12px; }
 }

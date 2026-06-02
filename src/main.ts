@@ -134,16 +134,16 @@ app.innerHTML = `
 
   <main id="workspaceView" class="workspace" hidden>
     <header class="workspace-bar">
-      <button id="doneBtn" class="ghost-btn">● Done</button>
+      <button id="doneBtn" class="ghost-btn">回主页</button>
       <button id="toggleSideBtn" class="ghost-btn" title="收起/展开左侧面板">⇤ 收起左栏</button>
       <label class="select-all-control">
         <input id="selectAllBox" type="checkbox" checked />
-        <span>Select All</span>
+        <span>全选</span>
         <small id="selectCount">0/0</small>
       </label>
       <div class="workspace-spacer"></div>
-      <button id="downloadPdfBtn" disabled>Download PDF</button>
-      <button id="downloadPptxBtn" disabled>Download PPTX</button>
+      <button id="downloadPdfBtn" disabled>下载 PDF</button>
+      <button id="downloadPptxBtn" disabled>下载 PPTX</button>
     </header>
 
     <section class="workspace-body">
@@ -159,6 +159,18 @@ app.innerHTML = `
         </div>
 
         <div class="status" id="status">等待抽帧。</div>
+
+        <section class="export-panel" aria-label="导出选中页面">
+          <div>
+            <strong>导出选中页面</strong>
+            <small id="exportHint">抽帧完成后，选中的页面会在这里下载。</small>
+          </div>
+          <div class="export-actions">
+            <button id="sideDownloadPdfBtn" disabled>下载 PDF</button>
+            <button id="sideDownloadPptxBtn" disabled>下载 PPTX</button>
+            <button id="sideDownloadFramesBtn" disabled>下载 Frames ZIP</button>
+          </div>
+        </section>
 
         <div class="workspace-actions">
           <button id="transcribeBtn" disabled>Transcribe</button>
@@ -244,8 +256,12 @@ const transcribeBtn = $<HTMLButtonElement>('#transcribeBtn');
 const summarizeBtn = $<HTMLButtonElement>('#summarizeBtn');
 const downloadPdfBtn = $<HTMLButtonElement>('#downloadPdfBtn');
 const downloadPptxBtn = $<HTMLButtonElement>('#downloadPptxBtn');
+const sideDownloadPdfBtn = $<HTMLButtonElement>('#sideDownloadPdfBtn');
+const sideDownloadPptxBtn = $<HTMLButtonElement>('#sideDownloadPptxBtn');
+const sideDownloadFramesBtn = $<HTMLButtonElement>('#sideDownloadFramesBtn');
 const downloadTranscriptBtn = $<HTMLButtonElement>('#downloadTranscriptBtn');
 const downloadSummaryBtn = $<HTMLButtonElement>('#downloadSummaryBtn');
+const exportHint = $<HTMLElement>('#exportHint');
 const homeStatus = $<HTMLDivElement>('#homeStatus');
 const imageStatus = $<HTMLDivElement>('#imageStatus');
 const statusEl = $<HTMLDivElement>('#status');
@@ -537,7 +553,7 @@ async function processCurrentFile(): Promise<void> {
     videoMeta = result.meta;
     forceTimelineToEnd();
     setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面。Done 回主页后可直接下载 PDF，也可稍后回到这个工作台继续编辑。`);
+    setStatus(`抽帧完成：保留 ${slides.length} 张页面。左侧“导出选中页面”可直接下载 PDF、PPTX 或 Frames ZIP。`);
     setStateForFile(file, {
       slides,
       transcript: transcriptEl.value,
@@ -698,6 +714,9 @@ summarizeBtn.addEventListener('click', async () => {
 
 downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
 downloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
+sideDownloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
+sideDownloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
+sideDownloadFramesBtn.addEventListener('click', () => downloadSelectedFramesZip());
 downloadTranscriptBtn.addEventListener('click', () => {
   if (!selectedFile) return;
   downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), `${baseName(selectedFile.name)}-transcript.txt`);
@@ -1377,6 +1396,26 @@ async function downloadSelectedPptx(): Promise<void> {
   }
 }
 
+async function downloadSelectedFramesZip(): Promise<void> {
+  const selectedSlides = slides.filter((slide) => slide.selected);
+  if (!selectedFile || selectedSlides.length === 0) {
+    setStatus('请至少勾选一张页面。');
+    return;
+  }
+  try {
+    setProgress('正在生成选中页面 Frames ZIP', 50, true);
+    const zip = new JSZip();
+    addSlidesToZip(zip, selectedFile, selectedSlides);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${baseName(selectedFile.name)}-selected-frames.zip`);
+    setProgress('Frames ZIP 已生成', 100);
+    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 Frames ZIP。`);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : 'Frames ZIP 生成失败。');
+  }
+}
+
 async function makePptx(items: Slide[]): Promise<Blob> {
   if (items.length === 0) throw new Error('没有可导出的页面。');
   const zip = new JSZip();
@@ -1902,6 +1941,9 @@ function updateActionState(): void {
   transcribeBtn.disabled = !hasVideoFile || busy || imageMode;
   downloadPdfBtn.disabled = selectedCount === 0 || busy;
   downloadPptxBtn.disabled = selectedCount === 0 || busy;
+  sideDownloadPdfBtn.disabled = selectedCount === 0 || busy;
+  sideDownloadPptxBtn.disabled = selectedCount === 0 || busy;
+  sideDownloadFramesBtn.disabled = selectedCount === 0 || busy;
   downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing || imageMode;
   summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
@@ -1915,6 +1957,9 @@ function updateActionState(): void {
 function updateSelectionUI(): void {
   const selectedCount = slides.filter((slide) => slide.selected).length;
   selectCount.textContent = `${selectedCount}/${slides.length}`;
+  exportHint.textContent = slides.length > 0
+    ? `已选 ${selectedCount} / ${slides.length} 张。默认全选；取消勾选可排除页面。`
+    : '抽帧完成后，选中的页面会在这里下载。';
   selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
   selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
 }
