@@ -49,11 +49,16 @@ type WorkerResult =
   | { type: 'result'; id: number; text: string }
   | { type: 'error'; id?: number; error: string };
 
+type WorkspaceMode = 'video' | 'image';
+
 const VISUAL_HASH_BITS = 320;
 const FRAME_CONCURRENCY = 3;
 const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
 const TIMELINE_PAINT_INTERVAL_MS = 220;
+const IMAGE_DECK_MAX_EDGE = 2400;
+const PPTX_SLIDE_WIDTH_EMU = 12192000;
+const PPTX_SLIDE_HEIGHT_EMU = 6858000;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -63,9 +68,34 @@ app.innerHTML = `
     <section class="hero">
       <div>
         <p class="eyebrow">Vid2PPT Deck</p>
-        <h1>视频一键生成去重版PPT、PDF、逐字稿与Summary</h1>
-        <p class="subhead">支持批量上传视频或直接录制屏幕。单个视频可进入工作台精修；批量上传后，一键抽帧即可下载所有帧图片压缩包（Frames ZIP）。</p>
+        <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与Summary</h1>
+        <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可本地生成 PPTX；批量上传后，一键抽帧即可下载所有帧图片压缩包（Frames ZIP）。</p>
       </div>
+    </section>
+
+    <section class="panel image-ppt-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Image to PPT</p>
+          <h2>图片本地生成 PPTX</h2>
+        </div>
+        <span>本地渲染 · 适合普通 MacBook Air</span>
+      </div>
+
+      <label class="dropzone image-dropzone" id="imageDropzone" for="imageInput">
+        <input id="imageInput" type="file" multiple accept="image/png,image/jpeg,image/webp" />
+        <span id="imageFileLabel">选择或拖入一组图片页</span>
+        <small>每张图片生成一页 PPT；进入工作台后可勾选、裁剪、删除，再下载 PPTX 或 PDF。</small>
+      </label>
+
+      <div id="imageFileList" class="file-list image-file-list" hidden></div>
+
+      <div class="actions">
+        <button id="imagePptBtn" disabled>图片生成 PPTX</button>
+        <button id="imageWorkspaceBtn" disabled>进入PPT编辑模式</button>
+      </div>
+
+      <div class="status" id="imageStatus">等待上传图片。</div>
     </section>
 
     <section class="panel">
@@ -113,6 +143,7 @@ app.innerHTML = `
       </label>
       <div class="workspace-spacer"></div>
       <button id="downloadPdfBtn" disabled>Download PDF</button>
+      <button id="downloadPptxBtn" disabled>Download PPTX</button>
     </header>
 
     <section class="workspace-body">
@@ -191,14 +222,20 @@ const $ = <T extends Element>(selector: string) => {
 const homeView = $<HTMLElement>('#homeView');
 const workspaceView = $<HTMLElement>('#workspaceView');
 const dropzone = $<HTMLLabelElement>('#dropzone');
+const imageDropzone = $<HTMLLabelElement>('#imageDropzone');
 const fileLabel = $<HTMLSpanElement>('#fileLabel');
+const imageFileLabel = $<HTMLSpanElement>('#imageFileLabel');
 const fileList = $<HTMLDivElement>('#fileList');
+const imageFileList = $<HTMLDivElement>('#imageFileList');
 const videoInput = $<HTMLInputElement>('#videoInput');
+const imageInput = $<HTMLInputElement>('#imageInput');
 const recordScreenBtn = $<HTMLButtonElement>('#recordScreenBtn');
 const stopRecordBtn = $<HTMLButtonElement>('#stopRecordBtn');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
 const batchZipBtn = $<HTMLButtonElement>('#batchZipBtn');
 const downloadFramesZipBtn = $<HTMLButtonElement>('#downloadFramesZipBtn');
+const imagePptBtn = $<HTMLButtonElement>('#imagePptBtn');
+const imageWorkspaceBtn = $<HTMLButtonElement>('#imageWorkspaceBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
 const toggleSideBtn = $<HTMLButtonElement>('#toggleSideBtn');
 const selectAllBox = $<HTMLInputElement>('#selectAllBox');
@@ -206,9 +243,11 @@ const selectCount = $<HTMLElement>('#selectCount');
 const transcribeBtn = $<HTMLButtonElement>('#transcribeBtn');
 const summarizeBtn = $<HTMLButtonElement>('#summarizeBtn');
 const downloadPdfBtn = $<HTMLButtonElement>('#downloadPdfBtn');
+const downloadPptxBtn = $<HTMLButtonElement>('#downloadPptxBtn');
 const downloadTranscriptBtn = $<HTMLButtonElement>('#downloadTranscriptBtn');
 const downloadSummaryBtn = $<HTMLButtonElement>('#downloadSummaryBtn');
 const homeStatus = $<HTMLDivElement>('#homeStatus');
+const imageStatus = $<HTMLDivElement>('#imageStatus');
 const statusEl = $<HTMLDivElement>('#status');
 const progressPanel = $<HTMLDivElement>('#progressPanel');
 const progressText = $<HTMLSpanElement>('#progressText');
@@ -220,6 +259,7 @@ const summaryEl = $<HTMLTextAreaElement>('#summary');
 const previewImage = $<HTMLImageElement>('#previewImage');
 const previewEmpty = $<HTMLDivElement>('#previewEmpty');
 const timelineRail = $<HTMLDivElement>('#timelineRail');
+const captureTimeline = $<HTMLElement>('.capture-timeline');
 const timelineHandle = $<HTMLDivElement>('#timelineHandle');
 const timelineMarkers = $<HTMLDivElement>('#timelineMarkers');
 const timelineTimeEl = $<HTMLElement>('#timelineTime');
@@ -233,11 +273,13 @@ const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 
 let selectedFiles: File[] = [];
+let selectedImageFiles: File[] = [];
 let currentFileIndex = -1;
 let selectedFile: File | null = null;
 const fileStates = new Map<string, FileJobState>();
 let slides: Slide[] = [];
 let videoMeta: VideoMeta | null = null;
+let workspaceMode: WorkspaceMode = 'video';
 let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
 let isDraggingTimeline = false;
@@ -254,11 +296,14 @@ let recordedChunks: Blob[] = [];
 let currentRecordingMimeType = 'video/webm';
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
+imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
 recordScreenBtn.addEventListener('click', () => startScreenRecording());
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
 extractBtn.addEventListener('click', () => processCurrentFile());
 batchZipBtn.addEventListener('click', () => batchExtractAndDownloadZip());
 downloadFramesZipBtn.addEventListener('click', () => downloadProcessedFramesZip());
+imagePptBtn.addEventListener('click', () => downloadImagesAsPptx());
+imageWorkspaceBtn.addEventListener('click', () => openImagesInWorkspace());
 transcriptEl.addEventListener('input', () => { persistWorkspaceToState(); updateActionState(); });
 summaryEl.addEventListener('input', () => persistWorkspaceToState());
 
@@ -268,7 +313,7 @@ doneBtn.addEventListener('click', () => {
   homeView.hidden = false;
   hideProgress();
   renderFileList();
-  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+  setHomeStatus(workspaceMode === 'image' ? '图片 PPT 工作台已关闭，可继续上传图片或视频。' : selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
 });
 
 toggleSideBtn.addEventListener('click', () => {
@@ -297,6 +342,27 @@ dropzone.addEventListener('drop', (event) => {
   event.stopPropagation();
   dropzone.classList.remove('is-dragover');
   addFiles(Array.from(event.dataTransfer?.files ?? []));
+});
+
+for (const name of ['dragenter', 'dragover']) {
+  imageDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    imageDropzone.classList.add('is-dragover');
+  });
+}
+for (const name of ['dragleave', 'dragend']) {
+  imageDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    imageDropzone.classList.remove('is-dragover');
+  });
+}
+imageDropzone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  imageDropzone.classList.remove('is-dragover');
+  addImageFiles(Array.from(event.dataTransfer?.files ?? []));
 });
 
 timelineRail.addEventListener('pointerdown', (event) => {
@@ -363,6 +429,40 @@ function addFiles(files: File[], selectAdded = false): void {
   videoInput.value = '';
 }
 
+function addImageFiles(files: File[]): void {
+  const validFiles = files.filter(isSupportedImageFile);
+  if (validFiles.length === 0) {
+    setImageStatus('没有检测到可处理的图片文件。');
+    imageInput.value = '';
+    return;
+  }
+
+  const existingKeys = new Set(selectedImageFiles.map(fileKey));
+  for (const file of validFiles) {
+    const key = fileKey(file);
+    if (existingKeys.has(key)) continue;
+    selectedImageFiles.push(file);
+    existingKeys.add(key);
+  }
+
+  selectedImageFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+  renderImageFileList();
+  setImageStatus(`已选择 ${selectedImageFiles.length} 张图片，可直接生成 PPTX 或进入编辑模式。`);
+  updateActionState();
+  imageInput.value = '';
+}
+
+function removeImageFile(index: number): void {
+  if (isBusy()) {
+    setImageStatus('当前有任务正在运行，完成后再移除图片。');
+    return;
+  }
+  selectedImageFiles.splice(index, 1);
+  renderImageFileList();
+  setImageStatus(selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片。` : '等待上传图片。');
+  updateActionState();
+}
+
 function chooseFile(index: number): void {
   if (index < 0 || index >= selectedFiles.length) return;
   if (isBusy()) {
@@ -370,6 +470,7 @@ function chooseFile(index: number): void {
     return;
   }
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  setWorkspaceMode('video');
   currentFileIndex = index;
   selectedFile = selectedFiles[index];
   loadStateIntoWorkspace(selectedFile);
@@ -403,6 +504,7 @@ async function processCurrentFile(): Promise<void> {
   if (!selectedFile || isBusy()) return;
   const file = selectedFile;
   const settings = readSettings();
+  setWorkspaceMode('video');
   showWorkspace();
   resetFrameOutputs();
 
@@ -595,6 +697,7 @@ summarizeBtn.addEventListener('click', async () => {
 });
 
 downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
+downloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
 downloadTranscriptBtn.addEventListener('click', () => {
   if (!selectedFile) return;
   downloadBlob(new Blob([transcriptEl.value], { type: 'text/plain;charset=utf-8' }), `${baseName(selectedFile.name)}-transcript.txt`);
@@ -667,7 +770,17 @@ function renderFileList(): void {
         await downloadSingleFramesZip(index);
       });
 
-      actions.append(view, download, frames);
+      const pptx = document.createElement('button');
+      pptx.type = 'button';
+      pptx.className = 'file-result-btn';
+      pptx.textContent = '下载 PPTX';
+      pptx.disabled = isBusy();
+      pptx.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await downloadProcessedPptx(index);
+      });
+
+      actions.append(view, download, pptx, frames);
     }
 
     const remove = document.createElement('button');
@@ -686,7 +799,41 @@ function renderFileList(): void {
   });
 }
 
+function renderImageFileList(): void {
+  imageFileList.innerHTML = '';
+  imageFileList.hidden = selectedImageFiles.length === 0;
+  imageFileLabel.textContent = selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片` : '选择或拖入一组图片页';
+
+  selectedImageFiles.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.className = 'file-list-item image-list-item';
+
+    const main = document.createElement('div');
+    main.className = 'file-pick-btn image-pick-label';
+
+    const title = document.createElement('strong');
+    title.textContent = file.name;
+    const meta = document.createElement('small');
+    meta.textContent = `${formatBytes(file.size)} · 第 ${index + 1} 页`;
+    main.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'file-list-actions';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'file-remove-btn';
+    remove.textContent = '移除';
+    remove.disabled = isBusy();
+    remove.addEventListener('click', () => removeImageFile(index));
+    actions.append(remove);
+
+    item.append(main, actions);
+    imageFileList.appendChild(item);
+  });
+}
+
 function openProcessedFile(index: number): void {
+  setWorkspaceMode('video');
   chooseFile(index);
   showWorkspace();
   setStatus('已回到上次处理结果，可继续勾选、裁剪、删除或补抓 frame。');
@@ -711,6 +858,25 @@ async function downloadProcessedPdf(index: number): Promise<void> {
   }
 }
 
+async function downloadProcessedPptx(index: number): Promise<void> {
+  const file = selectedFiles[index];
+  if (!file) return;
+  const selectedSlides = getState(file).slides.filter((slide) => slide.selected);
+  if (selectedSlides.length === 0) {
+    setHomeStatus('这个视频还没有可下载的选中页面。');
+    return;
+  }
+  try {
+    setHomeStatus(`正在生成 ${file.name} 的 PPTX...`);
+    const pptxBlob = await makePptx(selectedSlides);
+    downloadBlob(pptxBlob, `${baseName(file.name)}.pptx`);
+    setHomeStatus(`已下载 ${file.name} 的 PPTX。`);
+  } catch (error) {
+    console.error(error);
+    setHomeStatus(error instanceof Error ? error.message : 'PPTX 生成失败。');
+  }
+}
+
 async function downloadSingleFramesZip(index: number): Promise<void> {
   const file = selectedFiles[index];
   if (!file) return;
@@ -728,6 +894,58 @@ async function downloadSingleFramesZip(index: number): Promise<void> {
   }
 }
 
+async function downloadImagesAsPptx(): Promise<void> {
+  if (selectedImageFiles.length === 0 || isBusy()) return;
+  isBatchProcessing = true;
+  updateActionState();
+  try {
+    setImageStatus('正在本地渲染图片页...');
+    const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
+      setImageStatus(`正在本地渲染图片页：${index} / ${total}`);
+    });
+    setImageStatus('正在生成 PPTX...');
+    const pptxBlob = await makePptx(imageSlides);
+    downloadBlob(pptxBlob, `vid2ppt-deck-images-${timestampForFilename()}.pptx`);
+    setImageStatus(`已生成 ${imageSlides.length} 页 PPTX。`);
+  } catch (error) {
+    console.error(error);
+    setImageStatus(error instanceof Error ? error.message : '图片生成 PPTX 失败。');
+  } finally {
+    isBatchProcessing = false;
+    updateActionState();
+  }
+}
+
+async function openImagesInWorkspace(): Promise<void> {
+  if (selectedImageFiles.length === 0 || isBusy()) return;
+  isBatchProcessing = true;
+  updateActionState();
+  try {
+    setWorkspaceMode('image');
+    selectedFile = new File([], `image-deck-${timestampForFilename()}.images`, { type: 'application/x-vid2deck-image-deck' });
+    currentFileIndex = -1;
+    resetCurrentFileState();
+    showWorkspace();
+    setProgress('正在本地渲染图片页', 10, true);
+    setStatus('正在把图片转换成 PPT 页面。');
+    slides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
+      setProgress(`本地渲染图片页：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 80), true);
+    });
+    videoMeta = null;
+    renderSlides();
+    if (slides[0]) setPreview(slides[0]);
+    setProgress('图片页已准备好', 100);
+    setStatus(`已生成 ${slides.length} 张图片页。可勾选、裁剪、删除后下载 PPTX 或 PDF。`);
+    persistWorkspaceToState({ markProcessed: true });
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : '图片进入编辑模式失败。');
+  } finally {
+    isBatchProcessing = false;
+    updateActionState();
+  }
+}
+
 function updateHomeFileStatus(): void {
   fileLabel.textContent = selectedFiles.length > 0 ? `已选择 ${selectedFiles.length} 个文件` : '选择或拖入一个或多个视频文件';
   setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
@@ -736,7 +954,14 @@ function updateHomeFileStatus(): void {
 function showWorkspace(): void {
   homeView.hidden = true;
   workspaceView.hidden = false;
+  captureTimeline.hidden = workspaceMode !== 'video';
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setWorkspaceMode(mode: WorkspaceMode): void {
+  workspaceMode = mode;
+  workspaceView.classList.toggle('image-mode', mode === 'image');
+  captureTimeline.hidden = mode !== 'video';
 }
 
 function getState(file: File): FileJobState {
@@ -1077,6 +1302,45 @@ async function makePdf(items: Slide[]): Promise<Blob> {
   return pdf.output('blob');
 }
 
+async function buildSlidesFromImages(files: File[], onProgress?: (index: number, total: number) => void): Promise<Slide[]> {
+  const imageSlides: Slide[] = [];
+  for (const [index, file] of files.entries()) {
+    onProgress?.(index + 1, files.length);
+    imageSlides.push(await imageFileToSlide(file, index));
+    await yieldToBrowser();
+  }
+  return imageSlides;
+}
+
+async function imageFileToSlide(file: File, index: number): Promise<Slide> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(1, IMAGE_DECK_MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('浏览器不支持 Canvas。');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    return {
+      id: index + 1,
+      time: index,
+      hash: visualHash(ctx, width, height),
+      dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+      width,
+      height,
+      selected: true
+    };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function downloadSelectedPdf(): Promise<void> {
   const selectedSlides = slides.filter((slide) => slide.selected);
   if (!selectedFile || selectedSlides.length === 0) {
@@ -1093,6 +1357,244 @@ async function downloadSelectedPdf(): Promise<void> {
     console.error(error);
     setStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
   }
+}
+
+async function downloadSelectedPptx(): Promise<void> {
+  const selectedSlides = slides.filter((slide) => slide.selected);
+  if (!selectedFile || selectedSlides.length === 0) {
+    setStatus('请至少勾选一张页面。');
+    return;
+  }
+  try {
+    setProgress('正在生成选中页面 PPTX', 50, true);
+    const pptxBlob = await makePptx(selectedSlides);
+    downloadBlob(pptxBlob, `${baseName(selectedFile.name)}.pptx`);
+    setProgress('PPTX 已生成', 100);
+    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 PPTX。`);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : 'PPTX 生成失败。');
+  }
+}
+
+async function makePptx(items: Slide[]): Promise<Blob> {
+  if (items.length === 0) throw new Error('没有可导出的页面。');
+  const zip = new JSZip();
+  const media = items.map((slide, index) => {
+    const image = dataUrlToPptImage(slide.dataUrl);
+    return { ...image, name: `image${index + 1}.${image.ext}` };
+  });
+
+  zip.file('[Content_Types].xml', pptxContentTypes(items.length));
+  zip.folder('_rels')?.file('.rels', pptxRootRels());
+  zip.folder('docProps')?.file('app.xml', pptxAppXml(items.length));
+  zip.folder('docProps')?.file('core.xml', pptxCoreXml());
+  zip.folder('ppt')?.file('presentation.xml', pptxPresentationXml(items.length));
+  zip.folder('ppt')?.folder('_rels')?.file('presentation.xml.rels', pptxPresentationRels(items.length));
+  zip.folder('ppt')?.folder('theme')?.file('theme1.xml', pptxThemeXml());
+  zip.folder('ppt')?.folder('slideMasters')?.file('slideMaster1.xml', pptxSlideMasterXml());
+  zip.folder('ppt')?.folder('slideMasters')?.folder('_rels')?.file('slideMaster1.xml.rels', pptxSlideMasterRels());
+  zip.folder('ppt')?.folder('slideLayouts')?.file('slideLayout1.xml', pptxSlideLayoutXml());
+  zip.folder('ppt')?.folder('slideLayouts')?.folder('_rels')?.file('slideLayout1.xml.rels', pptxSlideLayoutRels());
+
+  const slidesFolder = zip.folder('ppt')?.folder('slides');
+  const slideRelsFolder = slidesFolder?.folder('_rels');
+  const mediaFolder = zip.folder('ppt')?.folder('media');
+
+  items.forEach((slide, index) => {
+    slidesFolder?.file(`slide${index + 1}.xml`, pptxSlideXml(slide, index + 1, media[index].name));
+    slideRelsFolder?.file(`slide${index + 1}.xml.rels`, pptxSlideRels(media[index].name));
+    mediaFolder?.file(media[index].name, media[index].base64, { base64: true });
+  });
+
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+}
+
+function dataUrlToPptImage(dataUrl: string): { ext: 'jpg' | 'png'; contentType: string; base64: string } {
+  const mime = dataUrl.match(/^data:([^;,]+)/)?.[1] ?? 'image/jpeg';
+  const ext = mime.includes('png') ? 'png' : 'jpg';
+  return {
+    ext,
+    contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
+    base64: dataUrlToBase64(dataUrl)
+  };
+}
+
+function pptxImagePlacement(slide: Slide): { x: number; y: number; cx: number; cy: number } {
+  const ratio = Math.min(PPTX_SLIDE_WIDTH_EMU / slide.width, PPTX_SLIDE_HEIGHT_EMU / slide.height);
+  const cx = Math.round(slide.width * ratio);
+  const cy = Math.round(slide.height * ratio);
+  return {
+    x: Math.round((PPTX_SLIDE_WIDTH_EMU - cx) / 2),
+    y: Math.round((PPTX_SLIDE_HEIGHT_EMU - cy) / 2),
+    cx,
+    cy
+  };
+}
+
+function pptxContentTypes(slideCount: number): string {
+  const slideOverrides = Array.from({ length: slideCount }, (_, index) => `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="jpg" ContentType="image/jpeg"/>
+  <Default Extension="jpeg" ContentType="image/jpeg"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  ${slideOverrides}
+</Types>`;
+}
+
+function pptxRootRels(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`;
+}
+
+function pptxPresentationRels(slideCount: number): string {
+  const slideRels = Array.from({ length: slideCount }, (_, index) => `<Relationship Id="rId${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${index + 1}.xml"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
+  ${slideRels}
+</Relationships>`;
+}
+
+function pptxPresentationXml(slideCount: number): string {
+  const slideIds = Array.from({ length: slideCount }, (_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
+  <p:sldIdLst>${slideIds}</p:sldIdLst>
+  <p:sldSz cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}" type="wide"/>
+  <p:notesSz cx="6858000" cy="9144000"/>
+  <p:defaultTextStyle/>
+</p:presentation>`;
+}
+
+function pptxSlideRels(mediaName: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${escapeXml(mediaName)}"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+</Relationships>`;
+}
+
+function pptxSlideXml(slide: Slide, slideNumber: number, mediaName: string): string {
+  const placement = pptxImagePlacement(slide);
+  const title = escapeXml(`Page ${slideNumber}: ${mediaName}`);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/><a:chOff x="0" y="0"/><a:chExt cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/></a:xfrm></p:grpSpPr>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="${slideNumber + 1}" name="${title}" descr="${title}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr><a:xfrm><a:off x="${placement.x}" y="${placement.y}"/><a:ext cx="${placement.cx}" cy="${placement.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+      </p:pic>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+}
+
+function pptxAppXml(slideCount: number): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Vid2PPT Deck</Application>
+  <PresentationFormat>Widescreen</PresentationFormat>
+  <Slides>${slideCount}</Slides>
+</Properties>`;
+}
+
+function pptxCoreXml(): string {
+  const now = new Date().toISOString();
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Vid2PPT Deck Export</dc:title>
+  <dc:creator>Vid2PPT Deck</dc:creator>
+  <cp:lastModifiedBy>Vid2PPT Deck</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`;
+}
+
+function pptxSlideMasterRels(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
+</Relationships>`;
+}
+
+function pptxSlideLayoutRels(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
+</Relationships>`;
+}
+
+function pptxSlideMasterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/><a:chOff x="0" y="0"/><a:chExt cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/></a:xfrm></p:grpSpPr>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
+  <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
+</p:sldMaster>`;
+}
+
+function pptxSlideLayoutXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">
+  <p:cSld name="Blank">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/><a:chOff x="0" y="0"/><a:chExt cx="${PPTX_SLIDE_WIDTH_EMU}" cy="${PPTX_SLIDE_HEIGHT_EMU}"/></a:xfrm></p:grpSpPr>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sldLayout>`;
+}
+
+function pptxThemeXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Vid2PPT Deck">
+  <a:themeElements>
+    <a:clrScheme name="Office">
+      <a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="1F2937"/></a:dk2><a:lt2><a:srgbClr val="F8FAFC"/></a:lt2>
+      <a:accent1><a:srgbClr val="2563EB"/></a:accent1><a:accent2><a:srgbClr val="16A34A"/></a:accent2>
+      <a:accent3><a:srgbClr val="F97316"/></a:accent3><a:accent4><a:srgbClr val="7C3AED"/></a:accent4>
+      <a:accent5><a:srgbClr val="0F172A"/></a:accent5><a:accent6><a:srgbClr val="64748B"/></a:accent6>
+      <a:hlink><a:srgbClr val="2563EB"/></a:hlink><a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink>
+    </a:clrScheme>
+    <a:fontScheme name="Office"><a:majorFont><a:latin typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/></a:minorFont></a:fontScheme>
+    <a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>
+  </a:themeElements>
+</a:theme>`;
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 function addSlidesToZip(zip: JSZip, file: File, items: Slide[]): void {
@@ -1227,14 +1729,15 @@ function appendSlideCard(slide: Slide): void {
   const card = document.createElement('figure');
   card.className = 'slide-card';
   card.dataset.slideId = String(slide.id);
+  const caption = workspaceMode === 'image' ? `#${slide.id} · 图片页` : `#${slide.id} · ${formatTime(slide.time)}`;
   card.innerHTML = `
-    <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入 PDF</span></label>
+    <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入导出</span></label>
     <div class="frame-tools">
       <button class="crop-frame" title="裁剪" type="button">⌗</button>
       <button class="delete-frame" title="删除" type="button">🗑</button>
     </div>
     <img src="${slide.dataUrl}" alt="Slide ${slide.id}" />
-    <figcaption>#${slide.id} · ${formatTime(slide.time)}</figcaption>
+    <figcaption>${caption}</figcaption>
   `;
   const img = card.querySelector<HTMLImageElement>('img');
   img?.addEventListener('click', () => setPreview(slide));
@@ -1270,7 +1773,7 @@ function deleteSlide(id: number): void {
     previewImage.removeAttribute('src');
     previewEmpty.hidden = false;
   }
-  setStatus('已删除 frame。');
+  setStatus(workspaceMode === 'image' ? '已删除图片页。' : '已删除 frame。');
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
   renderFileList();
 }
@@ -1388,16 +1891,22 @@ function updateTimelineMarkers(): void {
 function updateActionState(): void {
   const busy = isBusy();
   const hasFile = Boolean(selectedFile);
+  const hasVideoFile = Boolean(selectedFile) && currentFileIndex >= 0 && workspaceMode === 'video';
+  const imageMode = workspaceMode === 'image';
   const selectedCount = slides.filter((slide) => slide.selected).length;
-  extractBtn.disabled = !hasFile || busy;
+  extractBtn.disabled = !hasVideoFile || busy;
   batchZipBtn.disabled = selectedFiles.length === 0 || busy;
   downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
-  transcribeBtn.disabled = !hasFile || busy;
+  imagePptBtn.disabled = selectedImageFiles.length === 0 || busy;
+  imageWorkspaceBtn.disabled = selectedImageFiles.length === 0 || busy;
+  transcribeBtn.disabled = !hasVideoFile || busy || imageMode;
   downloadPdfBtn.disabled = selectedCount === 0 || busy;
-  downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing;
-  summarizeBtn.disabled = !transcriptEl.value.trim() || busy;
-  downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing;
+  downloadPptxBtn.disabled = selectedCount === 0 || busy;
+  downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing || imageMode;
+  summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode;
+  downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   videoInput.disabled = busy;
+  imageInput.disabled = busy;
   recordScreenBtn.disabled = busy;
   stopRecordBtn.hidden = !isRecording;
   updateSelectionUI();
@@ -1552,6 +2061,7 @@ function hideProgress(): void {
 
 function setStatus(message: string): void { statusEl.textContent = message; }
 function setHomeStatus(message: string): void { homeStatus.textContent = message; }
+function setImageStatus(message: string): void { imageStatus.textContent = message; }
 
 function waitForEvent(target: EventTarget, eventName: string, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -1616,6 +2126,9 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function isSupportedMediaFile(file: File): boolean {
   return file.type.startsWith('video/') || file.type.startsWith('audio/') || /\.(mkv|mov|mp4|webm|avi|m4v)$/i.test(file.name);
+}
+function isSupportedImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
 }
 function fileKey(file: File): string { return `${file.name}:${file.size}:${file.lastModified}`; }
 function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }

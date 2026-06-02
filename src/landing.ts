@@ -7,12 +7,12 @@ landing.innerHTML = `
   <section class="landing-block proof-block">
     <p class="landing-kicker">Why Vid2PPT Deck</p>
     <h2>面向课程、会议和教程视频的轻量工作台</h2>
-    <p class="landing-lead">录屏、网课、讲座、演示视频：本地一键输出PDF、逐字稿、Summary和Frames ZIP。</p>
+    <p class="landing-lead">录屏、网课、讲座、演示视频和图片页：本地一键输出PPTX、PDF、逐字稿、Summary和Frames ZIP。</p>
     <div class="proof-grid">
       <article><strong>本地优先</strong><span>视频默认不上传服务器，更适合课程、会议和项目资料。</span></article>
       <article><strong>去重抽帧</strong><span>自动跳过相似画面，保留更像 PPT 页面的关键帧。</span></article>
+      <article><strong>图片转PPT</strong><span>多张图片本地渲染成 PPTX，可进入工作台继续勾选、裁剪和删除。</span></article>
       <article><strong>可编辑输出</strong><span>导出前可勾选、删除、裁剪，也能从时间轴补抓。</span></article>
-      <article><strong>批量打包</strong><span>多个视频可一次处理并下载 Frames ZIP。</span></article>
     </div>
   </section>
 
