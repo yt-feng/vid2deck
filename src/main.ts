@@ -10,6 +10,20 @@ type Slide = {
   width: number;
   height: number;
   selected: boolean;
+  textBoxes: SlideTextBox[];
+};
+
+type SlideTextBox = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  align: 'left' | 'center' | 'right';
 };
 
 type Settings = {
@@ -77,7 +91,7 @@ app.innerHTML = `
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Image to PPT</p>
-          <h2>图片本地生成 PPTX</h2>
+          <h2>图片本地生成可编辑 PPTX</h2>
         </div>
         <span>本地渲染 · 适合普通 MacBook Air</span>
       </div>
@@ -85,14 +99,14 @@ app.innerHTML = `
       <label class="dropzone image-dropzone" id="imageDropzone" for="imageInput">
         <input id="imageInput" type="file" multiple accept="image/png,image/jpeg,image/webp" />
         <span id="imageFileLabel">选择或拖入一组图片页</span>
-        <small>每张图片生成一页 PPT；进入工作台后可勾选、裁剪、删除，再下载 PPTX 或 PDF。</small>
+        <small>每张图片生成一页 PPT；进入编辑模式后可添加真实文本框，再导出可编辑 PPTX。</small>
       </label>
 
       <div id="imageFileList" class="file-list image-file-list" hidden></div>
 
       <div class="actions">
-        <button id="imagePptBtn" disabled>图片生成 PPTX</button>
-        <button id="imageWorkspaceBtn" disabled>进入PPT编辑模式</button>
+        <button id="imagePptBtn" disabled>快速生成图片版 PPTX</button>
+        <button id="imageWorkspaceBtn" disabled>编辑图片为可编辑 PPTX</button>
       </div>
 
       <div class="status" id="imageStatus">等待上传图片。</div>
@@ -184,6 +198,36 @@ app.innerHTML = `
             <button id="sideDownloadPdfBtn" disabled>下载 PDF</button>
             <button id="sideDownloadPptxBtn" disabled>下载 PPTX</button>
             <button id="sideDownloadFramesBtn" disabled>下载 Frames ZIP</button>
+          </div>
+        </section>
+
+        <section class="text-layer-panel" aria-label="可编辑文本框">
+          <div class="text-layer-heading">
+            <div>
+              <strong>可编辑文本框</strong>
+              <small id="textLayerHint">选择一页后添加文本框；导出 PPTX 时会变成真实 PowerPoint 文本对象。</small>
+            </div>
+            <button id="addTextBoxBtn" type="button" disabled>添加文本框</button>
+          </div>
+          <textarea id="textBoxContent" placeholder="选择或添加文本框后，在这里输入文字。" disabled></textarea>
+          <div class="text-box-grid">
+            <label>X %<input id="textBoxX" type="number" min="0" max="100" step="1" disabled /></label>
+            <label>Y %<input id="textBoxY" type="number" min="0" max="100" step="1" disabled /></label>
+            <label>宽 %<input id="textBoxWidth" type="number" min="5" max="100" step="1" disabled /></label>
+            <label>高 %<input id="textBoxHeight" type="number" min="5" max="100" step="1" disabled /></label>
+            <label>字号<input id="textBoxFontSize" type="number" min="8" max="96" step="1" disabled /></label>
+            <label>颜色<input id="textBoxColor" type="color" value="#111827" disabled /></label>
+          </div>
+          <div class="text-box-options">
+            <label><input id="textBoxBold" type="checkbox" disabled />粗体</label>
+            <label>对齐
+              <select id="textBoxAlign" disabled>
+                <option value="left">左对齐</option>
+                <option value="center">居中</option>
+                <option value="right">右对齐</option>
+              </select>
+            </label>
+            <button id="deleteTextBoxBtn" type="button" disabled>删除文本框</button>
           </div>
         </section>
 
@@ -309,6 +353,18 @@ const cropTop = $<HTMLInputElement>('#cropTop');
 const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
+const addTextBoxBtn = $<HTMLButtonElement>('#addTextBoxBtn');
+const deleteTextBoxBtn = $<HTMLButtonElement>('#deleteTextBoxBtn');
+const textLayerHint = $<HTMLElement>('#textLayerHint');
+const textBoxContent = $<HTMLTextAreaElement>('#textBoxContent');
+const textBoxX = $<HTMLInputElement>('#textBoxX');
+const textBoxY = $<HTMLInputElement>('#textBoxY');
+const textBoxWidth = $<HTMLInputElement>('#textBoxWidth');
+const textBoxHeight = $<HTMLInputElement>('#textBoxHeight');
+const textBoxFontSize = $<HTMLInputElement>('#textBoxFontSize');
+const textBoxColor = $<HTMLInputElement>('#textBoxColor');
+const textBoxBold = $<HTMLInputElement>('#textBoxBold');
+const textBoxAlign = $<HTMLSelectElement>('#textBoxAlign');
 
 let selectedFiles: File[] = [];
 let selectedImageFiles: File[] = [];
@@ -320,6 +376,8 @@ let videoMeta: VideoMeta | null = null;
 let workspaceMode: WorkspaceMode = 'video';
 let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
+let activeSlideId: number | null = null;
+let activeTextBoxId: string | null = null;
 let isDraggingTimeline = false;
 let extractionTimelineMax = 0;
 let lastTimelinePaint = 0;
@@ -360,6 +418,13 @@ toggleSideBtn.addEventListener('click', () => {
 });
 
 selectAllBox.addEventListener('change', () => setAllSlidesSelected(selectAllBox.checked));
+addTextBoxBtn.addEventListener('click', () => addTextBoxToActiveSlide());
+deleteTextBoxBtn.addEventListener('click', () => deleteActiveTextBox());
+textBoxContent.addEventListener('input', () => updateActiveTextBoxFromControls());
+[textBoxX, textBoxY, textBoxWidth, textBoxHeight, textBoxFontSize, textBoxColor, textBoxBold].forEach((control) => {
+  control.addEventListener('input', () => updateActiveTextBoxFromControls());
+});
+textBoxAlign.addEventListener('change', () => updateActiveTextBoxFromControls());
 
 for (const name of ['dragenter', 'dragover']) {
   dropzone.addEventListener(name, (event) => {
@@ -485,7 +550,7 @@ function addImageFiles(files: File[]): void {
 
   selectedImageFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
   renderImageFileList();
-  setImageStatus(`已选择 ${selectedImageFiles.length} 张图片，可直接生成 PPTX 或进入编辑模式。`);
+  setImageStatus(`已选择 ${selectedImageFiles.length} 张图片，可快速生成图片版 PPTX，或进入编辑模式添加真实文本框。`);
   updateActionState();
   imageInput.value = '';
 }
@@ -947,10 +1012,10 @@ async function downloadImagesAsPptx(): Promise<void> {
     const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
       setImageStatus(`正在本地渲染图片页：${index} / ${total}`);
     });
-    setImageStatus('正在生成 PPTX...');
+    setImageStatus('正在生成图片版 PPTX...');
     const pptxBlob = await makePptx(imageSlides);
     downloadBlob(pptxBlob, `vid2ppt-deck-images-${timestampForFilename()}.pptx`);
-    setImageStatus(`已生成 ${imageSlides.length} 页 PPTX。`);
+    setImageStatus(`已生成 ${imageSlides.length} 页图片版 PPTX；如需文本框，请进入编辑模式。`);
   } catch (error) {
     console.error(error);
     setImageStatus(error instanceof Error ? error.message : '图片生成 PPTX 失败。');
@@ -971,7 +1036,7 @@ async function openImagesInWorkspace(): Promise<void> {
     resetCurrentFileState();
     showWorkspace();
     setProgress('正在本地渲染图片页', 10, true);
-    setStatus('正在把图片转换成 PPT 页面。');
+    setStatus('正在把图片转换成可编辑 PPT 页面。');
     slides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
       setProgress(`本地渲染图片页：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 80), true);
     });
@@ -979,7 +1044,7 @@ async function openImagesInWorkspace(): Promise<void> {
     renderSlides();
     if (slides[0]) setPreview(slides[0]);
     setProgress('图片页已准备好', 100);
-    setStatus(`已生成 ${slides.length} 张图片页。顶部导出栏可直接下载 PPTX、PDF 或 Frames ZIP。`);
+    setStatus(`已生成 ${slides.length} 张图片页。可在左侧添加文本框，顶部导出栏会输出包含真实文本框的 PPTX。`);
     persistWorkspaceToState({ markProcessed: true });
   } catch (error) {
     console.error(error);
@@ -1057,6 +1122,8 @@ function loadStateIntoWorkspace(file: File): void {
   const state = getState(file);
   slides = cloneSlides(state.slides);
   videoMeta = state.videoMeta ? { ...state.videoMeta } : null;
+  activeSlideId = slides[0]?.id ?? null;
+  activeTextBoxId = null;
   timelineTime = slides[0]?.time ?? 0;
   extractionTimelineMax = timelineTime;
   lastTimelinePaint = 0;
@@ -1071,12 +1138,17 @@ function loadStateIntoWorkspace(file: File): void {
 }
 
 function cloneSlides(items: Slide[]): Slide[] {
-  return items.map((slide) => ({ ...slide }));
+  return items.map((slide) => ({
+    ...slide,
+    textBoxes: (slide.textBoxes ?? []).map((box) => ({ ...box }))
+  }));
 }
 
 function resetCurrentFileState(): void {
   slides = [];
   videoMeta = null;
+  activeSlideId = null;
+  activeTextBoxId = null;
   timelineTime = 0;
   extractionTimelineMax = 0;
   lastTimelinePaint = 0;
@@ -1093,6 +1165,8 @@ function resetCurrentFileState(): void {
 
 function resetFrameOutputs(): void {
   slides = [];
+  activeSlideId = null;
+  activeTextBoxId = null;
   slidesEl.innerHTML = '';
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
@@ -1134,7 +1208,7 @@ async function extractSlidesFromFile(
         nextCommit += 1;
         const duplicate = kept.some((slide) => isDuplicateSlide(slide, frame.hash, frame.time, settings));
         if (!duplicate) {
-          const slide: Slide = { id: kept.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true };
+          const slide: Slide = { id: kept.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: true, textBoxes: [] };
           kept.push(slide);
           hooks.onKeep?.({ ...slide });
         }
@@ -1255,7 +1329,7 @@ async function captureManualFrameAt(time: number): Promise<void> {
     setProgress(`正在补抓 ${formatClock(requestedTime)} 的 frame`, 50, true);
     extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
     const frame = await extractor.capture(slides.length, requestedTime);
-    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected() };
+    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected(), textBoxes: [] };
     slides.push(slide);
     sortAndReindexSlides();
     timelineTime = frame.time;
@@ -1340,7 +1414,21 @@ async function makePdf(items: Slide[]): Promise<Blob> {
     const ratio = Math.min(pageWidth / slide.width, pageHeight / slide.height);
     const drawWidth = slide.width * ratio;
     const drawHeight = slide.height * ratio;
-    pdf.addImage(slide.dataUrl, 'JPEG', (pageWidth - drawWidth) / 2, (pageHeight - drawHeight) / 2, drawWidth, drawHeight);
+    const imageX = (pageWidth - drawWidth) / 2;
+    const imageY = (pageHeight - drawHeight) / 2;
+    pdf.addImage(slide.dataUrl, 'JPEG', imageX, imageY, drawWidth, drawHeight);
+    for (const box of slide.textBoxes ?? []) {
+      const [r, g, b] = hexToRgb(normalizeHexColor(box.color));
+      const fontSize = Math.max(6, box.fontSize * (drawWidth / 960));
+      const x = imageX + (box.x / 100) * drawWidth;
+      const y = imageY + (box.y / 100) * drawHeight + fontSize;
+      const width = (box.width / 100) * drawWidth;
+      pdf.setTextColor(r, g, b);
+      pdf.setFontSize(fontSize);
+      pdf.setFont('helvetica', box.bold ? 'bold' : 'normal');
+      const lines = pdf.splitTextToSize(box.text || ' ', width);
+      pdf.text(lines, x, y, { maxWidth: width, align: box.align });
+    }
     await yieldToBrowser();
   }
   return pdf.output('blob');
@@ -1378,7 +1466,8 @@ async function imageFileToSlide(file: File, index: number): Promise<Slide> {
       dataUrl: canvas.toDataURL('image/jpeg', 0.92),
       width,
       height,
-      selected: true
+      selected: true,
+      textBoxes: []
     };
   } finally {
     URL.revokeObjectURL(url);
@@ -1556,6 +1645,9 @@ function pptxSlideRels(mediaName: string): string {
 function pptxSlideXml(slide: Slide, slideNumber: number, mediaName: string): string {
   const placement = pptxImagePlacement(slide);
   const title = escapeXml(`Page ${slideNumber}: ${mediaName}`);
+  const textBoxes = (slide.textBoxes ?? [])
+    .map((box, index) => pptxTextBoxXml(box, slideNumber * 100 + index + 10, placement))
+    .join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
@@ -1568,10 +1660,30 @@ function pptxSlideXml(slide: Slide, slideNumber: number, mediaName: string): str
         <p:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
         <p:spPr><a:xfrm><a:off x="${placement.x}" y="${placement.y}"/><a:ext cx="${placement.cx}" cy="${placement.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
       </p:pic>
+      ${textBoxes}
     </p:spTree>
   </p:cSld>
   <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
 </p:sld>`;
+}
+
+function pptxTextBoxXml(box: SlideTextBox, shapeId: number, placement: { x: number; y: number; cx: number; cy: number }): string {
+  const x = Math.round(placement.x + (box.x / 100) * placement.cx);
+  const y = Math.round(placement.y + (box.y / 100) * placement.cy);
+  const cx = Math.round((box.width / 100) * placement.cx);
+  const cy = Math.round((box.height / 100) * placement.cy);
+  const fontSize = Math.round(clamp(box.fontSize, 8, 96) * 100);
+  const color = normalizeHexColor(box.color).replace('#', '').toUpperCase();
+  const align = box.align === 'center' ? 'ctr' : box.align === 'right' ? 'r' : 'l';
+  const paragraphs = (box.text || ' ')
+    .split(/\r?\n/)
+    .map((line) => `<a:p><a:pPr algn="${align}"/><a:r><a:rPr lang="zh-CN" sz="${fontSize}"${box.bold ? ' b="1"' : ''}><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Microsoft YaHei"/></a:rPr><a:t>${escapeXml(line || ' ')}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="${fontSize}"/></a:p>`)
+    .join('');
+  return `<p:sp>
+        <p:nvSpPr><p:cNvPr id="${shapeId}" name="Editable Text ${shapeId}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+        <p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:spAutoFit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody>
+      </p:sp>`;
 }
 
 function pptxAppXml(slideCount: number): string {
@@ -1659,6 +1771,22 @@ function pptxThemeXml(): string {
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function normalizeHexColor(value: string): string {
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  if (/^[0-9a-f]{6}$/i.test(trimmed)) return `#${trimmed}`;
+  return '#111827';
+}
+
+function hexToRgb(value: string): [number, number, number] {
+  const hex = normalizeHexColor(value).replace('#', '');
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16)
+  ];
 }
 
 function addSlidesToZip(zip: JSZip, file: File, items: Slide[]): void {
@@ -1792,19 +1920,30 @@ function transcribeChunk(worker: Worker, id: number, audio: Float32Array): Promi
 function appendSlideCard(slide: Slide): void {
   const card = document.createElement('figure');
   card.className = 'slide-card';
+  if (slide.id === activeSlideId) card.classList.add('is-active');
   card.dataset.slideId = String(slide.id);
   const caption = workspaceMode === 'image' ? `#${slide.id} · 图片页` : `#${slide.id} · ${formatTime(slide.time)}`;
   card.innerHTML = `
     <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入导出</span></label>
     <div class="frame-tools">
+      <button class="add-text-box" title="添加可编辑文本框" type="button">T</button>
       <button class="crop-frame" title="裁剪" type="button">⌗</button>
       <button class="delete-frame" title="删除" type="button">🗑</button>
     </div>
-    <img src="${slide.dataUrl}" alt="Slide ${slide.id}" />
+    <div class="slide-thumb">
+      <img src="${slide.dataUrl}" alt="Slide ${slide.id}" />
+      <div class="text-box-layer"></div>
+    </div>
     <figcaption>${caption}</figcaption>
   `;
   const img = card.querySelector<HTMLImageElement>('img');
   img?.addEventListener('click', () => setPreview(slide));
+  card.querySelector<HTMLDivElement>('.slide-thumb')?.addEventListener('click', () => {
+    setPreview(slide);
+    activeTextBoxId = null;
+    updateTextBoxPanel();
+    syncActiveSlideSelection();
+  });
   const checkbox = card.querySelector<HTMLInputElement>('.frame-checkbox');
   if (checkbox) checkbox.checked = slide.selected;
   checkbox?.addEventListener('change', () => {
@@ -1817,20 +1956,237 @@ function appendSlideCard(slide: Slide): void {
   });
   card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
   card.querySelector<HTMLButtonElement>('.crop-frame')?.addEventListener('click', (event) => { event.stopPropagation(); openCropDialog(slide); });
+  card.querySelector<HTMLButtonElement>('.add-text-box')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setPreview(slide);
+    addTextBoxToActiveSlide();
+  });
   slidesEl.appendChild(card);
-  if (slide.id === 1) setPreview(slide);
+  refreshSlideTextLayer(slide);
+  if (!activeSlideId && slide.id === 1) setPreview(slide);
 }
 
 function renderSlides(): void {
   slidesEl.innerHTML = '';
+  if (activeSlideId && !slides.some((slide) => slide.id === activeSlideId)) activeSlideId = slides[0]?.id ?? null;
+  if (!activeSlideId && slides[0]) activeSlideId = slides[0].id;
   slides.forEach((slide) => appendSlideCard(slide));
   updateTimelineMarkers();
   updateActionState();
+  updateTextBoxPanel();
+}
+
+function addTextBoxToActiveSlide(): void {
+  const slide = getActiveSlide() ?? slides[0];
+  if (!slide || isBusy()) return;
+  activeSlideId = slide.id;
+  const box: SlideTextBox = {
+    id: `tb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    text: '在这里输入文字',
+    x: 12,
+    y: 14,
+    width: 46,
+    height: 14,
+    fontSize: 24,
+    color: '#111827',
+    bold: false,
+    align: 'left'
+  };
+  slide.textBoxes.push(box);
+  activeTextBoxId = box.id;
+  refreshSlideTextLayer(slide);
+  syncActiveSlideSelection();
+  updateTextBoxPanel();
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  setStatus('已添加可编辑文本框。导出 PPTX 后可在 PowerPoint 里继续修改。');
+}
+
+function deleteActiveTextBox(): void {
+  const slide = getActiveSlide();
+  if (!slide || !activeTextBoxId) return;
+  const before = slide.textBoxes.length;
+  slide.textBoxes = slide.textBoxes.filter((box) => box.id !== activeTextBoxId);
+  if (slide.textBoxes.length === before) return;
+  activeTextBoxId = slide.textBoxes[0]?.id ?? null;
+  refreshSlideTextLayer(slide);
+  updateTextBoxPanel();
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  setStatus('已删除文本框。');
+}
+
+function updateActiveTextBoxFromControls(): void {
+  const slide = getActiveSlide();
+  const box = getActiveTextBox();
+  if (!slide || !box) return;
+  box.text = textBoxContent.value;
+  box.x = clamp(Number(textBoxX.value || 0), 0, 100);
+  box.y = clamp(Number(textBoxY.value || 0), 0, 100);
+  box.width = clamp(Number(textBoxWidth.value || 5), 5, 100);
+  box.height = clamp(Number(textBoxHeight.value || 5), 5, 100);
+  box.width = Math.min(box.width, 100 - box.x);
+  box.height = Math.min(box.height, 100 - box.y);
+  box.fontSize = clamp(Number(textBoxFontSize.value || 24), 8, 96);
+  box.color = normalizeHexColor(textBoxColor.value);
+  box.bold = textBoxBold.checked;
+  box.align = isTextAlign(textBoxAlign.value) ? textBoxAlign.value : 'left';
+  refreshSlideTextLayer(slide);
+  updateTextBoxPanel(false);
+  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+}
+
+function refreshSlideTextLayer(slide: Slide): void {
+  const layer = slidesEl.querySelector<HTMLDivElement>(`.slide-card[data-slide-id="${slide.id}"] .text-box-layer`);
+  if (!layer) return;
+  layer.innerHTML = '';
+  for (const box of slide.textBoxes) {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'slide-text-box';
+    if (box.id === activeTextBoxId && slide.id === activeSlideId) node.classList.add('is-selected');
+    node.dataset.textBoxId = box.id;
+    node.style.left = `${box.x}%`;
+    node.style.top = `${box.y}%`;
+    node.style.width = `${box.width}%`;
+    node.style.height = `${box.height}%`;
+    node.style.color = normalizeHexColor(box.color);
+    node.style.fontSize = `max(10px, ${(box.fontSize / 960) * 100}cqw)`;
+    node.style.fontWeight = box.bold ? '900' : '700';
+    node.style.textAlign = box.align;
+    node.textContent = box.text || '空文本框';
+    node.addEventListener('click', (event) => {
+      event.stopPropagation();
+      activeSlideId = slide.id;
+      activeTextBoxId = box.id;
+      setPreview(slide);
+      updateTextBoxPanel();
+      syncActiveSlideSelection();
+      refreshSlideTextLayer(slide);
+    });
+    bindTextBoxDrag(node, slide, box);
+    layer.appendChild(node);
+  }
+}
+
+function bindTextBoxDrag(node: HTMLButtonElement, slide: Slide, box: SlideTextBox): void {
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+
+  node.addEventListener('pointerdown', (event) => {
+    if (isBusy()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const layer = node.parentElement;
+    if (!layer) return;
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    startLeft = box.x;
+    startTop = box.y;
+    activeSlideId = slide.id;
+    activeTextBoxId = box.id;
+    node.setPointerCapture(event.pointerId);
+    setPreview(slide);
+    updateTextBoxPanel();
+    syncActiveSlideSelection();
+    slidesEl.querySelectorAll<HTMLElement>('.slide-text-box').forEach((item) => item.classList.remove('is-selected'));
+    node.classList.add('is-selected');
+  });
+
+  node.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    const layer = node.parentElement;
+    if (!layer) return;
+    const rect = layer.getBoundingClientRect();
+    box.x = clamp(startLeft + ((event.clientX - startX) / Math.max(rect.width, 1)) * 100, 0, 100 - box.width);
+    box.y = clamp(startTop + ((event.clientY - startY) / Math.max(rect.height, 1)) * 100, 0, 100 - box.height);
+    node.style.left = `${box.x}%`;
+    node.style.top = `${box.y}%`;
+    updateTextBoxPanel(false);
+  });
+
+  node.addEventListener('pointerup', (event) => {
+    if (!dragging) return;
+    dragging = false;
+    node.releasePointerCapture(event.pointerId);
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  });
+
+  node.addEventListener('pointercancel', () => { dragging = false; });
+}
+
+function updateTextBoxPanel(syncValues = true): void {
+  const slide = getActiveSlide();
+  const box = getActiveTextBox();
+  const hasSlide = Boolean(slide);
+  const hasBox = Boolean(box);
+  addTextBoxBtn.disabled = !hasSlide || isBusy();
+  deleteTextBoxBtn.disabled = !hasBox || isBusy();
+  [textBoxContent, textBoxX, textBoxY, textBoxWidth, textBoxHeight, textBoxFontSize, textBoxColor, textBoxBold, textBoxAlign].forEach((control) => {
+    control.disabled = !hasBox || isBusy();
+  });
+  textLayerHint.textContent = hasBox
+    ? `正在编辑第 ${slide?.id ?? '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
+    : hasSlide
+      ? `当前选中第 ${slide?.id ?? '-'} 页；添加文本框后导出 PPTX 即为真实文本对象。`
+      : '选择一页后添加文本框；导出 PPTX 时会变成真实 PowerPoint 文本对象。';
+
+  if (!syncValues) return;
+  if (!box) {
+    textBoxContent.value = '';
+    textBoxX.value = '';
+    textBoxY.value = '';
+    textBoxWidth.value = '';
+    textBoxHeight.value = '';
+    textBoxFontSize.value = '';
+    textBoxColor.value = '#111827';
+    textBoxBold.checked = false;
+    textBoxAlign.value = 'left';
+    return;
+  }
+
+  textBoxContent.value = box.text;
+  textBoxX.value = String(Math.round(box.x));
+  textBoxY.value = String(Math.round(box.y));
+  textBoxWidth.value = String(Math.round(box.width));
+  textBoxHeight.value = String(Math.round(box.height));
+  textBoxFontSize.value = String(Math.round(box.fontSize));
+  textBoxColor.value = normalizeHexColor(box.color);
+  textBoxBold.checked = box.bold;
+  textBoxAlign.value = box.align;
+}
+
+function syncActiveSlideSelection(): void {
+  slidesEl.querySelectorAll<HTMLElement>('.slide-card').forEach((card) => {
+    card.classList.toggle('is-active', card.dataset.slideId === String(activeSlideId));
+  });
+}
+
+function getActiveSlide(): Slide | null {
+  if (!activeSlideId) return null;
+  return slides.find((slide) => slide.id === activeSlideId) ?? null;
+}
+
+function getActiveTextBox(): SlideTextBox | null {
+  const slide = getActiveSlide();
+  if (!slide || !activeTextBoxId) return null;
+  return slide.textBoxes.find((box) => box.id === activeTextBoxId) ?? null;
+}
+
+function isTextAlign(value: string): value is SlideTextBox['align'] {
+  return value === 'left' || value === 'center' || value === 'right';
 }
 
 function deleteSlide(id: number): void {
   slides = slides.filter((slide) => slide.id !== id);
+  if (activeSlideId === id) {
+    activeSlideId = null;
+    activeTextBoxId = null;
+  }
   sortAndReindexSlides();
+  if (!activeSlideId) activeSlideId = slides[0]?.id ?? null;
   renderSlides();
   if (slides[0]) setPreview(slides[0]);
   else {
@@ -1888,8 +2244,11 @@ async function applyCrop(): Promise<void> {
 }
 
 function setPreview(slide: Slide): void {
+  activeSlideId = slide.id;
   previewImage.src = slide.dataUrl;
   previewEmpty.hidden = true;
+  syncActiveSlideSelection();
+  updateTextBoxPanel();
 }
 
 function setupTimeline(duration: number): void {
@@ -1991,6 +2350,7 @@ function updateSelectionUI(): void {
   selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
   selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
   updateResultDock(selectedCount);
+  updateTextBoxPanel();
 }
 
 function updateResultDock(selectedCount: number): void {
