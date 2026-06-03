@@ -11,6 +11,16 @@ PUBLIC_KEYS = [
     "PADDLE_PRICE_PRO_MONTHLY",
     "PADDLE_PRICE_LIFETIME",
     "PADDLE_PRICE_DAY_PASS",
+    "PADDLE_PRICE_MANUAL_RECORDING_HOUR",
+    "PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE",
+    "PADDLE_PRICE_MANUAL_PPT_PREMIUM_PAGE",
+]
+
+REQUIRED_KEYS = [
+    "PADDLE_CLIENT_TOKEN",
+    "PADDLE_PRICE_PRO_MONTHLY",
+    "PADDLE_PRICE_LIFETIME",
+    "PADDLE_PRICE_DAY_PASS",
 ]
 
 
@@ -18,8 +28,9 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         config = {key: (os.getenv(key) or "").strip() for key in PUBLIC_KEYS}
         config["PADDLE_ENV"] = config["PADDLE_ENV"] or "production"
-        missing = [key for key, value in config.items() if not value and key != "PADDLE_ENV"]
-        self.send_json({"config": config, "missing": missing})
+        missing = [key for key in REQUIRED_KEYS if not config.get(key)]
+        optional_missing = [key for key, value in config.items() if not value and key not in REQUIRED_KEYS and key != "PADDLE_ENV"]
+        self.send_json({"config": config, "missing": missing, "optional_missing": optional_missing})
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)

@@ -12,8 +12,10 @@ from typing import Any
 
 try:
     from _supabase import insert_usage_event, save_entitlement
+    from _email import send_manual_order_notification
 except ModuleNotFoundError:
     from api._supabase import insert_usage_event, save_entitlement
+    from api._email import send_manual_order_notification
 
 
 HANDLED_EVENTS = {
@@ -119,10 +121,13 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     custom_data = as_dict(data.get("custom_data") or data.get("customData"))
     email = normalize_email(extract_email(data, custom_data))
     price_ids = collect_price_ids(data)
+    manual_info = resolve_manual_service(price_ids)
     plan_info = resolve_plan(price_ids)
 
     if not email:
         return {"processed": False, "event_type": event_type, "detail": "missing email"}
+    if manual_info and event_type == "transaction.completed":
+        return process_manual_order(event, data, custom_data, email, price_ids, manual_info)
     if not plan_info:
         insert_usage_event(
             email,
@@ -170,6 +175,50 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def process_manual_order(
+    event: dict[str, Any],
+    data: dict[str, Any],
+    custom_data: dict[str, Any],
+    email: str,
+    price_ids: list[str],
+    manual_info: dict[str, str],
+) -> dict[str, Any]:
+    quantity = parse_positive_int(custom_data.get("quantity")) or quantity_for_price(data, manual_info["price_id"]) or 1
+    order = {
+        "event_id": event.get("event_id"),
+        "event_type": event.get("event_type"),
+        "email": email,
+        "plan": manual_info["plan"],
+        "service_name": manual_info["service_name"],
+        "unit_label": manual_info["unit_label"],
+        "quantity": quantity,
+        "details": clean_text(custom_data.get("details"), limit=1200),
+        "price_ids": price_ids,
+        "paddle_customer_id": first_text(data.get("customer_id"), custom_data.get("paddle_customer_id")),
+        "paddle_transaction_id": transaction_id_for_event(str(event.get("event_type") or ""), data),
+    }
+    try:
+        notify_result = send_manual_order_notification(order)
+    except Exception as exc:
+        notify_result = {"sent": False, "reason": f"notification error: {str(exc)[:300]}"}
+    insert_usage_event(
+        email,
+        "manual_order.completed",
+        {
+            **order,
+            "notification": notify_result,
+        },
+    )
+    return {
+        "processed": True,
+        "event_type": str(event.get("event_type") or ""),
+        "email": email,
+        "plan": manual_info["plan"],
+        "manual_order": True,
+        "notification_sent": bool(notify_result.get("sent")),
+    }
+
+
 def resolve_plan(price_ids: list[str]) -> tuple[str, bool] | None:
     price_map = {
         (os.getenv("PADDLE_PRICE_PRO_MONTHLY") or "").strip(): ("pro", False),
@@ -180,6 +229,39 @@ def resolve_plan(price_ids: list[str]) -> tuple[str, bool] | None:
         plan = price_map.get(price_id)
         if plan:
             return plan
+    return None
+
+
+def resolve_manual_service(price_ids: list[str]) -> dict[str, str] | None:
+    services = [
+        (
+            "PADDLE_PRICE_MANUAL_RECORDING_HOUR",
+            "manual_recording",
+            "人工代录制",
+            "hour",
+        ),
+        (
+            "PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE",
+            "manual_ppt_basic",
+            "人工代修改 PPT",
+            "page",
+        ),
+        (
+            "PADDLE_PRICE_MANUAL_PPT_PREMIUM_PAGE",
+            "manual_ppt_premium",
+            "大师级精修",
+            "page",
+        ),
+    ]
+    for env_key, plan, service_name, unit_label in services:
+        price_id = (os.getenv(env_key) or "").strip()
+        if price_id and price_id in price_ids:
+            return {
+                "price_id": price_id,
+                "plan": plan,
+                "service_name": service_name,
+                "unit_label": unit_label,
+            }
     return None
 
 
@@ -270,6 +352,42 @@ def collect_price_ids(value: Any) -> list[str]:
 
     walk(value)
     return found
+
+
+def quantity_for_price(value: Any, price_id: str) -> int | None:
+    if isinstance(value, dict):
+        price = as_dict(value.get("price"))
+        current_price_id = first_text(price.get("id"), value.get("price_id"), value.get("priceId"))
+        if current_price_id == price_id:
+            quantity = parse_positive_int(value.get("quantity"))
+            if quantity:
+                return quantity
+        for child in value.values():
+            quantity = quantity_for_price(child, price_id)
+            if quantity:
+                return quantity
+    elif isinstance(value, list):
+        for child in value:
+            quantity = quantity_for_price(child, price_id)
+            if quantity:
+                return quantity
+    return None
+
+
+def parse_positive_int(value: Any) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 1:
+        return None
+    return min(number, 999)
+
+
+def clean_text(value: Any, *, limit: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:limit]
 
 
 def as_dict(value: Any) -> dict[str, Any]:

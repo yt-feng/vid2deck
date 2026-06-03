@@ -78,7 +78,12 @@
     .service-card h3 { margin: 0 0 10px; font-size: 1.5rem; letter-spacing: -.04em; }
     .service-price { margin: 0 0 14px; color: #0f172a; font-size: 2.1rem; font-weight: 950; letter-spacing: -.05em; }
     .service-card p { margin: 0; color: #64748b; line-height: 1.65; }
-    .service-card a { margin-top: auto; color: #0f172a; font-weight: 900; text-decoration: none; }
+    .service-order { display: grid; gap: 10px; margin-top: 18px; }
+    .service-order label { display: grid; gap: 7px; color: #0f172a; font-weight: 900; }
+    .service-order input, .service-order textarea { width: 100%; padding: 12px 13px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-weight: 700; }
+    .service-order textarea { min-height: 82px; resize: vertical; line-height: 1.45; }
+    .service-order input:focus, .service-order textarea:focus { outline: 3px solid rgba(37,99,235,.18); border-color: #2563eb; }
+    .service-card .cta { margin-top: 12px; }
     .note { margin: 34px auto 0; text-align: center; color: #64748b; }
     .note a { color: #0f172a; font-weight: 900; }
     .footer { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 54px; color: #64748b; font-size: .95rem; }
@@ -166,19 +171,43 @@
           <h3>人工代录制</h3>
           <p class="service-price">$5 / 小时</p>
           <p>代录网课、讲座、演示或屏幕流程，按实际录制时长计费。</p>
-          <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20recording">预约代录制</a>
+          <div class="service-order">
+            <label>小时数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：课程链接、录制要求、截止时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_recording" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_RECORDING_HOUR" data-service-label="人工代录制" data-unit-label="hour">支付下单</button>
+          </div>
         </article>
         <article class="service-card">
           <h3>人工代修改 PPT</h3>
           <p class="service-price">$5 / 页起</p>
           <p>基础排版、错字修正、页面清理和截图页重建，按精细程度定价。</p>
-          <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20PPT%20editing">咨询改稿</a>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：改稿要求、文件链接、交付时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_basic" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE" data-service-label="人工代修改 PPT" data-unit-label="page">支付下单</button>
+          </div>
         </article>
         <article class="service-card">
           <h3>大师级精修</h3>
           <p class="service-price">$20 / 页</p>
           <p>适合高要求商业演示、品牌统一、复杂版式复刻和深度视觉打磨。</p>
-          <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20premium%20PPT%20editing">咨询精修</a>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：品牌风格、参考链接、精修要求。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_premium" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_PREMIUM_PAGE" data-service-label="大师级精修" data-unit-label="page">支付下单</button>
+          </div>
         </article>
       </div>
     </section>
@@ -210,7 +239,7 @@
       </table>
     </section>
 
-    <p class="note">企业、人工代录制和大师级精修仍可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 联系确认报价。</p>
+    <p class="note">人工服务下单后会按购买邮箱跟进。复杂项目也可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 先确认报价。</p>
 
     <footer class="footer">
       <a href="/terms-and-conditions/">Terms of Service</a>
@@ -302,8 +331,13 @@
               token: config.PADDLE_CLIENT_TOKEN,
               eventCallback: function (event) {
                 var name = String((event && (event.name || event.eventName || event.type)) || '');
-                if (name === 'checkout.completed' || name === 'checkout.payment.initiated') {
-                  setTimeout(refreshEntitlement, 1800);
+                if (name === 'checkout.completed') {
+                  var pendingPlan = sessionStorage.getItem('vid2deck.checkout.plan') || '';
+                  if (isManualPlan(pendingPlan)) {
+                    setStatus('人工服务订单已支付。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+                  } else {
+                    setTimeout(refreshEntitlement, 1800);
+                  }
                 }
               }
             });
@@ -318,7 +352,14 @@
         if (plan === 'pro') return '专业版';
         if (plan === 'lifetime') return '终身版';
         if (plan === 'day_pass') return '临时版';
+        if (plan === 'manual_recording') return '人工代录制';
+        if (plan === 'manual_ppt_basic') return '人工代修改 PPT';
+        if (plan === 'manual_ppt_premium') return '大师级精修';
         return '免费版';
+      }
+
+      function isManualPlan(plan) {
+        return String(plan || '').indexOf('manual_') === 0;
       }
 
       function periodText(value) {
@@ -355,9 +396,30 @@
         });
       }
 
+      function checkoutQuantity(button) {
+        var card = button.closest('.service-card');
+        if (!card) return 1;
+        var input = card.querySelector('.service-quantity');
+        var quantity = parseInt(input && input.value, 10);
+        if (!Number.isFinite(quantity) || quantity < 1) {
+          setStatus('请填写有效数量。', 'error');
+          if (input) input.focus();
+          return 0;
+        }
+        return Math.min(quantity, 999);
+      }
+
+      function serviceDetails(button) {
+        var card = button.closest('.service-card');
+        var textarea = card && card.querySelector('.service-details');
+        return textarea ? textarea.value.trim().slice(0, 1200) : '';
+      }
+
       function openCheckout(button) {
         var email = requireEmail();
         if (!email) return;
+        var quantity = checkoutQuantity(button);
+        if (!quantity) return;
         setButtonsBusy(true);
         setStatus('正在打开支付窗口...', 'warn');
         ensurePaddle()
@@ -365,14 +427,25 @@
             var priceKey = button.getAttribute('data-price-key');
             var priceId = config[priceKey];
             var plan = button.getAttribute('data-plan') || 'unknown';
-            if (!priceId) throw new Error('未找到对应的 Price ID。');
+            var orderKind = button.getAttribute('data-order-kind') || 'membership';
+            var serviceLabel = button.getAttribute('data-service-label') || planLabel(plan);
+            var unitLabel = button.getAttribute('data-unit-label') || '';
+            var details = serviceDetails(button);
+            if (!priceId) throw new Error('未找到对应的 Price ID：' + priceKey);
+            sessionStorage.setItem('vid2deck.checkout.plan', plan);
+            sessionStorage.setItem('vid2deck.checkout.orderKind', orderKind);
             window.Paddle.Checkout.open({
-              items: [{ priceId: priceId, quantity: 1 }],
+              items: [{ priceId: priceId, quantity: quantity }],
               customer: { email: email },
               customData: {
                 email: email,
                 plan: plan,
-                source: 'pricing_page'
+                source: 'pricing_page',
+                order_kind: orderKind,
+                quantity: quantity,
+                service_label: serviceLabel,
+                unit_label: unitLabel,
+                details: details
               },
               settings: {
                 displayMode: 'overlay',
@@ -407,10 +480,16 @@
         refreshEntitlement();
       });
 
-      if (new URLSearchParams(window.location.search).get('checkout') === 'success') {
-        setStatus('支付已完成，正在等待 Paddle 回调确认...', 'warn');
-        setTimeout(refreshEntitlement, 2500);
-        setTimeout(refreshEntitlement, 9000);
+      var searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('checkout') === 'success') {
+        var successPlan = searchParams.get('plan') || sessionStorage.getItem('vid2deck.checkout.plan') || '';
+        if (isManualPlan(successPlan)) {
+          setStatus('人工服务订单已提交。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+        } else {
+          setStatus('支付已完成，正在等待 Paddle 回调确认...', 'warn');
+          setTimeout(refreshEntitlement, 2500);
+          setTimeout(refreshEntitlement, 9000);
+        }
       }
     }());
   </script>
