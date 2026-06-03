@@ -20,10 +20,23 @@
     .eyebrow { margin: 0 0 12px; color: #2563eb; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4.5rem); line-height: 1; letter-spacing: -.06em; }
     .subhead { max-width: 760px; margin: 20px auto 0; color: #475569; font-size: 1.12rem; line-height: 1.75; }
-    .toggle { width: fit-content; display: flex; align-items: center; gap: 4px; margin: 28px auto 36px; padding: 6px; background: #eef2f7; border-radius: 18px; }
+    .toggle { width: fit-content; display: flex; align-items: center; gap: 4px; margin: 28px auto 22px; padding: 6px; background: #eef2f7; border-radius: 18px; }
     .toggle span { padding: 12px 42px; color: #64748b; border-radius: 14px; font-weight: 900; }
     .toggle .active { color: #0f172a; background: #fff; box-shadow: 0 8px 22px rgba(15,23,42,.08); }
     .toggle b { color: #16a34a; }
+    .checkout-panel { display: grid; grid-template-columns: 1fr minmax(320px, 430px); gap: 22px; align-items: center; margin: 0 0 34px; padding: 24px; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .checkout-panel h2 { margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2.2rem); letter-spacing: -.045em; }
+    .checkout-panel p { margin: 0; color: #64748b; line-height: 1.65; }
+    .checkout-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .checkout-form label { grid-column: 1 / -1; color: #0f172a; font-weight: 900; }
+    .checkout-form input { width: 100%; min-height: 48px; padding: 0 14px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-weight: 750; }
+    .checkout-form input:focus { outline: 3px solid rgba(37,99,235,.18); border-color: #2563eb; }
+    .small-btn { min-height: 48px; padding: 0 16px; color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 900; white-space: nowrap; }
+    .small-btn:hover { border-color: #0f172a; }
+    .checkout-status { grid-column: 1 / -1; min-height: 24px; color: #64748b; font-size: .95rem; line-height: 1.5; }
+    .checkout-status.ok { color: #047857; font-weight: 850; }
+    .checkout-status.warn { color: #b45309; font-weight: 850; }
+    .checkout-status.error { color: #b91c1c; font-weight: 850; }
     .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
     .card { position: relative; display: flex; flex-direction: column; padding: 34px; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
     .card.featured { border: 3px solid #0f172a; box-shadow: 0 22px 60px rgba(15,23,42,.14); transform: translateY(-8px); }
@@ -39,8 +52,15 @@
     li::before { content: '✓'; color: #16a34a; font-weight: 900; }
     li.muted { color: #94a3b8; }
     li.muted::before { content: '×'; color: #94a3b8; }
-    .cta { margin-top: auto; display: block; width: 100%; padding: 15px 18px; color: #fff; background: #0f172a; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 900; }
+    .cta { margin-top: auto; display: block; width: 100%; padding: 15px 18px; color: #fff; background: #0f172a; border: 0; border-radius: 12px; cursor: pointer; font: inherit; text-align: center; text-decoration: none; font-weight: 900; }
     .cta.secondary { color: #64748b; background: #fff; border: 1px solid #e2e8f0; }
+    .cta:disabled { cursor: wait; opacity: .7; }
+    .plan-note { margin: -18px 0 28px; color: #64748b; font-weight: 750; line-height: 1.55; }
+    .day-pass { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; margin-top: 24px; padding: 22px 24px; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .day-pass h2 { margin: 0 0 6px; font-size: 1.45rem; letter-spacing: -.035em; }
+    .day-pass p { margin: 0; color: #64748b; font-weight: 700; }
+    .day-pass-price { color: #0f172a; font-size: 2rem; font-weight: 950; letter-spacing: -.05em; white-space: nowrap; }
+    .day-pass .cta { min-width: 180px; margin-top: 0; }
     .comparison { margin-top: 42px; overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
     .comparison table { width: 100%; min-width: 760px; border-collapse: collapse; }
     .comparison th, .comparison td { padding: 18px 24px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 1rem; }
@@ -63,7 +83,7 @@
     .note a { color: #0f172a; font-weight: 900; }
     .footer { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 54px; color: #64748b; font-size: .95rem; }
     .footer a { text-decoration: none; font-weight: 700; }
-    @media (max-width: 980px) { .cards, .service-grid { grid-template-columns: 1fr; } .card.featured { transform: none; } .toggle span { padding-inline: 22px; } .nav, .section-title { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 980px) { .cards, .service-grid, .checkout-panel, .day-pass { grid-template-columns: 1fr; } .card.featured { transform: none; } .toggle span { padding-inline: 22px; } .nav, .section-title { align-items: flex-start; flex-direction: column; } .checkout-form { grid-template-columns: 1fr; } .day-pass .cta { width: 100%; } }
   </style>
 </head>
 <body>
@@ -87,6 +107,19 @@
       <span>年付 <b>省43%</b></span>
     </div>
 
+    <section class="checkout-panel" aria-label="会员账号">
+      <div>
+        <h2>会员账号</h2>
+        <p>支付和权益会绑定到这个邮箱。支付成功后系统会自动开通，通常几十秒内刷新。</p>
+      </div>
+      <form class="checkout-form" id="checkoutForm">
+        <label for="checkoutEmail">邮箱</label>
+        <input id="checkoutEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+        <button class="small-btn" id="checkEntitlementBtn" type="submit">查看权益</button>
+        <div class="checkout-status" id="checkoutStatus" aria-live="polite">等待填写邮箱。</div>
+      </form>
+    </section>
+
     <section class="cards" aria-label="Pricing plans">
       <article class="card">
         <h2>免费版</h2>
@@ -100,7 +133,8 @@
         <h2>专业版</h2>
         <p class="for">推荐专业用户使用</p>
         <p class="price"><strong>¥39</strong><span>/ 月</span></p>
-        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20Pro%20subscription">立即订阅</a>
+        <p class="plan-note">按月订阅，适合持续处理课程、会议和长视频。</p>
+        <button class="cta checkout-btn" type="button" data-plan="pro" data-price-key="PADDLE_PRICE_PRO_MONTHLY">立即订阅</button>
       </article>
 
       <article class="card">
@@ -108,8 +142,18 @@
         <h2>终身版</h2>
         <p class="for">一次购买，终身使用</p>
         <p class="price"><strong>¥498</strong><del>¥999</del></p>
-        <a class="cta" href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20Lifetime%20purchase">立即购买</a>
+        <p class="plan-note">一次付费，后续版本权益持续保留。</p>
+        <button class="cta checkout-btn" type="button" data-plan="lifetime" data-price-key="PADDLE_PRICE_LIFETIME">立即购买</button>
       </article>
+    </section>
+
+    <section class="day-pass" aria-label="临时版">
+      <div>
+        <h2>临时版</h2>
+        <p>适合临时处理单次作业、演讲或课程材料。</p>
+      </div>
+      <div class="day-pass-price">¥9.9</div>
+      <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS">开通临时版</button>
     </section>
 
     <section class="services" aria-label="人工服务">
@@ -166,7 +210,7 @@
       </table>
     </section>
 
-    <p class="note">只需要临时使用吗？<a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20one-time%20pass">点这里</a>，低至 ¥9.9。</p>
+    <p class="note">企业、人工代录制和大师级精修仍可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 联系确认报价。</p>
 
     <footer class="footer">
       <a href="/terms-and-conditions/">Terms of Service</a>
@@ -175,5 +219,200 @@
       <span>© 2026 Vid2PPT Deck</span>
     </footer>
   </div>
+  <script>
+    (function () {
+      var PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+      var STORAGE_EMAIL_KEY = 'vid2deck.checkout.email';
+      var configPromise = null;
+      var paddlePromise = null;
+      var paddleInitialized = false;
+
+      var emailInput = document.getElementById('checkoutEmail');
+      var checkoutForm = document.getElementById('checkoutForm');
+      var checkoutStatus = document.getElementById('checkoutStatus');
+      var checkoutButtons = Array.prototype.slice.call(document.querySelectorAll('.checkout-btn'));
+
+      function setStatus(message, tone) {
+        checkoutStatus.textContent = message;
+        checkoutStatus.className = 'checkout-status' + (tone ? ' ' + tone : '');
+      }
+
+      function normalizeEmail(value) {
+        return String(value || '').trim().toLowerCase();
+      }
+
+      function isValidEmail(email) {
+        return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+      }
+
+      function selectedEmail() {
+        var email = normalizeEmail(emailInput.value);
+        if (email) localStorage.setItem(STORAGE_EMAIL_KEY, email);
+        return email;
+      }
+
+      function requireEmail() {
+        var email = selectedEmail();
+        if (!isValidEmail(email)) {
+          setStatus('请先填写有效邮箱。', 'error');
+          emailInput.focus();
+          return '';
+        }
+        return email;
+      }
+
+      function fetchConfig() {
+        if (configPromise) return configPromise;
+        configPromise = fetch('/api/paddle-config')
+          .then(function (response) {
+            if (!response.ok) throw new Error('支付配置接口异常。');
+            return response.json();
+          })
+          .then(function (payload) {
+            if (payload.missing && payload.missing.length) {
+              throw new Error('支付配置缺少：' + payload.missing.join(', '));
+            }
+            return payload.config || {};
+          });
+        return configPromise;
+      }
+
+      function loadPaddleScript() {
+        if (window.Paddle) return Promise.resolve();
+        return new Promise(function (resolve, reject) {
+          var script = document.createElement('script');
+          script.src = PADDLE_SCRIPT_URL;
+          script.async = true;
+          script.onload = function () { resolve(); };
+          script.onerror = function () { reject(new Error('Paddle.js 加载失败。')); };
+          document.head.appendChild(script);
+        });
+      }
+
+      function ensurePaddle() {
+        if (paddlePromise) return paddlePromise;
+        paddlePromise = Promise.all([fetchConfig(), loadPaddleScript()]).then(function (result) {
+          var config = result[0];
+          if (!window.Paddle) throw new Error('Paddle.js 未就绪。');
+          if (config.PADDLE_ENV === 'sandbox' && window.Paddle.Environment && window.Paddle.Environment.set) {
+            window.Paddle.Environment.set('sandbox');
+          }
+          if (!paddleInitialized) {
+            window.Paddle.Initialize({
+              token: config.PADDLE_CLIENT_TOKEN,
+              eventCallback: function (event) {
+                var name = String((event && (event.name || event.eventName || event.type)) || '');
+                if (name === 'checkout.completed' || name === 'checkout.payment.initiated') {
+                  setTimeout(refreshEntitlement, 1800);
+                }
+              }
+            });
+            paddleInitialized = true;
+          }
+          return config;
+        });
+        return paddlePromise;
+      }
+
+      function planLabel(plan) {
+        if (plan === 'pro') return '专业版';
+        if (plan === 'lifetime') return '终身版';
+        if (plan === 'day_pass') return '临时版';
+        return '免费版';
+      }
+
+      function periodText(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return '，有效期至 ' + date.toLocaleString('zh-CN', { hour12: false });
+      }
+
+      function refreshEntitlement() {
+        var email = requireEmail();
+        if (!email) return Promise.resolve();
+        setStatus('正在刷新权益...', 'warn');
+        return fetch('/api/entitlement?email=' + encodeURIComponent(email))
+          .then(function (response) {
+            if (!response.ok) throw new Error('权益查询失败。');
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.active) {
+              setStatus('已开通 ' + planLabel(data.plan) + periodText(data.current_period_end) + '。', 'ok');
+            } else {
+              setStatus('当前未检测到已生效权益。支付完成后可稍后刷新。', 'warn');
+            }
+          })
+          .catch(function (error) {
+            setStatus(error.message || '权益查询失败。', 'error');
+          });
+      }
+
+      function setButtonsBusy(busy) {
+        checkoutButtons.forEach(function (button) {
+          button.disabled = busy;
+        });
+      }
+
+      function openCheckout(button) {
+        var email = requireEmail();
+        if (!email) return;
+        setButtonsBusy(true);
+        setStatus('正在打开支付窗口...', 'warn');
+        ensurePaddle()
+          .then(function (config) {
+            var priceKey = button.getAttribute('data-price-key');
+            var priceId = config[priceKey];
+            var plan = button.getAttribute('data-plan') || 'unknown';
+            if (!priceId) throw new Error('未找到对应的 Price ID。');
+            window.Paddle.Checkout.open({
+              items: [{ priceId: priceId, quantity: 1 }],
+              customer: { email: email },
+              customData: {
+                email: email,
+                plan: plan,
+                source: 'pricing_page'
+              },
+              settings: {
+                displayMode: 'overlay',
+                theme: 'light',
+                successUrl: window.location.origin + '/pricing/?checkout=success&plan=' + encodeURIComponent(plan)
+              }
+            });
+            setStatus('支付窗口已打开。', 'ok');
+          })
+          .catch(function (error) {
+            setStatus(error.message || '支付窗口打开失败。', 'error');
+          })
+          .finally(function () {
+            setButtonsBusy(false);
+          });
+      }
+
+      var storedEmail = localStorage.getItem(STORAGE_EMAIL_KEY);
+      if (storedEmail) {
+        emailInput.value = storedEmail;
+        refreshEntitlement();
+      }
+
+      checkoutButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          openCheckout(button);
+        });
+      });
+
+      checkoutForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        refreshEntitlement();
+      });
+
+      if (new URLSearchParams(window.location.search).get('checkout') === 'success') {
+        setStatus('支付已完成，正在等待 Paddle 回调确认...', 'warn');
+        setTimeout(refreshEntitlement, 2500);
+        setTimeout(refreshEntitlement, 9000);
+      }
+    }());
+  </script>
 </body>
 </html>
