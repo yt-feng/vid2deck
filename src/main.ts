@@ -40,6 +40,22 @@ type TesseractApi = {
   createWorker: (langs: string[] | string, oem?: number, options?: Record<string, unknown>) => Promise<OcrWorker>;
   PSM?: { SPARSE_TEXT?: string; AUTO?: string };
 };
+type PaddleConfig = {
+  PADDLE_ENV?: string;
+  PADDLE_CLIENT_TOKEN?: string;
+  PADDLE_PRICE_AUTHOR_TIP_CNY_CENT?: string;
+};
+type PaddleApi = {
+  Environment?: { set: (environment: string) => void };
+  Initialize: (options: { token: string; eventCallback?: (event: unknown) => void }) => void;
+  Checkout: {
+    open: (options: {
+      items: { priceId: string; quantity: number }[];
+      customData?: Record<string, string | number | boolean>;
+      settings?: { displayMode?: string; theme?: string; successUrl?: string };
+    }) => void;
+  };
+};
 
 type Settings = {
   sampleEvery: number;
@@ -92,6 +108,10 @@ const TESSERACT_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/di
 const OCR_LANGUAGES = ['eng', 'chi_sim'];
 const OCR_MAX_EDGE = 2800;
 const OCR_MIN_CONFIDENCE = 35;
+const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+const TIP_AMOUNTS = [5, 20, 50, 80, 100, 200] as const;
+const TIP_MIN_AMOUNT = 0.01;
+const TIP_MAX_QUANTITY = 999999;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -162,6 +182,14 @@ app.innerHTML = `
       </div>
 
       <div class="status" id="homeStatus">等待上传视频。</div>
+    </section>
+
+    <section class="support-author-panel" aria-label="赞赏作者">
+      <div>
+        <p class="eyebrow">Support</p>
+        <h2>觉得 Vid2PPT Deck 有用，可以请作者喝杯咖啡</h2>
+      </div>
+      <button id="openTipDialogBtn" type="button">赞赏作者</button>
     </section>
   </main>
 
@@ -304,6 +332,29 @@ app.innerHTML = `
       </div>
     </form>
   </dialog>
+
+  <dialog id="tipDialog" class="tip-dialog">
+    <form method="dialog" class="tip-panel">
+      <div class="tip-heading">
+        <div>
+          <p class="eyebrow">Support</p>
+          <h2>赞赏作者</h2>
+        </div>
+        <button id="showCustomTipBtn" type="button" class="tip-custom-link">其他金额</button>
+      </div>
+      <div class="tip-amount-grid" role="group" aria-label="选择赞赏金额">
+        ${TIP_AMOUNTS.map((amount) => `<button type="button" class="tip-amount-btn" data-amount="${amount}">¥${amount}</button>`).join('')}
+      </div>
+      <label id="customTipLabel" class="custom-tip-label" hidden>自定义金额
+        <input id="customTipAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="例如 0.01" />
+      </label>
+      <div class="tip-status" id="tipStatus" aria-live="polite">请选择赞赏金额。</div>
+      <div class="tip-actions">
+        <button id="tipCancelBtn" value="cancel" class="ghost-btn">取消</button>
+        <button id="customTipPayBtn" type="button" hidden>支付自定义金额</button>
+      </div>
+    </form>
+  </dialog>
 `;
 
 const $ = <T extends Element>(selector: string) => {
@@ -375,6 +426,13 @@ const cropTop = $<HTMLInputElement>('#cropTop');
 const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
+const openTipDialogBtn = $<HTMLButtonElement>('#openTipDialogBtn');
+const tipDialog = $<HTMLDialogElement>('#tipDialog');
+const showCustomTipBtn = $<HTMLButtonElement>('#showCustomTipBtn');
+const customTipLabel = $<HTMLLabelElement>('#customTipLabel');
+const customTipAmount = $<HTMLInputElement>('#customTipAmount');
+const customTipPayBtn = $<HTMLButtonElement>('#customTipPayBtn');
+const tipStatus = $<HTMLDivElement>('#tipStatus');
 const runOcrBtn = $<HTMLButtonElement>('#runOcrBtn');
 const addTextBoxBtn = $<HTMLButtonElement>('#addTextBoxBtn');
 const deleteTextBoxBtn = $<HTMLButtonElement>('#deleteTextBoxBtn');
@@ -415,6 +473,10 @@ let recordingStream: MediaStream | null = null;
 let recordedChunks: Blob[] = [];
 let currentRecordingMimeType = 'video/webm';
 let tesseractLoadPromise: Promise<TesseractApi> | null = null;
+let paddleConfigPromise: Promise<PaddleConfig> | null = null;
+let paddleLoadPromise: Promise<PaddleConfig> | null = null;
+let paddleInitialized = false;
+let isTipCheckoutOpening = false;
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
@@ -526,8 +588,185 @@ cropApplyBtn.addEventListener('click', async (event) => {
   await applyCrop();
 });
 
+openTipDialogBtn.addEventListener('click', () => openTipDialog());
+showCustomTipBtn.addEventListener('click', () => showCustomTipInput());
+customTipPayBtn.addEventListener('click', () => {
+  void openTipCheckout(readCustomTipAmount());
+});
+customTipAmount.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void openTipCheckout(readCustomTipAmount());
+  }
+});
+
+tipDialog.addEventListener('click', (event) => {
+  if (event.target === tipDialog) tipDialog.close();
+});
+
+tipDialog.querySelectorAll<HTMLButtonElement>('.tip-amount-btn').forEach((button) => {
+  button.addEventListener('click', () => {
+    void openTipCheckout(Number(button.dataset.amount));
+  });
+});
+
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording;
+  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening;
+}
+
+function openTipDialog(): void {
+  tipStatus.textContent = '请选择赞赏金额。';
+  tipStatus.className = 'tip-status';
+  customTipLabel.hidden = true;
+  customTipPayBtn.hidden = true;
+  customTipAmount.value = '';
+  if (typeof tipDialog.showModal === 'function') tipDialog.showModal();
+  else tipDialog.setAttribute('open', '');
+}
+
+function showCustomTipInput(): void {
+  customTipLabel.hidden = false;
+  customTipPayBtn.hidden = false;
+  tipStatus.textContent = '请输入任意金额，最低 ¥0.01。';
+  tipStatus.className = 'tip-status';
+  customTipAmount.focus();
+}
+
+function readCustomTipAmount(): number {
+  return Number(customTipAmount.value);
+}
+
+function amountToCentQuantity(amount: number): number {
+  return Math.round(amount * 100);
+}
+
+function validTipAmount(amount: number): boolean {
+  if (!Number.isFinite(amount)) return false;
+  const quantity = amountToCentQuantity(amount);
+  return amount >= TIP_MIN_AMOUNT && quantity >= 1 && quantity <= TIP_MAX_QUANTITY;
+}
+
+function setTipStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
+  tipStatus.textContent = message;
+  tipStatus.className = `tip-status${tone ? ` ${tone}` : ''}`;
+}
+
+async function fetchPaddleConfig(): Promise<PaddleConfig> {
+  if (paddleConfigPromise) return paddleConfigPromise;
+  paddleConfigPromise = fetch('/api/paddle-config')
+    .then((response) => {
+      if (!response.ok) throw new Error('支付配置接口异常。');
+      return response.json() as Promise<{ config?: PaddleConfig; missing?: string[] }>;
+    })
+    .then((payload) => payload.config ?? {});
+  return paddleConfigPromise;
+}
+
+function loadPaddleScript(): Promise<void> {
+  if (windowPaddle()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${PADDLE_SCRIPT_URL}"]`);
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Paddle.js 加载失败。')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = PADDLE_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Paddle.js 加载失败。'));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensurePaddle(): Promise<PaddleConfig> {
+  if (paddleLoadPromise) return paddleLoadPromise;
+  paddleLoadPromise = Promise.all([fetchPaddleConfig(), loadPaddleScript()]).then(([config]) => {
+    const paddle = windowPaddle();
+    if (!paddle) throw new Error('Paddle.js 未就绪。');
+    if (config.PADDLE_ENV === 'sandbox' && paddle.Environment?.set) {
+      paddle.Environment.set('sandbox');
+    }
+    if (!paddleInitialized) {
+      const token = config.PADDLE_CLIENT_TOKEN;
+      if (!token) throw new Error('支付配置缺少：PADDLE_CLIENT_TOKEN');
+      paddle.Initialize({
+        token,
+        eventCallback: (event) => {
+          const name = String(eventName(event));
+          if (name === 'checkout.completed') setTipStatus('谢谢支持，支付已完成。', 'ok');
+        }
+      });
+      paddleInitialized = true;
+    }
+    return config;
+  });
+  return paddleLoadPromise;
+}
+
+async function openTipCheckout(amount: number): Promise<void> {
+  if (!validTipAmount(amount)) {
+    setTipStatus('请输入不小于 ¥0.01 的有效金额。', 'error');
+    showCustomTipInput();
+    return;
+  }
+
+  const quantity = amountToCentQuantity(amount);
+  const normalizedAmount = quantity / 100;
+  isTipCheckoutOpening = true;
+  setTipButtonsBusy(true);
+  updateActionState();
+  setTipStatus('正在打开支付窗口...', 'warn');
+
+  try {
+    const config = await ensurePaddle();
+    const priceId = config.PADDLE_PRICE_AUTHOR_TIP_CNY_CENT;
+    if (!priceId) throw new Error('支付配置缺少：PADDLE_PRICE_AUTHOR_TIP_CNY_CENT');
+    const paddle = windowPaddle();
+    if (!paddle) throw new Error('Paddle.js 未就绪。');
+    paddle.Checkout.open({
+      items: [{ priceId, quantity }],
+      customData: {
+        plan: 'author_tip',
+        order_kind: 'author_tip',
+        source: 'home_tip_dialog',
+        amount_cny: normalizedAmount.toFixed(2),
+        quantity
+      },
+      settings: {
+        displayMode: 'overlay',
+        theme: 'light',
+        successUrl: `${window.location.origin}/?checkout=success&plan=author_tip`
+      }
+    });
+    setTipStatus(`支付窗口已打开：¥${normalizedAmount.toFixed(2)}。`, 'ok');
+  } catch (error) {
+    setTipStatus(error instanceof Error ? error.message : '支付窗口打开失败。', 'error');
+  } finally {
+    isTipCheckoutOpening = false;
+    setTipButtonsBusy(false);
+    updateActionState();
+  }
+}
+
+function setTipButtonsBusy(busy: boolean): void {
+  openTipDialogBtn.disabled = busy;
+  showCustomTipBtn.disabled = busy;
+  customTipPayBtn.disabled = busy;
+  tipDialog.querySelectorAll<HTMLButtonElement>('.tip-amount-btn').forEach((button) => {
+    button.disabled = busy;
+  });
+}
+
+function windowPaddle(): PaddleApi | undefined {
+  return (window as Window & { Paddle?: PaddleApi }).Paddle;
+}
+
+function eventName(event: unknown): string {
+  if (!event || typeof event !== 'object') return '';
+  const data = event as { name?: unknown; eventName?: unknown; type?: unknown };
+  return String(data.name ?? data.eventName ?? data.type ?? '');
 }
 
 function addFiles(files: File[], selectAdded = false): void {

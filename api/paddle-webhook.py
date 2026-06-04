@@ -122,8 +122,11 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     email = normalize_email(extract_email(data, custom_data))
     price_ids = collect_price_ids(data)
     manual_info = resolve_manual_service(price_ids)
+    tip_info = resolve_author_tip(price_ids)
     plan_info = resolve_plan(price_ids)
 
+    if tip_info and event_type == "transaction.completed":
+        return process_author_tip(event, data, custom_data, email, price_ids, tip_info)
     if not email:
         return {"processed": False, "event_type": event_type, "detail": "missing email"}
     if manual_info and event_type == "transaction.completed":
@@ -219,6 +222,40 @@ def process_manual_order(
     }
 
 
+def process_author_tip(
+    event: dict[str, Any],
+    data: dict[str, Any],
+    custom_data: dict[str, Any],
+    email: str,
+    price_ids: list[str],
+    tip_info: dict[str, str],
+) -> dict[str, Any]:
+    quantity = parse_positive_int(custom_data.get("quantity"), max_value=999999) or quantity_for_price(data, tip_info["price_id"], max_value=999999) or 1
+    amount_cny = quantity / 100
+    insert_usage_event(
+        email or "anonymous",
+        "author_tip.completed",
+        {
+            "event_id": event.get("event_id"),
+            "event_type": event.get("event_type"),
+            "plan": tip_info["plan"],
+            "amount_cny": amount_cny,
+            "quantity": quantity,
+            "price_ids": price_ids,
+            "paddle_customer_id": first_text(data.get("customer_id"), custom_data.get("paddle_customer_id")),
+            "paddle_transaction_id": transaction_id_for_event(str(event.get("event_type") or ""), data),
+        },
+    )
+    return {
+        "processed": True,
+        "event_type": str(event.get("event_type") or ""),
+        "email": email or None,
+        "plan": tip_info["plan"],
+        "author_tip": True,
+        "amount_cny": amount_cny,
+    }
+
+
 def resolve_plan(price_ids: list[str]) -> tuple[str, bool] | None:
     price_map = {
         (os.getenv("PADDLE_PRICE_PRO_MONTHLY") or "").strip(): ("pro", False),
@@ -262,6 +299,16 @@ def resolve_manual_service(price_ids: list[str]) -> dict[str, str] | None:
                 "service_name": service_name,
                 "unit_label": unit_label,
             }
+    return None
+
+
+def resolve_author_tip(price_ids: list[str]) -> dict[str, str] | None:
+    price_id = (os.getenv("PADDLE_PRICE_AUTHOR_TIP_CNY_CENT") or "").strip()
+    if price_id and price_id in price_ids:
+        return {
+            "price_id": price_id,
+            "plan": "author_tip",
+        }
     return None
 
 
@@ -354,34 +401,34 @@ def collect_price_ids(value: Any) -> list[str]:
     return found
 
 
-def quantity_for_price(value: Any, price_id: str) -> int | None:
+def quantity_for_price(value: Any, price_id: str, *, max_value: int = 999) -> int | None:
     if isinstance(value, dict):
         price = as_dict(value.get("price"))
         current_price_id = first_text(price.get("id"), value.get("price_id"), value.get("priceId"))
         if current_price_id == price_id:
-            quantity = parse_positive_int(value.get("quantity"))
+            quantity = parse_positive_int(value.get("quantity"), max_value=max_value)
             if quantity:
                 return quantity
         for child in value.values():
-            quantity = quantity_for_price(child, price_id)
+            quantity = quantity_for_price(child, price_id, max_value=max_value)
             if quantity:
                 return quantity
     elif isinstance(value, list):
         for child in value:
-            quantity = quantity_for_price(child, price_id)
+            quantity = quantity_for_price(child, price_id, max_value=max_value)
             if quantity:
                 return quantity
     return None
 
 
-def parse_positive_int(value: Any) -> int | None:
+def parse_positive_int(value: Any, *, max_value: int = 999) -> int | None:
     try:
         number = int(value)
     except (TypeError, ValueError):
         return None
     if number < 1:
         return None
-    return min(number, 999)
+    return min(number, max_value)
 
 
 def clean_text(value: Any, *, limit: int) -> str:
