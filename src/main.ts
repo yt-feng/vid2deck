@@ -132,12 +132,11 @@ app.innerHTML = `
           <p class="eyebrow">Image to PPT</p>
           <h2>图片本地生成可编辑 PPTX</h2>
         </div>
-        <span>本地渲染 · 适合普通 MacBook Air</span>
       </div>
 
       <label class="dropzone image-dropzone" id="imageDropzone" for="imageInput">
         <input id="imageInput" type="file" multiple accept="image/png,image/jpeg,image/webp" />
-        <span id="imageFileLabel">选择或拖入一组图片页</span>
+        <span id="imageFileLabel">选择或拖入一组图片</span>
         <small>每张图片生成一页 PPT；进入编辑模式后可添加真实文本框，再导出可编辑 PPTX。</small>
       </label>
 
@@ -1176,7 +1175,7 @@ function renderFileList(): void {
 function renderImageFileList(): void {
   imageFileList.innerHTML = '';
   imageFileList.hidden = selectedImageFiles.length === 0;
-  imageFileLabel.textContent = selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片` : '选择或拖入一组图片页';
+  imageFileLabel.textContent = selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片` : '选择或拖入一组图片';
 
   selectedImageFiles.forEach((file, index) => {
     const item = document.createElement('div');

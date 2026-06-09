@@ -280,7 +280,7 @@ def resolve_manual_service(price_ids: list[str]) -> dict[str, str] | None:
         (
             "PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE",
             "manual_ppt_basic",
-            "人工代修改 PPT",
+            "人工代改 PPT",
             "page",
         ),
         (

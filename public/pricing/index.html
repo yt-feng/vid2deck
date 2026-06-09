@@ -108,8 +108,8 @@
     </section>
 
     <div class="toggle" aria-label="Billing period">
-      <span class="active">月付</span>
-      <span>年付 <b>省43%</b></span>
+      <span class="active">月付灵活</span>
+      <span>终身买断 <b>更省心</b></span>
     </div>
 
     <section class="checkout-panel" aria-label="会员账号">
@@ -152,66 +152,6 @@
       </article>
     </section>
 
-    <section class="day-pass" aria-label="临时版">
-      <div>
-        <h2>临时版</h2>
-        <p>适合临时处理单次作业、演讲或课程材料。</p>
-      </div>
-      <div class="day-pass-price">¥9.9</div>
-      <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS">开通临时版</button>
-    </section>
-
-    <section class="services" aria-label="人工服务">
-      <div class="section-title">
-        <h2>人工服务</h2>
-        <p>适合需要代录制、精修课件或把复杂图片页整理成更像正式交付物的场景。最终报价按素材复杂度、页数和交付要求确认。</p>
-      </div>
-      <div class="service-grid">
-        <article class="service-card">
-          <h3>人工代录制</h3>
-          <p class="service-price">$5 / 小时</p>
-          <p>代录网课、讲座、演示或屏幕流程，按实际录制时长计费。</p>
-          <div class="service-order">
-            <label>小时数
-              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
-            </label>
-            <label>需求备注
-              <textarea class="service-details" maxlength="1200" placeholder="可选：课程链接、录制要求、截止时间。"></textarea>
-            </label>
-            <button class="cta checkout-btn" type="button" data-plan="manual_recording" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_RECORDING_HOUR" data-service-label="人工代录制" data-unit-label="hour">支付下单</button>
-          </div>
-        </article>
-        <article class="service-card">
-          <h3>人工代修改 PPT</h3>
-          <p class="service-price">$5 / 页起</p>
-          <p>基础排版、错字修正、页面清理和截图页重建，按精细程度定价。</p>
-          <div class="service-order">
-            <label>页数
-              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
-            </label>
-            <label>需求备注
-              <textarea class="service-details" maxlength="1200" placeholder="可选：改稿要求、文件链接、交付时间。"></textarea>
-            </label>
-            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_basic" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE" data-service-label="人工代修改 PPT" data-unit-label="page">支付下单</button>
-          </div>
-        </article>
-        <article class="service-card">
-          <h3>大师级精修</h3>
-          <p class="service-price">$20 / 页</p>
-          <p>适合高要求商业演示、品牌统一、复杂版式复刻和深度视觉打磨。</p>
-          <div class="service-order">
-            <label>页数
-              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
-            </label>
-            <label>需求备注
-              <textarea class="service-details" maxlength="1200" placeholder="可选：品牌风格、参考链接、精修要求。"></textarea>
-            </label>
-            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_premium" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_PREMIUM_PAGE" data-service-label="大师级精修" data-unit-label="page">支付下单</button>
-          </div>
-        </article>
-      </div>
-    </section>
-
     <section class="comparison" aria-label="套餐功能对比">
       <table>
         <thead>
@@ -239,7 +179,67 @@
       </table>
     </section>
 
-    <p class="note">人工服务下单后会按购买邮箱跟进。复杂项目也可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 先确认报价。</p>
+    <section class="day-pass" aria-label="临时版">
+      <div>
+        <h2>临时版</h2>
+        <p>适合临时处理单次作业、演讲或课程材料。提供超出免费版相应额度之外的一日使用服务，单个视频时长限制为 10 分钟。</p>
+      </div>
+      <div class="day-pass-price">¥9.9</div>
+      <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS">开通临时版</button>
+    </section>
+
+    <section class="services" aria-label="扩展服务">
+      <div class="section-title">
+        <h2>扩展服务</h2>
+        <p>适合需要代录制、精修课件，或把复杂图片页整理为更规范交付物的场景。最终报价将根据素材复杂度、页数及交付要求确定。</p>
+      </div>
+      <div class="service-grid">
+        <article class="service-card">
+          <h3>人工代录制</h3>
+          <p class="service-price">$5 / 小时</p>
+          <p>提供网课、讲座、演示或屏幕流程的代录服务，按实际录制时长计费。</p>
+          <div class="service-order">
+            <label>小时数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：课程链接、录制要求、截止时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_recording" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_RECORDING_HOUR" data-service-label="人工代录制" data-unit-label="hour">支付下单</button>
+          </div>
+        </article>
+        <article class="service-card">
+          <h3>人工代改 PPT</h3>
+          <p class="service-price">$5 / 页起</p>
+          <p>提供基础排版、错字修正、页面清理及截图页重建服务，按所需精细程度分级报价。</p>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：改稿要求、文件链接、交付时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_basic" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_BASIC_PAGE" data-service-label="人工代改 PPT" data-unit-label="page">支付下单</button>
+          </div>
+        </article>
+        <article class="service-card">
+          <h3>大师级精修</h3>
+          <p class="service-price">$20 / 页</p>
+          <p>适用于高要求的商业演示、品牌统一规范、复杂版式复刻以及深度视觉打磨等场景。</p>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：品牌风格、参考链接、精修要求。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_premium" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_PPT_PREMIUM_PAGE" data-service-label="大师级精修" data-unit-label="page">支付下单</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <p class="note">扩展服务下单后，我们将按购买邮箱进行跟进。复杂项目也可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 先确认报价。</p>
 
     <footer class="footer">
       <a href="/terms-and-conditions/">Terms of Service</a>
@@ -334,7 +334,7 @@
                 if (name === 'checkout.completed') {
                   var pendingPlan = sessionStorage.getItem('vid2deck.checkout.plan') || '';
                   if (isManualPlan(pendingPlan)) {
-                    setStatus('人工服务订单已支付。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+                    setStatus('扩展服务订单已支付。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
                   } else {
                     setTimeout(refreshEntitlement, 1800);
                   }
@@ -353,7 +353,7 @@
         if (plan === 'lifetime') return '终身版';
         if (plan === 'day_pass') return '临时版';
         if (plan === 'manual_recording') return '人工代录制';
-        if (plan === 'manual_ppt_basic') return '人工代修改 PPT';
+        if (plan === 'manual_ppt_basic') return '人工代改 PPT';
         if (plan === 'manual_ppt_premium') return '大师级精修';
         return '免费版';
       }
@@ -484,7 +484,7 @@
       if (searchParams.get('checkout') === 'success') {
         var successPlan = searchParams.get('plan') || sessionStorage.getItem('vid2deck.checkout.plan') || '';
         if (isManualPlan(successPlan)) {
-          setStatus('人工服务订单已提交。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+          setStatus('扩展服务订单已提交。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
         } else {
           setStatus('支付已完成，正在等待 Paddle 回调确认...', 'warn');
           setTimeout(refreshEntitlement, 2500);
