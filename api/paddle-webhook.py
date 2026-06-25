@@ -121,7 +121,7 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     custom_data = as_dict(data.get("custom_data") or data.get("customData"))
     email = normalize_email(extract_email(data, custom_data))
     price_ids = collect_price_ids(data)
-    manual_info = resolve_manual_service(price_ids)
+    manual_info = resolve_manual_service(price_ids, custom_data)
     tip_info = resolve_author_tip(price_ids)
     plan_info = resolve_plan(price_ids)
 
@@ -195,6 +195,10 @@ def process_manual_order(
         "service_name": manual_info["service_name"],
         "unit_label": manual_info["unit_label"],
         "quantity": quantity,
+        "billing_quantity": parse_positive_int(custom_data.get("billing_quantity"), max_value=999999)
+        or quantity_for_price(data, manual_info["price_id"], max_value=999999),
+        "unit_price_cents": parse_positive_int(custom_data.get("unit_price_cents"), max_value=999999),
+        "amount_usd": clean_text(custom_data.get("amount_usd"), limit=40),
         "details": clean_text(custom_data.get("details"), limit=1200),
         "price_ids": price_ids,
         "paddle_customer_id": first_text(data.get("customer_id"), custom_data.get("paddle_customer_id")),
@@ -269,8 +273,34 @@ def resolve_plan(price_ids: list[str]) -> tuple[str, bool] | None:
     return None
 
 
-def resolve_manual_service(price_ids: list[str]) -> dict[str, str] | None:
-    services = [
+def resolve_manual_service(price_ids: list[str], custom_data: dict[str, Any]) -> dict[str, str] | None:
+    shared_price_id = (os.getenv("PADDLE_PRICE_MANUAL_SERVICE_USD_CENT") or "").strip()
+    requested_plan = first_text(custom_data.get("plan"))
+    order_kind = first_text(custom_data.get("order_kind"), custom_data.get("orderKind"))
+    if shared_price_id and shared_price_id in price_ids and order_kind == "manual_service" and requested_plan:
+        for _, plan, service_name, unit_label in manual_services():
+            if requested_plan == plan:
+                return {
+                    "price_id": shared_price_id,
+                    "plan": plan,
+                    "service_name": service_name,
+                    "unit_label": unit_label,
+                }
+
+    for env_key, plan, service_name, unit_label in manual_services():
+        price_id = (os.getenv(env_key) or "").strip()
+        if price_id and price_id in price_ids:
+            return {
+                "price_id": price_id,
+                "plan": plan,
+                "service_name": service_name,
+                "unit_label": unit_label,
+            }
+    return None
+
+
+def manual_services() -> list[tuple[str, str, str, str]]:
+    return [
         (
             "PADDLE_PRICE_MANUAL_RECORDING_HOUR",
             "manual_recording",
@@ -290,16 +320,6 @@ def resolve_manual_service(price_ids: list[str]) -> dict[str, str] | None:
             "page",
         ),
     ]
-    for env_key, plan, service_name, unit_label in services:
-        price_id = (os.getenv(env_key) or "").strip()
-        if price_id and price_id in price_ids:
-            return {
-                "price_id": price_id,
-                "plan": plan,
-                "service_name": service_name,
-                "unit_label": unit_label,
-            }
-    return None
 
 
 def resolve_author_tip(price_ids: list[str]) -> dict[str, str] | None:

@@ -54,6 +54,8 @@ def render_manual_order_email(order: dict[str, Any]) -> str:
         f"Service: {order.get('service_name') or ''}",
         f"Customer email: {order.get('email') or ''}",
         f"Quantity: {order.get('quantity') or 1} {order.get('unit_label') or ''}",
+        f"Amount: ${order.get('amount_usd') or ''}",
+        f"Paddle billing quantity: {order.get('billing_quantity') or ''}",
         f"Plan key: {order.get('plan') or ''}",
         f"Transaction ID: {order.get('paddle_transaction_id') or ''}",
         f"Customer ID: {order.get('paddle_customer_id') or ''}",
