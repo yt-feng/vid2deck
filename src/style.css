@@ -193,7 +193,7 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
 
 .tip-dialog { border: 0; padding: 0; border-radius: 24px; box-shadow: 0 30px 90px rgba(15,23,42,0.28); }
 .tip-dialog::backdrop { background: rgba(15,23,42,0.55); }
-.tip-panel { width: min(440px, calc(100vw - 32px)); padding: 24px; background: white; }
+.tip-panel { width: min(460px, calc(100vw - 32px)); padding: 24px; background: white; }
 .tip-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .tip-heading .eyebrow { margin-bottom: 6px; color: #15803d; }
 .tip-heading h2 { margin: 0; color: #0f172a; font-size: 2rem; line-height: 1.05; letter-spacing: -0.04em; }
@@ -201,8 +201,14 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
 .tip-custom-link:hover:not(:disabled) { color: #0f172a; transform: none; }
 .tip-amount-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .tip-amount-btn { min-height: 56px; border-radius: 14px; background: #0f172a; font-size: 1.08rem; }
-.custom-tip-label { display: block; margin-top: 16px; color: #334155; }
-.custom-tip-label[hidden] { display: none; }
+.custom-tip-field { display: grid; gap: 10px; margin-top: 16px; padding: 16px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 18px; }
+.custom-tip-field[hidden] { display: none; }
+.custom-tip-field label { color: #0f172a; font-size: 0.95rem; font-weight: 900; }
+.custom-tip-input { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #dbe3ef; }
+.custom-tip-input span { color: #0f172a; font-size: 2rem; font-weight: 950; line-height: 1; }
+.custom-tip-input input { min-width: 0; margin: 0; padding: 0; color: #0f172a; background: transparent; border: 0; border-radius: 0; box-shadow: none; font-size: 2rem; font-weight: 900; }
+.custom-tip-input input:focus { border: 0; box-shadow: none; }
+.custom-tip-field small { color: #64748b; font-size: 0.88rem; font-weight: 800; }
 .tip-status { min-height: 24px; margin-top: 14px; color: #64748b; font-weight: 800; line-height: 1.5; }
 .tip-status.ok { color: #047857; }
 .tip-status.warn { color: #b45309; }

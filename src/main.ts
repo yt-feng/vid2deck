@@ -110,7 +110,7 @@ const OCR_MAX_EDGE = 2800;
 const OCR_MIN_CONFIDENCE = 35;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const TIP_AMOUNTS = [5, 20, 50, 80, 100, 200] as const;
-const TIP_MIN_AMOUNT = 0.01;
+const TIP_MIN_AMOUNT = 1;
 const TIP_MAX_QUANTITY = 999999;
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -183,12 +183,12 @@ app.innerHTML = `
       <div class="status" id="homeStatus">等待上传视频。</div>
     </section>
 
-    <section class="support-author-panel" aria-label="赞赏作者">
+    <section class="support-author-panel" aria-label="赞助本站">
       <div>
         <p class="eyebrow">Support</p>
-        <h2>觉得 Vid2PPT Deck 有用，可以请作者喝杯咖啡</h2>
+        <h2>觉得 Vid2PPT Deck 有用，可以赞助本站继续维护</h2>
       </div>
-      <button id="openTipDialogBtn" type="button">赞赏作者</button>
+      <button id="openTipDialogBtn" type="button">赞助本站</button>
     </section>
   </main>
 
@@ -337,20 +337,25 @@ app.innerHTML = `
       <div class="tip-heading">
         <div>
           <p class="eyebrow">Support</p>
-          <h2>赞赏作者</h2>
+          <h2>赞助本站</h2>
         </div>
-        <button id="showCustomTipBtn" type="button" class="tip-custom-link">其他金额</button>
+        <button id="showCustomTipBtn" type="button" class="tip-custom-link">自定义金额</button>
       </div>
       <div class="tip-amount-grid" role="group" aria-label="选择赞赏金额">
         ${TIP_AMOUNTS.map((amount) => `<button type="button" class="tip-amount-btn" data-amount="${amount}">¥${amount}</button>`).join('')}
       </div>
-      <label id="customTipLabel" class="custom-tip-label" hidden>自定义金额
-        <input id="customTipAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="例如 0.01" />
-      </label>
+      <div id="customTipLabel" class="custom-tip-field" hidden>
+        <label for="customTipAmount">赞赏金额</label>
+        <div class="custom-tip-input">
+          <span>¥</span>
+          <input id="customTipAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="1" />
+        </div>
+        <small>最低赞赏 ¥1</small>
+      </div>
       <div class="tip-status" id="tipStatus" aria-live="polite">请选择赞赏金额。</div>
       <div class="tip-actions">
         <button id="tipCancelBtn" value="cancel" class="ghost-btn">取消</button>
-        <button id="customTipPayBtn" type="button" hidden>支付自定义金额</button>
+        <button id="customTipPayBtn" type="button" hidden>确定并支付</button>
       </div>
     </form>
   </dialog>
@@ -425,10 +430,11 @@ const cropTop = $<HTMLInputElement>('#cropTop');
 const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
+const openSiteTipDialogBtn = document.querySelector<HTMLButtonElement>('#openSiteTipDialogBtn');
 const openTipDialogBtn = $<HTMLButtonElement>('#openTipDialogBtn');
 const tipDialog = $<HTMLDialogElement>('#tipDialog');
 const showCustomTipBtn = $<HTMLButtonElement>('#showCustomTipBtn');
-const customTipLabel = $<HTMLLabelElement>('#customTipLabel');
+const customTipLabel = $<HTMLDivElement>('#customTipLabel');
 const customTipAmount = $<HTMLInputElement>('#customTipAmount');
 const customTipPayBtn = $<HTMLButtonElement>('#customTipPayBtn');
 const tipStatus = $<HTMLDivElement>('#tipStatus');
@@ -587,6 +593,7 @@ cropApplyBtn.addEventListener('click', async (event) => {
   await applyCrop();
 });
 
+openSiteTipDialogBtn?.addEventListener('click', () => openTipDialog());
 openTipDialogBtn.addEventListener('click', () => openTipDialog());
 showCustomTipBtn.addEventListener('click', () => showCustomTipInput());
 customTipPayBtn.addEventListener('click', () => {
@@ -626,7 +633,7 @@ function openTipDialog(): void {
 function showCustomTipInput(): void {
   customTipLabel.hidden = false;
   customTipPayBtn.hidden = false;
-  tipStatus.textContent = '请输入任意金额，最低 ¥0.01。';
+  tipStatus.textContent = '请输入任意金额，最低 ¥1。';
   tipStatus.className = 'tip-status';
   customTipAmount.focus();
 }
@@ -706,7 +713,7 @@ async function ensurePaddle(): Promise<PaddleConfig> {
 
 async function openTipCheckout(amount: number): Promise<void> {
   if (!validTipAmount(amount)) {
-    setTipStatus('请输入不小于 ¥0.01 的有效金额。', 'error');
+    setTipStatus('请输入不小于 ¥1 的有效金额。', 'error');
     showCustomTipInput();
     return;
   }
@@ -750,6 +757,7 @@ async function openTipCheckout(amount: number): Promise<void> {
 }
 
 function setTipButtonsBusy(busy: boolean): void {
+  if (openSiteTipDialogBtn) openSiteTipDialogBtn.disabled = busy;
   openTipDialogBtn.disabled = busy;
   showCustomTipBtn.disabled = busy;
   customTipPayBtn.disabled = busy;
