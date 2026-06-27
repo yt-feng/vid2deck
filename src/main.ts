@@ -728,6 +728,7 @@ async function openTipCheckout(amount: number): Promise<void> {
   setTipButtonsBusy(true);
   updateActionState();
   setTipStatus('正在打开支付窗口...', 'warn');
+  let tipDialogClosedForCheckout = false;
 
   try {
     const config = await ensurePaddle();
@@ -735,6 +736,10 @@ async function openTipCheckout(amount: number): Promise<void> {
     if (!priceId) throw new Error('支付配置缺少：PADDLE_PRICE_AUTHOR_TIP_CNY_CENT');
     const paddle = windowPaddle();
     if (!paddle) throw new Error('Paddle.js 未就绪。');
+    if (tipDialog.open) {
+      tipDialog.close();
+      tipDialogClosedForCheckout = true;
+    }
     paddle.Checkout.open({
       items: [{ priceId, quantity }],
       customData: {
@@ -759,6 +764,10 @@ async function openTipCheckout(amount: number): Promise<void> {
       'ok'
     );
   } catch (error) {
+    if (tipDialogClosedForCheckout) {
+      if (typeof tipDialog.showModal === 'function') tipDialog.showModal();
+      else tipDialog.setAttribute('open', '');
+    }
     setTipStatus(error instanceof Error ? error.message : '支付窗口打开失败。', 'error');
   } finally {
     isTipCheckoutOpening = false;
