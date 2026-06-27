@@ -115,10 +115,10 @@
     <section class="checkout-panel" aria-label="会员账号">
       <div>
         <h2>会员账号</h2>
-        <p>支付和权益会绑定到这个邮箱。支付成功后系统会自动开通，通常几十秒内刷新。</p>
+        <p>支付和权益会绑定到这个账号邮箱。已登录时会自动带入；未登录也可以先用邮箱付款。</p>
       </div>
       <form class="checkout-form" id="checkoutForm">
-        <label for="checkoutEmail">邮箱</label>
+        <label for="checkoutEmail">账号邮箱</label>
         <input id="checkoutEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
         <button class="small-btn" id="checkEntitlementBtn" type="submit">查看权益</button>
         <div class="checkout-status" id="checkoutStatus" aria-live="polite">等待填写邮箱。</div>
@@ -251,6 +251,7 @@
   <script>
     (function () {
       var PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+      var AUTH_STORAGE_KEY = 'vid2deck.auth.session';
       var STORAGE_EMAIL_KEY = 'vid2deck.checkout.email';
       var configPromise = null;
       var paddlePromise = null;
@@ -272,6 +273,23 @@
 
       function isValidEmail(email) {
         return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+      }
+
+      function readAuthSession() {
+        try {
+          var raw = localStorage.getItem(AUTH_STORAGE_KEY);
+          if (!raw) return null;
+          var session = JSON.parse(raw);
+          if (!session || !session.token || !session.user || !session.user.email) return null;
+          return session;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function currentUser() {
+        var session = readAuthSession();
+        return session && session.user ? session.user : null;
       }
 
       function selectedEmail() {
@@ -450,6 +468,7 @@
             var unitLabel = button.getAttribute('data-unit-label') || '';
             var unitPriceCents = parseInt(button.getAttribute('data-unit-price-cents') || '0', 10);
             var details = serviceDetails(button);
+            var user = currentUser();
             if (!priceId) throw new Error('未找到对应的 Price ID：' + priceKey);
             sessionStorage.setItem('vid2deck.checkout.plan', plan);
             sessionStorage.setItem('vid2deck.checkout.orderKind', orderKind);
@@ -461,6 +480,8 @@
                 plan: plan,
                 source: 'pricing_page',
                 order_kind: orderKind,
+                username: user && user.username ? user.username : '',
+                account_id: user && user.id ? user.id : '',
                 quantity: serviceQty,
                 billing_quantity: quantity,
                 unit_price_cents: unitPriceCents || '',
@@ -485,9 +506,13 @@
           });
       }
 
-      var storedEmail = localStorage.getItem(STORAGE_EMAIL_KEY);
+      var authUser = currentUser();
+      var storedEmail = authUser && authUser.email ? authUser.email : localStorage.getItem(STORAGE_EMAIL_KEY);
       if (storedEmail) {
         emailInput.value = storedEmail;
+        if (authUser && authUser.username) {
+          setStatus('已登录 ' + authUser.username + '，支付会绑定到当前账号。', 'ok');
+        }
         refreshEntitlement();
       }
 

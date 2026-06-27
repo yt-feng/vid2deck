@@ -7,6 +7,11 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+try:
+    from _auth import verify_user_token
+except ModuleNotFoundError:
+    from api._auth import verify_user_token
+
 AUTH_CODE = (os.getenv("AUTH_CODE") or "").strip()
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
@@ -67,12 +72,8 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            if not AUTH_CODE:
-                self.send_json({"detail": "AUTH_CODE is not configured"}, 500)
-                return
-            access_code = (self.headers.get("x-access-code") or "").strip()
-            if access_code != AUTH_CODE:
-                self.send_json({"detail": "Invalid access code"}, 401)
+            if not request_is_authorized(self.headers.get("x-access-code", ""), self.headers.get("authorization", "")):
+                self.send_json({"detail": "请先登录账号。"}, 401)
                 return
 
             data = self.read_json()
@@ -103,3 +104,19 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+def request_is_authorized(access_code_header: str, authorization_header: str) -> bool:
+    access_code = access_code_header.strip()
+    if AUTH_CODE and access_code == AUTH_CODE:
+        return True
+
+    prefix = "Bearer "
+    if not authorization_header.startswith(prefix):
+        return False
+    token = authorization_header.removeprefix(prefix).strip()
+    try:
+        verify_user_token(token)
+        return True
+    except Exception:
+        return False

@@ -62,7 +62,18 @@ type Settings = {
   duplicateThreshold: number;
   minGap: number;
   summaryApiUrl: string;
-  authCode: string;
+};
+
+type AuthMode = 'login' | 'register';
+type AuthUser = {
+  id?: string;
+  username: string;
+  email: string;
+  email_is_generated?: boolean;
+};
+type AuthSession = {
+  token: string;
+  user: AuthUser;
 };
 
 type CapturedFrame = {
@@ -109,6 +120,8 @@ const OCR_LANGUAGES = ['eng', 'chi_sim'];
 const OCR_MAX_EDGE = 2800;
 const OCR_MIN_CONFIDENCE = 35;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
+const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const TIP_AMOUNTS = [5, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 5;
@@ -124,6 +137,38 @@ app.innerHTML = `
         <p class="eyebrow">Vid2PPT Deck</p>
         <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与Summary</h1>
         <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可本地生成 PPTX；批量上传后，一键抽帧即可下载所有帧图片压缩包（Frames ZIP）。</p>
+      </div>
+    </section>
+
+    <section class="account-panel" aria-label="用户账号">
+      <div class="account-copy">
+        <p class="eyebrow">Account</p>
+        <h2>用户名登录</h2>
+        <p id="accountStatus" class="account-status">登录后可直接生成 Summary，付款也会绑定到同一账号。</p>
+      </div>
+      <form id="authForm" class="auth-form">
+        <label>用户名<input id="authUsername" type="text" autocomplete="username" placeholder="yourname" /></label>
+        <label id="authEmailLabel">邮箱（可选）<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <label>密码<input id="authPassword" type="password" autocomplete="current-password" placeholder="至少 4 位" /></label>
+        <label class="captcha-field">图片验证码
+          <div class="captcha-row">
+            <img id="authCaptchaImage" alt="图片验证码" />
+            <button id="refreshAuthCaptchaBtn" class="ghost-btn" type="button">换一张</button>
+          </div>
+          <input id="authCaptchaAnswer" type="text" inputmode="numeric" autocomplete="off" placeholder="输入结果" />
+        </label>
+        <div class="auth-actions">
+          <button id="authSubmitBtn" type="submit">登录</button>
+          <button id="authModeToggleBtn" class="ghost-btn" type="button">注册新账号</button>
+        </div>
+      </form>
+      <div id="authSignedIn" class="auth-signed-in" hidden>
+        <div>
+          <span>当前账号</span>
+          <strong id="authSignedInName">-</strong>
+          <small id="authSignedInEmail">-</small>
+        </div>
+        <button id="authLogoutBtn" class="ghost-btn" type="button">退出登录</button>
       </div>
     </section>
 
@@ -170,7 +215,6 @@ app.innerHTML = `
         <label>去重阈值（越大越容易合并）<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
         <label>同页合并窗口（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
         <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize-simple" /></label>
-        <label>访问码<input id="authCode" type="password" placeholder="填 Vercel 的 AUTH_CODE" autocomplete="current-password" /></label>
       </div>
 
       <div class="hint">单文件：点击“处理当前视频”进入工作台，支持勾选、裁剪、删除、补抓帧，最后下载 PDF。多文件：点击“批量抽帧并下载 ZIP”，自动逐个处理全部视频，仅打包输出抽帧图片（不含转写与 Summary）。</div>
@@ -370,6 +414,21 @@ const $ = <T extends Element>(selector: string) => {
 
 const homeView = $<HTMLElement>('#homeView');
 const workspaceView = $<HTMLElement>('#workspaceView');
+const authForm = $<HTMLFormElement>('#authForm');
+const authUsername = $<HTMLInputElement>('#authUsername');
+const authEmailLabel = $<HTMLLabelElement>('#authEmailLabel');
+const authEmail = $<HTMLInputElement>('#authEmail');
+const authPassword = $<HTMLInputElement>('#authPassword');
+const authCaptchaImage = $<HTMLImageElement>('#authCaptchaImage');
+const refreshAuthCaptchaBtn = $<HTMLButtonElement>('#refreshAuthCaptchaBtn');
+const authCaptchaAnswer = $<HTMLInputElement>('#authCaptchaAnswer');
+const authSubmitBtn = $<HTMLButtonElement>('#authSubmitBtn');
+const authModeToggleBtn = $<HTMLButtonElement>('#authModeToggleBtn');
+const authSignedIn = $<HTMLDivElement>('#authSignedIn');
+const authSignedInName = $<HTMLElement>('#authSignedInName');
+const authSignedInEmail = $<HTMLElement>('#authSignedInEmail');
+const authLogoutBtn = $<HTMLButtonElement>('#authLogoutBtn');
+const accountStatus = $<HTMLElement>('#accountStatus');
 const dropzone = $<HTMLLabelElement>('#dropzone');
 const imageDropzone = $<HTMLLabelElement>('#imageDropzone');
 const fileLabel = $<HTMLSpanElement>('#fileLabel');
@@ -483,6 +542,27 @@ let paddleConfigPromise: Promise<PaddleConfig> | null = null;
 let paddleLoadPromise: Promise<PaddleConfig> | null = null;
 let paddleInitialized = false;
 let isTipCheckoutOpening = false;
+let authMode: AuthMode = 'login';
+let authSession: AuthSession | null = loadAuthSession();
+let authCaptchaToken = '';
+let isAuthBusy = false;
+
+authForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void submitAuthForm();
+});
+authModeToggleBtn.addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));
+refreshAuthCaptchaBtn.addEventListener('click', () => {
+  void loadAuthCaptcha();
+});
+authLogoutBtn.addEventListener('click', () => {
+  authSession = null;
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  setAuthStatus('已退出登录。', '');
+  updateAuthUi();
+  void loadAuthCaptcha();
+});
+updateAuthUi();
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
@@ -617,8 +697,128 @@ tipDialog.querySelectorAll<HTMLButtonElement>('.tip-amount-btn').forEach((button
   });
 });
 
+function loadAuthSession(): AuthSession | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as Partial<AuthSession>;
+    if (!session.token || !session.user?.username || !session.user.email) return null;
+    return session as AuthSession;
+  } catch {
+    return null;
+  }
+}
+
+function saveAuthSession(session: AuthSession): void {
+  authSession = session;
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  localStorage.setItem(CHECKOUT_EMAIL_STORAGE_KEY, session.user.email);
+}
+
+function setAuthStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
+  accountStatus.textContent = message;
+  accountStatus.className = `account-status${tone ? ` ${tone}` : ''}`;
+}
+
+function setAuthMode(mode: AuthMode): void {
+  authMode = mode;
+  authPassword.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  authSubmitBtn.textContent = mode === 'register' ? '注册并登录' : '登录';
+  authModeToggleBtn.textContent = mode === 'register' ? '已有账号，去登录' : '注册新账号';
+  authEmailLabel.hidden = mode !== 'register';
+  setAuthStatus(mode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可直接生成 Summary，付款也会绑定到同一账号。', '');
+  authCaptchaAnswer.value = '';
+  void loadAuthCaptcha();
+}
+
+function updateAuthUi(): void {
+  const signedIn = !!authSession;
+  authForm.hidden = signedIn;
+  authSignedIn.hidden = !signedIn;
+  if (authSession) {
+    authSignedInName.textContent = authSession.user.username;
+    authSignedInEmail.textContent = authSession.user.email_is_generated ? `${authSession.user.email}（自动生成）` : authSession.user.email;
+    setAuthStatus('已登录，可生成 Summary。', 'ok');
+  } else {
+    setAuthMode(authMode);
+  }
+  updateActionState();
+}
+
+async function loadAuthCaptcha(): Promise<void> {
+  if (authSession) return;
+  try {
+    refreshAuthCaptchaBtn.disabled = true;
+    const response = await fetch('/api/captcha', { cache: 'no-store' });
+    const data = await response.json() as { image?: string; token?: string; detail?: string };
+    if (!response.ok || !data.image || !data.token) throw new Error(data.detail || '验证码加载失败。');
+    authCaptchaImage.src = data.image;
+    authCaptchaToken = data.token;
+  } catch (error) {
+    authCaptchaToken = '';
+    setAuthStatus(error instanceof Error ? error.message : '验证码加载失败。', 'error');
+  } finally {
+    refreshAuthCaptchaBtn.disabled = false;
+  }
+}
+
+async function submitAuthForm(): Promise<void> {
+  const username = authUsername.value.trim();
+  const password = authPassword.value;
+  const captchaAnswer = authCaptchaAnswer.value.trim();
+  if (!username || !password || !captchaAnswer) {
+    setAuthStatus('请填写用户名、密码和验证码。', 'error');
+    return;
+  }
+  if (!authCaptchaToken) {
+    setAuthStatus('验证码还没有加载完成，请换一张再试。', 'error');
+    return;
+  }
+
+  isAuthBusy = true;
+  setAuthBusy(true);
+  setAuthStatus(authMode === 'register' ? '正在注册...' : '正在登录...', 'warn');
+  try {
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: authMode,
+        username,
+        password,
+        email: authMode === 'register' ? authEmail.value.trim() : '',
+        captcha_token: authCaptchaToken,
+        captcha_answer: captchaAnswer
+      })
+    });
+    const data = await response.json() as { token?: string; user?: AuthUser; detail?: string };
+    if (!response.ok || !data.token || !data.user) throw new Error(data.detail || '账号请求失败。');
+    saveAuthSession({ token: data.token, user: data.user });
+    authPassword.value = '';
+    authCaptchaAnswer.value = '';
+    updateAuthUi();
+  } catch (error) {
+    setAuthStatus(error instanceof Error ? error.message : '账号请求失败。', 'error');
+    authCaptchaAnswer.value = '';
+    void loadAuthCaptcha();
+  } finally {
+    isAuthBusy = false;
+    setAuthBusy(false);
+  }
+}
+
+function setAuthBusy(busy: boolean): void {
+  authUsername.disabled = busy;
+  authEmail.disabled = busy;
+  authPassword.disabled = busy;
+  authCaptchaAnswer.disabled = busy;
+  authSubmitBtn.disabled = busy;
+  authModeToggleBtn.disabled = busy;
+  refreshAuthCaptchaBtn.disabled = busy;
+}
+
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening;
+  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening || isAuthBusy;
 }
 
 function openTipDialog(): void {
@@ -2894,7 +3094,7 @@ function updateActionState(): void {
   sideDownloadPptxBtn.disabled = selectedCount === 0 || busy;
   sideDownloadFramesBtn.disabled = selectedCount === 0 || busy;
   downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing || imageMode;
-  summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode;
+  summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode || !authSession;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   videoInput.disabled = busy;
   imageInput.disabled = busy;
@@ -3045,10 +3245,11 @@ function isNearDuplicate(current: string, previous: string): boolean {
 }
 
 async function summarizeWithApi(settings: Settings, transcript: string): Promise<string> {
-  if (!settings.authCode) throw new Error('请先填写访问码，也就是 Vercel 环境变量 AUTH_CODE。');
+  const token = authSession?.token;
+  if (!token) throw new Error('请先注册或登录账号，再生成 Summary。');
   const response = await fetch(settings.summaryApiUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Access-Code': settings.authCode },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ transcript })
   });
   if (!response.ok) throw new Error(`Summary API 请求失败：${response.status} ${await response.text()}`);
@@ -3061,8 +3262,7 @@ function readSettings(): Settings {
     sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
     duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
     minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
-    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim(),
-    authCode: $<HTMLInputElement>('#authCode').value
+    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim()
   };
 }
 

@@ -108,3 +108,32 @@ def insert_usage_event(email: str, event_type: str, metadata: dict[str, Any] | N
         "metadata": metadata or {},
     }
     supabase_request("POST", "/rest/v1/usage_events", payload)
+
+
+def find_site_user_by_username(username: str) -> dict[str, Any] | None:
+    query = query_string(
+        {
+            "username": f"eq.{username}",
+            "limit": "1",
+        }
+    )
+    rows = supabase_request("GET", f"/rest/v1/site_users?{query}")
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return None
+
+
+def create_site_user(fields: dict[str, Any]) -> dict[str, Any]:
+    rows = supabase_request("POST", "/rest/v1/site_users?select=*", fields, prefer_return=True)
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return fields
+
+
+def update_site_user(user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    payload = {**fields, "updated_at": utc_now_iso()}
+    query = query_string({"id": f"eq.{user_id}", "select": "*"})
+    rows = supabase_request("PATCH", f"/rest/v1/site_users?{query}", payload, prefer_return=True)
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return payload

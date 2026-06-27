@@ -59,6 +59,50 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .ghost-btn { color: #172033; background: #eef2ff; }
 .status { margin-top: 18px; padding: 14px 16px; color: #1e3a8a; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 16px; font-weight: 700; }
 
+.account-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 18px;
+  align-items: start;
+  margin-top: 24px;
+  padding: 22px 24px;
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 22px;
+  box-shadow: 0 14px 42px rgba(15,23,42,0.06);
+}
+.account-copy .eyebrow { margin-bottom: 6px; color: #2563eb; }
+.account-copy h2 { margin: 0 0 10px; color: #0f172a; font-size: clamp(1.3rem, 2.6vw, 2rem); line-height: 1.08; letter-spacing: -0.04em; }
+.account-status { margin: 0; color: #64748b; line-height: 1.6; font-weight: 800; }
+.account-status.ok { color: #047857; }
+.account-status.warn { color: #b45309; }
+.account-status.error { color: #b91c1c; }
+.auth-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.auth-form[hidden] { display: none; }
+.auth-form label { display: grid; gap: 6px; }
+.auth-form label[hidden] { display: none; }
+.auth-form input { margin-top: 0; border-radius: 12px; }
+.captcha-field { grid-column: 1 / -1; }
+.captcha-row { display: flex; align-items: center; gap: 10px; }
+.captcha-row img { width: 180px; height: 64px; display: block; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 14px; }
+.captcha-row button { min-height: 44px; padding: 0 14px; border-radius: 12px; white-space: nowrap; }
+.auth-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.auth-actions button { border-radius: 12px; }
+.auth-signed-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+}
+.auth-signed-in[hidden] { display: none; }
+.auth-signed-in span, .auth-signed-in small { display: block; color: #64748b; font-weight: 800; }
+.auth-signed-in strong { display: block; margin: 4px 0; color: #0f172a; font-size: 1.35rem; line-height: 1.1; }
+.auth-signed-in button { flex: 0 0 auto; border-radius: 12px; }
+
 .support-author-panel {
   display: flex;
   align-items: center;
@@ -218,6 +262,9 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
 
 @media (max-width: 980px) {
   #app { width: min(100% - 24px, 1180px); padding-top: 24px; }
+  .account-panel { grid-template-columns: 1fr; }
+  .auth-form { grid-template-columns: 1fr; }
+  .captcha-row { align-items: flex-start; flex-direction: column; }
   .grid, .crop-grid { grid-template-columns: 1fr; }
   .hero, .panel { padding: 22px; border-radius: 24px; }
   .panel-heading { align-items: flex-start; flex-direction: column; }
