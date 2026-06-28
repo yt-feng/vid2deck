@@ -167,12 +167,10 @@
           <tr><td>视频转换次数</td><td>每月3次</td><td>每月100次</td><td>无限制</td></tr>
           <tr><td>下载去重后的 PDF</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
           <tr><td>图片转 PPTX</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>可编辑幻灯片</td><td>每月100张</td><td>总计10,000张</td><td class="no">—</td></tr>
+          <tr><td>可编辑幻灯片</td><td>每月100张</td><td>每月10,000张</td><td>无限制</td></tr>
           <tr><td>屏幕录制支持</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
           <tr><td>视频转录时长</td><td>每月600分钟</td><td>无限制</td><td>无限制</td></tr>
           <tr><td>批量处理（视频批量转换）</td><td class="no">X</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>在线视频支持</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>去除视频水印</td><td class="no">X</td><td class="yes">✓</td><td class="yes">✓</td></tr>
           <tr><td>到期无自动续费</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
           <tr><td>可使用未来所有功能</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
         </tbody>
@@ -182,7 +180,7 @@
     <section class="day-pass" aria-label="临时版">
       <div>
         <h2>临时版</h2>
-        <p>适合临时处理单次作业、演讲或课程材料。提供超出免费版相应额度之外的一日使用服务，单个视频时长限制为 10 分钟。</p>
+        <p>适合临时处理单次作业、演讲或课程材料。24 小时内共可处理 20 次视频、300 张可编辑页、120 分钟转写；单个视频仍限 10 分钟，不开放批量。</p>
       </div>
       <div class="day-pass-price">¥9.9</div>
       <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS">开通临时版</button>
@@ -387,6 +385,22 @@
         return '，有效期至 ' + date.toLocaleString('zh-CN', { hour12: false });
       }
 
+      function limitText(value, unit) {
+        if (value === null) return '无限制';
+        if (typeof value === 'undefined') return '按免费版';
+        return String(value) + unit;
+      }
+
+      function entitlementLimitsText(data) {
+        var limits = data && data.limits ? data.limits : {};
+        var videoLength = limitText(limits.video_max_minutes, '分钟/单个视频');
+        var conversions = limitText(limits.video_conversions_monthly, '次/月');
+        var slides = limitText(limits.editable_slides_monthly, '张/月');
+        var transcribe = limitText(limits.transcribe_minutes_monthly, '分钟/月');
+        var batch = limits.batch_processing ? '支持批量' : '不含批量';
+        return '权益：视频 ' + videoLength + '，转换 ' + conversions + '，可编辑页 ' + slides + '，转写 ' + transcribe + '，' + batch + '。';
+      }
+
       function refreshEntitlement() {
         var email = requireEmail();
         if (!email) return Promise.resolve();
@@ -398,9 +412,9 @@
           })
           .then(function (data) {
             if (data.active) {
-              setStatus('已开通 ' + planLabel(data.plan) + periodText(data.current_period_end) + '。', 'ok');
+              setStatus('已开通 ' + planLabel(data.effective_plan || data.plan) + periodText(data.current_period_end) + '。' + entitlementLimitsText(data), 'ok');
             } else {
-              setStatus('当前未检测到已生效权益。支付完成后可稍后刷新。', 'warn');
+              setStatus('当前按免费版权益使用。' + entitlementLimitsText(data) + ' 支付完成后可稍后刷新。', 'warn');
             }
           })
           .catch(function (error) {

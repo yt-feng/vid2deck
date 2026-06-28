@@ -76,6 +76,35 @@ type AuthSession = {
   user: AuthUser;
 };
 
+type PlanKey = 'free' | 'day_pass' | 'pro' | 'lifetime';
+type PlanLimits = {
+  video_max_minutes: number | null;
+  video_conversions_monthly: number | null;
+  editable_slides_monthly: number | null;
+  transcribe_minutes_monthly: number | null;
+  batch_processing: boolean;
+  image_pptx: boolean;
+  screen_recording: boolean;
+};
+type EntitlementPayload = {
+  email: string;
+  plan: string;
+  effective_plan?: string;
+  status?: string;
+  lifetime?: boolean;
+  current_period_end?: string | null;
+  active: boolean;
+  limits?: Partial<PlanLimits>;
+  updated_at?: string;
+};
+type UsageEventType = 'video_conversion' | 'editable_slide' | 'transcribe_minute';
+type UsageSummary = {
+  email: string;
+  period?: string;
+  period_start: string;
+  monthly: Record<string, number>;
+};
+
 type CapturedFrame = {
   index: number;
   time: number;
@@ -122,10 +151,25 @@ const OCR_MIN_CONFIDENCE = 35;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
+const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 10;
 const TIP_MAX_QUANTITY = 999999;
+const FREE_PLAN_LIMITS: PlanLimits = {
+  video_max_minutes: 10,
+  video_conversions_monthly: 3,
+  editable_slides_monthly: 100,
+  transcribe_minutes_monthly: 600,
+  batch_processing: false,
+  image_pptx: true,
+  screen_recording: true
+};
+const USAGE_UNITS: Record<UsageEventType, string> = {
+  video_conversion: '次',
+  editable_slide: '张',
+  transcribe_minute: '分钟'
+};
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -546,6 +590,9 @@ let authMode: AuthMode = 'login';
 let authSession: AuthSession | null = loadAuthSession();
 let authCaptchaToken = '';
 let isAuthBusy = false;
+let entitlement: EntitlementPayload = freeEntitlement(authSession?.user.email ?? '');
+let usageSummary: UsageSummary = loadLocalUsageSummary();
+let entitlementFetchedAt = 0;
 
 authForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -557,12 +604,16 @@ refreshAuthCaptchaBtn.addEventListener('click', () => {
 });
 authLogoutBtn.addEventListener('click', () => {
   authSession = null;
+  entitlement = freeEntitlement();
+  usageSummary = loadLocalUsageSummary();
+  entitlementFetchedAt = 0;
   localStorage.removeItem(AUTH_STORAGE_KEY);
   setAuthStatus('已退出登录。', '');
   updateAuthUi();
   void loadAuthCaptcha();
 });
 updateAuthUi();
+void refreshEntitlement();
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
@@ -713,6 +764,7 @@ function saveAuthSession(session: AuthSession): void {
   authSession = session;
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
   localStorage.setItem(CHECKOUT_EMAIL_STORAGE_KEY, session.user.email);
+  void refreshEntitlement();
 }
 
 function setAuthStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
@@ -726,7 +778,7 @@ function setAuthMode(mode: AuthMode): void {
   authSubmitBtn.textContent = mode === 'register' ? '注册并登录' : '登录';
   authModeToggleBtn.textContent = mode === 'register' ? '已有账号，去登录' : '注册新账号';
   authEmailLabel.hidden = mode !== 'register';
-  setAuthStatus(mode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可直接生成 Summary，付款也会绑定到同一账号。', '');
+  renderEntitlementSummary();
   authCaptchaAnswer.value = '';
   void loadAuthCaptcha();
 }
@@ -738,7 +790,7 @@ function updateAuthUi(): void {
   if (authSession) {
     authSignedInName.textContent = authSession.user.username;
     authSignedInEmail.textContent = authSession.user.email_is_generated ? `${authSession.user.email}（自动生成）` : authSession.user.email;
-    setAuthStatus('已登录，可生成 Summary。', 'ok');
+    renderEntitlementSummary();
   } else {
     setAuthMode(authMode);
   }
@@ -815,6 +867,296 @@ function setAuthBusy(busy: boolean): void {
   authSubmitBtn.disabled = busy;
   authModeToggleBtn.disabled = busy;
   refreshAuthCaptchaBtn.disabled = busy;
+}
+
+function freeEntitlement(email = ''): EntitlementPayload {
+  return {
+    email,
+    plan: 'free',
+    effective_plan: 'free',
+    status: 'inactive',
+    lifetime: false,
+    current_period_end: null,
+    active: false,
+    limits: { ...FREE_PLAN_LIMITS }
+  };
+}
+
+function emptyUsageSummary(email = 'anonymous'): UsageSummary {
+  return {
+    email,
+    period: 'monthly',
+    period_start: currentMonthStartIso(),
+    monthly: {
+      video_conversion: 0,
+      editable_slide: 0,
+      transcribe_minute: 0
+    }
+  };
+}
+
+function loadLocalUsageSummary(): UsageSummary {
+  try {
+    const raw = localStorage.getItem(USAGE_STORAGE_KEY);
+    if (!raw) return emptyUsageSummary();
+    const parsed = JSON.parse(raw) as Partial<UsageSummary>;
+    if (!sameMonthlyPeriod(parsed.period_start)) return emptyUsageSummary();
+    return {
+      email: 'anonymous',
+      period: 'monthly',
+      period_start: parsed.period_start ?? currentMonthStartIso(),
+      monthly: normalizeMonthlyUsage(parsed.monthly)
+    };
+  } catch {
+    return emptyUsageSummary();
+  }
+}
+
+function saveLocalUsageSummary(summary: UsageSummary): void {
+  localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(summary));
+}
+
+function normalizeMonthlyUsage(value: unknown): Record<string, number> {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    video_conversion: nonNegativeInteger(source.video_conversion),
+    editable_slide: nonNegativeInteger(source.editable_slide),
+    transcribe_minute: nonNegativeInteger(source.transcribe_minute)
+  };
+}
+
+function nonNegativeInteger(value: unknown): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? Math.max(0, Math.floor(numberValue)) : 0;
+}
+
+function currentMonthStartIso(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+function sameMonthlyPeriod(periodStart: unknown): boolean {
+  return typeof periodStart === 'string' && periodStart.slice(0, 7) === currentMonthStartIso().slice(0, 7);
+}
+
+async function refreshEntitlement(): Promise<void> {
+  if (!authSession) {
+    entitlement = freeEntitlement();
+    usageSummary = loadLocalUsageSummary();
+    renderEntitlementSummary();
+    updateActionState();
+    return;
+  }
+
+  const email = authSession.user.email;
+  try {
+    const [entitlementResponse, usageResponse] = await Promise.all([
+      fetch(`/api/entitlement?email=${encodeURIComponent(email)}`, { cache: 'no-store' }),
+      fetch(`/api/usage?email=${encodeURIComponent(email)}`, { cache: 'no-store', headers: authHeaders() })
+    ]);
+    if (!entitlementResponse.ok) throw new Error('权益接口异常。');
+    if (!usageResponse.ok) throw new Error('用量接口异常。');
+    entitlement = normalizeEntitlement(await entitlementResponse.json(), email);
+    usageSummary = normalizeUsageSummary(await usageResponse.json(), email);
+    entitlementFetchedAt = Date.now();
+    renderEntitlementSummary();
+  } catch (error) {
+    console.warn(error);
+    if (entitlement.email !== email) entitlement = freeEntitlement(email);
+    if (usageSummary.email !== email) usageSummary = emptyUsageSummary(email);
+    setAuthStatus(`已登录，但权益刷新失败：${error instanceof Error ? error.message : '请稍后重试。'}`, 'warn');
+  } finally {
+    updateActionState();
+  }
+}
+
+function authHeaders(): Record<string, string> {
+  return authSession ? { Authorization: `Bearer ${authSession.token}` } : {};
+}
+
+function normalizeEntitlement(value: unknown, email: string): EntitlementPayload {
+  const data = value && typeof value === 'object' ? value as Partial<EntitlementPayload> : {};
+  const plan = typeof data.plan === 'string' ? data.plan : 'free';
+  const effectivePlan = typeof data.effective_plan === 'string' ? data.effective_plan : plan;
+  return {
+    email,
+    plan,
+    effective_plan: isPlanKey(effectivePlan) ? effectivePlan : 'free',
+    status: typeof data.status === 'string' ? data.status : 'inactive',
+    lifetime: Boolean(data.lifetime),
+    current_period_end: typeof data.current_period_end === 'string' ? data.current_period_end : null,
+    active: Boolean(data.active),
+    limits: normalizePlanLimits(data.limits),
+    updated_at: typeof data.updated_at === 'string' ? data.updated_at : undefined
+  };
+}
+
+function normalizeUsageSummary(value: unknown, email: string): UsageSummary {
+  const data = value && typeof value === 'object' ? value as Partial<UsageSummary> : {};
+  return {
+    email,
+    period: 'monthly',
+    period_start: typeof data.period_start === 'string' ? data.period_start : currentMonthStartIso(),
+    monthly: normalizeMonthlyUsage(data.monthly)
+  };
+}
+
+function normalizePlanLimits(limits: Partial<PlanLimits> | undefined): PlanLimits {
+  return {
+    video_max_minutes: limitNumberOrNull(limits?.video_max_minutes, FREE_PLAN_LIMITS.video_max_minutes),
+    video_conversions_monthly: limitNumberOrNull(limits?.video_conversions_monthly, FREE_PLAN_LIMITS.video_conversions_monthly),
+    editable_slides_monthly: limitNumberOrNull(limits?.editable_slides_monthly, FREE_PLAN_LIMITS.editable_slides_monthly),
+    transcribe_minutes_monthly: limitNumberOrNull(limits?.transcribe_minutes_monthly, FREE_PLAN_LIMITS.transcribe_minutes_monthly),
+    batch_processing: Boolean(limits?.batch_processing ?? FREE_PLAN_LIMITS.batch_processing),
+    image_pptx: Boolean(limits?.image_pptx ?? FREE_PLAN_LIMITS.image_pptx),
+    screen_recording: Boolean(limits?.screen_recording ?? FREE_PLAN_LIMITS.screen_recording)
+  };
+}
+
+function limitNumberOrNull(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? Math.max(0, numberValue) : fallback;
+}
+
+function isPlanKey(value: string): value is PlanKey {
+  return value === 'free' || value === 'day_pass' || value === 'pro' || value === 'lifetime';
+}
+
+function currentPlan(): PlanKey {
+  const plan = entitlement.effective_plan ?? entitlement.plan;
+  return isPlanKey(plan) ? plan : 'free';
+}
+
+function currentLimits(): PlanLimits {
+  return normalizePlanLimits(entitlement.limits);
+}
+
+function planLabel(plan: PlanKey | string): string {
+  if (plan === 'day_pass') return '临时版';
+  if (plan === 'pro') return '专业版';
+  if (plan === 'lifetime') return '终身版';
+  return '免费版';
+}
+
+function periodText(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `，有效期至 ${date.toLocaleString('zh-CN', { hour12: false })}`;
+}
+
+function renderEntitlementSummary(): void {
+  const plan = currentPlan();
+  const prefix = authSession
+    ? `已登录，当前套餐：${planLabel(plan)}${periodText(entitlement.current_period_end)}`
+    : `${authMode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可同步付费权益。'} 当前按免费版额度使用`;
+  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，转写${quotaText('transcribe_minute')}。`;
+  const tone: 'ok' | 'warn' | '' = authSession ? (plan === 'free' ? 'warn' : 'ok') : '';
+  setAuthStatus(message, tone);
+}
+
+function quotaText(eventType: UsageEventType): string {
+  const limit = monthlyLimitFor(eventType);
+  const used = usageValue(eventType);
+  const unit = USAGE_UNITS[eventType];
+  if (limit === null) return `已用 ${used}${unit}/不限`;
+  return `剩余 ${Math.max(0, Math.floor(limit - used))}${unit}（${used}/${limit}${unit}）`;
+}
+
+function monthlyLimitFor(eventType: UsageEventType): number | null {
+  const limits = currentLimits();
+  if (eventType === 'video_conversion') return limits.video_conversions_monthly;
+  if (eventType === 'editable_slide') return limits.editable_slides_monthly;
+  return limits.transcribe_minutes_monthly;
+}
+
+function usageValue(eventType: UsageEventType): number {
+  const currentSummary = authSession ? usageSummary : loadLocalUsageSummary();
+  return nonNegativeInteger(currentSummary.monthly[eventType]);
+}
+
+async function ensureUsageCapacity(
+  eventType: UsageEventType,
+  units: number,
+  featureLabel: string,
+  report: (message: string) => void
+): Promise<boolean> {
+  const safeUnits = Math.max(1, Math.ceil(units));
+  if (authSession && (entitlement.email !== authSession.user.email || Date.now() - entitlementFetchedAt > 30_000)) {
+    await refreshEntitlement();
+  }
+  if (!authSession) usageSummary = loadLocalUsageSummary();
+
+  const limit = monthlyLimitFor(eventType);
+  if (limit === null) return true;
+
+  const used = usageValue(eventType);
+  if (used + safeUnits <= limit) return true;
+
+  const unit = USAGE_UNITS[eventType];
+  report(`${featureLabel}额度不足：当前套餐 ${planLabel(currentPlan())} 本月已用 ${used}${unit}/${limit}${unit}，本次需要 ${safeUnits}${unit}。请在定价页开通或升级后继续。`);
+  return false;
+}
+
+async function recordUsage(eventType: UsageEventType, units: number, metadata: Record<string, unknown> = {}): Promise<void> {
+  const safeUnits = Math.max(1, Math.ceil(units));
+  if (!authSession) {
+    usageSummary = addUsageToSummary(loadLocalUsageSummary(), eventType, safeUnits, 'anonymous');
+    saveLocalUsageSummary(usageSummary);
+    renderEntitlementSummary();
+    updateActionState();
+    return;
+  }
+
+  const email = authSession.user.email;
+  try {
+    const response = await fetch('/api/usage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ email, event_type: eventType, units: safeUnits, metadata })
+    });
+    if (!response.ok) throw new Error('用量记录失败。');
+    usageSummary = normalizeUsageSummary(await response.json(), email);
+  } catch (error) {
+    console.warn(error);
+    usageSummary = addUsageToSummary(usageSummary, eventType, safeUnits, email);
+  } finally {
+    renderEntitlementSummary();
+    updateActionState();
+  }
+}
+
+function addUsageToSummary(summary: UsageSummary, eventType: UsageEventType, units: number, email: string): UsageSummary {
+  const currentSummary = sameMonthlyPeriod(summary.period_start) ? summary : emptyUsageSummary(email);
+  const monthly = normalizeMonthlyUsage(currentSummary.monthly);
+  monthly[eventType] = nonNegativeInteger(monthly[eventType]) + units;
+  return { ...currentSummary, email, monthly };
+}
+
+async function ensureVideoDurationAllowed(file: File, report: (message: string) => void): Promise<boolean> {
+  const limitMinutes = currentLimits().video_max_minutes;
+  if (limitMinutes === null) return true;
+
+  try {
+    report(`正在检查视频时长：${file.name}`);
+    const meta = await readFileVideoMetadata(file);
+    if (meta.duration <= limitMinutes * 60 + 0.5) return true;
+    report(`当前套餐 ${planLabel(currentPlan())} 单个视频限制 ${limitMinutes} 分钟；${file.name} 约 ${formatTime(meta.duration)}，请升级后处理。`);
+    return false;
+  } catch (error) {
+    report(error instanceof Error ? error.message : '无法读取视频时长。');
+    return false;
+  }
+}
+
+async function readFileVideoMetadata(file: File): Promise<VideoMeta> {
+  const url = URL.createObjectURL(file);
+  try {
+    return await readVideoMetadata(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function isBusy(): boolean {
@@ -1098,6 +1440,8 @@ function removeFile(index: number): void {
 async function processCurrentFile(): Promise<void> {
   if (!selectedFile || isBusy()) return;
   const file = selectedFile;
+  if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', setHomeStatus)) return;
+  if (!await ensureVideoDurationAllowed(file, setHomeStatus)) return;
   const settings = readSettings();
   setWorkspaceMode('video');
   showWorkspace();
@@ -1141,6 +1485,11 @@ async function processCurrentFile(): Promise<void> {
       status: 'done',
       processedAt: new Date().toISOString()
     });
+    await recordUsage('video_conversion', 1, {
+      name: file.name,
+      duration_seconds: Math.round(videoMeta.duration),
+      slides: slides.length
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : '抽帧失败，请查看控制台。';
     console.error(error);
@@ -1156,9 +1505,15 @@ async function processCurrentFile(): Promise<void> {
 
 async function batchExtractAndDownloadZip(): Promise<void> {
   if (selectedFiles.length === 0 || isBusy()) return;
+  if (!currentLimits().batch_processing) {
+    setHomeStatus('当前套餐不支持批量处理；专业版或终身版可批量抽帧并打包 ZIP。');
+    return;
+  }
+  if (!await ensureUsageCapacity('video_conversion', selectedFiles.length, '视频转换次数', setHomeStatus)) return;
   const settings = readSettings();
   const files = selectedFiles.slice();
   const zip = new JSZip();
+  const successfulFiles: string[] = [];
   isBatchProcessing = true;
   homeView.hidden = false;
   workspaceView.hidden = true;
@@ -1193,6 +1548,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
         processedAt: new Date().toISOString()
       });
       addSlidesToZip(zip, file, result.slides);
+      successfulFiles.push(file.name);
       renderFileList();
       await yieldToBrowser();
     }
@@ -1208,6 +1564,12 @@ async function batchExtractAndDownloadZip(): Promise<void> {
     setHomeStatus(error instanceof Error ? error.message : '批量抽帧失败。');
   } finally {
     isBatchProcessing = false;
+    if (successfulFiles.length > 0) {
+      await recordUsage('video_conversion', successfulFiles.length, {
+        batch: true,
+        files: successfulFiles.slice(0, 30)
+      });
+    }
     if (selectedFile) loadStateIntoWorkspace(selectedFile);
     renderFileList();
     updateActionState();
@@ -1243,6 +1605,16 @@ async function downloadProcessedFramesZip(): Promise<void> {
 async function transcribeCurrentFile(): Promise<void> {
   if (!selectedFile || isBusy()) return;
   const file = selectedFile;
+  let transcribeMinutes = 1;
+  try {
+    const meta = videoMeta ?? await readFileVideoMetadata(file);
+    transcribeMinutes = Math.max(1, Math.ceil(meta.duration / 60));
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : '无法读取视频时长。');
+    return;
+  }
+  if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return;
+
   try {
     isTranscribing = true;
     updateActionState();
@@ -1253,6 +1625,10 @@ async function transcribeCurrentFile(): Promise<void> {
     setProgress('转写完成', 100);
     setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
+    await recordUsage('transcribe_minute', transcribeMinutes, {
+      name: file.name,
+      minutes: transcribeMinutes
+    });
   } catch (error) {
     console.error(error);
     setProgress('转写失败', 100);
@@ -1519,6 +1895,7 @@ async function downloadImagesAsPptx(): Promise<void> {
 
 async function openImagesInWorkspace(): Promise<void> {
   if (selectedImageFiles.length === 0 || isBusy()) return;
+  if (!await ensureUsageCapacity('editable_slide', selectedImageFiles.length, '可编辑幻灯片', setImageStatus)) return;
   isBatchProcessing = true;
   updateActionState();
   try {
@@ -1550,6 +1927,11 @@ async function openImagesInWorkspace(): Promise<void> {
     setProgress('OCR 完成', 100);
     setStatus(`已生成 ${slides.length} 张图片页，并自动识别出 ${textBoxCount} 个可编辑文本框。顶部导出 PPTX 后可直接编辑文字。`);
     persistWorkspaceToState({ markProcessed: true });
+    await recordUsage('editable_slide', slides.length, {
+      source: 'image_workspace',
+      images: selectedImageFiles.length,
+      text_boxes: textBoxCount
+    });
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : '图片进入编辑模式失败。');
@@ -1987,6 +2369,7 @@ async function runOcrForSelectedSlides(): Promise<void> {
     setStatus('请先选择至少一页再运行 OCR。');
     return;
   }
+  if (!await ensureUsageCapacity('editable_slide', targetSlides.length, '可编辑幻灯片', setStatus)) return;
   try {
     setProgress('正在准备 OCR', 5, true);
     setStatus('正在自动 OCR 勾选页面。识别结果会替换这些页面现有文本框。');
@@ -2001,6 +2384,11 @@ async function runOcrForSelectedSlides(): Promise<void> {
     setProgress('OCR 完成', 100);
     setStatus(`OCR 完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
+    await recordUsage('editable_slide', targetSlides.length, {
+      source: 'workspace_ocr',
+      pages: targetSlides.length,
+      text_boxes: textBoxCount
+    });
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : 'OCR 失败。');
@@ -3078,12 +3466,14 @@ function updateActionState(): void {
   const hasFile = Boolean(selectedFile);
   const hasVideoFile = Boolean(selectedFile) && currentFileIndex >= 0 && workspaceMode === 'video';
   const imageMode = workspaceMode === 'image';
+  const limits = currentLimits();
   const selectedCount = slides.filter((slide) => slide.selected).length;
   extractBtn.disabled = !hasVideoFile || busy;
-  batchZipBtn.disabled = selectedFiles.length === 0 || busy;
+  batchZipBtn.disabled = selectedFiles.length === 0 || busy || !limits.batch_processing;
+  batchZipBtn.title = limits.batch_processing ? '' : '批量处理属于专业版和终身版权益';
   downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
-  imagePptBtn.disabled = selectedImageFiles.length === 0 || busy;
-  imageWorkspaceBtn.disabled = selectedImageFiles.length === 0 || busy;
+  imagePptBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
+  imageWorkspaceBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
   transcribeBtn.disabled = !hasVideoFile || busy || imageMode;
   downloadPdfBtn.disabled = selectedCount === 0 || busy;
   downloadPptxBtn.disabled = selectedCount === 0 || busy;
@@ -3098,7 +3488,7 @@ function updateActionState(): void {
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   videoInput.disabled = busy;
   imageInput.disabled = busy;
-  recordScreenBtn.disabled = busy;
+  recordScreenBtn.disabled = busy || !limits.screen_recording;
   stopRecordBtn.hidden = !isRecording;
   updateSelectionUI();
 }

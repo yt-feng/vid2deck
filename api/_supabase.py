@@ -84,6 +84,20 @@ def find_entitlement(email: str) -> dict[str, Any] | None:
     return None
 
 
+def list_usage_events(email: str, since_iso: str | None = None) -> list[dict[str, Any]]:
+    params = {
+        "email": f"eq.{email}",
+        "select": "event_type,units,metadata,created_at",
+        "order": "created_at.desc",
+        "limit": "1000",
+    }
+    if since_iso:
+        params["created_at"] = f"gte.{since_iso}"
+    query = query_string(params)
+    rows = supabase_request("GET", f"/rest/v1/usage_events?{query}")
+    return rows if isinstance(rows, list) else []
+
+
 def save_entitlement(email: str, fields: dict[str, Any]) -> dict[str, Any]:
     now = utc_now_iso()
     existing = find_entitlement(email)
@@ -100,11 +114,11 @@ def save_entitlement(email: str, fields: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def insert_usage_event(email: str, event_type: str, metadata: dict[str, Any] | None = None) -> None:
+def insert_usage_event(email: str, event_type: str, metadata: dict[str, Any] | None = None, *, units: int = 1) -> None:
     payload = {
         "email": email,
         "event_type": event_type,
-        "units": 1,
+        "units": max(1, int(units)),
         "metadata": metadata or {},
     }
     supabase_request("POST", "/rest/v1/usage_events", payload)

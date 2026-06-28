@@ -10,8 +10,10 @@ from typing import Any
 
 try:
     from _supabase import find_entitlement
+    from _plans import effective_plan, plan_limits
 except ModuleNotFoundError:
     from api._supabase import find_entitlement
+    from api._plans import effective_plan, plan_limits
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -68,10 +70,12 @@ def free_payload(email: str) -> dict[str, Any]:
     return {
         "email": email,
         "plan": "free",
+        "effective_plan": "free",
         "status": "inactive",
         "lifetime": False,
         "current_period_end": None,
         "active": False,
+        "limits": plan_limits("free"),
     }
 
 
@@ -81,13 +85,16 @@ def public_entitlement(row: dict[str, Any]) -> dict[str, Any]:
     lifetime = bool(row.get("lifetime"))
     current_period_end = row.get("current_period_end")
     active = status in ACTIVE_STATUSES and (lifetime or period_is_current(current_period_end))
+    effective = effective_plan(plan, active)
     return {
         "email": row.get("email"),
         "plan": plan,
+        "effective_plan": effective,
         "status": status,
         "lifetime": lifetime,
         "current_period_end": current_period_end,
         "active": active,
+        "limits": plan_limits(effective),
         "updated_at": row.get("updated_at"),
     }
 
