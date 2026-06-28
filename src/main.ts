@@ -122,9 +122,9 @@ const OCR_MIN_CONFIDENCE = 35;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
-const TIP_AMOUNTS = [5, 20, 50, 80, 100, 200] as const;
+const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
-const TIP_MIN_CHECKOUT_AMOUNT = 5;
+const TIP_MIN_CHECKOUT_AMOUNT = 10;
 const TIP_MAX_QUANTITY = 999999;
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -395,7 +395,7 @@ app.innerHTML = `
           <span>¥</span>
           <input id="customTipAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="1" />
         </div>
-        <small>最低输入 ¥1，低于 ¥5 会按 ¥5 结账</small>
+        <small>最低输入 ¥1，低于 ¥10 会按 ¥10 结账</small>
       </div>
       <div class="tip-status" id="tipStatus" aria-live="polite">请选择赞赏金额。</div>
       <div class="tip-actions">
@@ -834,7 +834,7 @@ function openTipDialog(): void {
 function showCustomTipInput(): void {
   customTipLabel.hidden = false;
   customTipPayBtn.hidden = false;
-  tipStatus.textContent = '请输入任意金额，低于 ¥5 会自动按 ¥5 打开支付。';
+  tipStatus.textContent = '请输入任意金额，低于 ¥10 会自动按 ¥10 打开支付。';
   tipStatus.className = 'tip-status';
   customTipAmount.focus();
 }
