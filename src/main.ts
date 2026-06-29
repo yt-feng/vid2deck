@@ -117,6 +117,17 @@ type CapturedFrame = {
 type VideoMeta = { duration: number; width: number; height: number };
 type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
 type JobStatus = 'queued' | 'processing' | 'done' | 'error';
+type UrlDownloadMode = 'queue' | 'extract';
+type UrlDownloadStatus = {
+  id: string;
+  status: 'queued' | 'downloading' | 'finished' | 'error';
+  progress: number;
+  message?: string;
+  filename?: string;
+  downloaded_bytes?: number;
+  total_bytes?: number;
+  error?: string;
+};
 
 type FileJobState = {
   slides: Slide[];
@@ -141,6 +152,7 @@ const FRAME_CONCURRENCY = 3;
 const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
 const TIMELINE_PAINT_INTERVAL_MS = 220;
+const URL_DOWNLOAD_POLL_INTERVAL_MS = 700;
 const IMAGE_DECK_MAX_EDGE = 2400;
 const PPTX_SLIDE_WIDTH_EMU = 12192000;
 const PPTX_SLIDE_HEIGHT_EMU = 6858000;
@@ -152,6 +164,7 @@ const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
+const LOCAL_DOWNLOADER_URL = (localStorage.getItem('vid2deck.localDownloaderUrl') || 'http://127.0.0.1:8765').replace(/\/+$/, '');
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 10;
@@ -246,6 +259,24 @@ app.innerHTML = `
         <span id="fileLabel">选择或拖入一个或多个视频文件</span>
         <small>可以一次选择多个文件，也可以多次追加。视频处理在浏览器本地完成。</small>
       </label>
+
+      <form id="videoUrlForm" class="url-import">
+        <label>在线视频链接
+          <input id="videoUrlInput" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+        </label>
+        <div class="url-import-actions">
+          <button id="downloadUrlBtn" type="submit">下载到队列</button>
+          <button id="processUrlBtn" type="button" class="ghost-btn">获取并直接抽帧</button>
+        </div>
+        <div id="urlDownloadProgress" class="url-download-progress" hidden>
+          <div class="url-download-progress-meta">
+            <span id="urlDownloadProgressText">准备下载</span>
+            <strong id="urlDownloadProgressPercent">0%</strong>
+          </div>
+          <div class="url-download-progress-track"><div id="urlDownloadProgressFill" class="url-download-progress-fill"></div></div>
+        </div>
+        <small id="urlDownloadStatus" class="url-download-status">粘贴 YouTube、Bilibili 或其他视频链接，可先加入队列，也可直接抽帧生成 PPT/PDF。</small>
+      </form>
 
       <div class="source-actions">
         <button id="recordScreenBtn" type="button">录制屏幕</button>
@@ -480,6 +511,15 @@ const imageFileLabel = $<HTMLSpanElement>('#imageFileLabel');
 const fileList = $<HTMLDivElement>('#fileList');
 const imageFileList = $<HTMLDivElement>('#imageFileList');
 const videoInput = $<HTMLInputElement>('#videoInput');
+const videoUrlForm = $<HTMLFormElement>('#videoUrlForm');
+const videoUrlInput = $<HTMLInputElement>('#videoUrlInput');
+const downloadUrlBtn = $<HTMLButtonElement>('#downloadUrlBtn');
+const processUrlBtn = $<HTMLButtonElement>('#processUrlBtn');
+const urlDownloadProgress = $<HTMLDivElement>('#urlDownloadProgress');
+const urlDownloadProgressText = $<HTMLElement>('#urlDownloadProgressText');
+const urlDownloadProgressPercent = $<HTMLElement>('#urlDownloadProgressPercent');
+const urlDownloadProgressFill = $<HTMLDivElement>('#urlDownloadProgressFill');
+const urlDownloadStatus = $<HTMLElement>('#urlDownloadStatus');
 const imageInput = $<HTMLInputElement>('#imageInput');
 const recordScreenBtn = $<HTMLButtonElement>('#recordScreenBtn');
 const stopRecordBtn = $<HTMLButtonElement>('#stopRecordBtn');
@@ -573,6 +613,7 @@ let extractionTimelineMax = 0;
 let lastTimelinePaint = 0;
 let isExtracting = false;
 let isBatchProcessing = false;
+let isUrlDownloading = false;
 let isTranscribing = false;
 let isSummarizing = false;
 let isOcrRunning = false;
@@ -616,6 +657,13 @@ updateAuthUi();
 void refreshEntitlement();
 
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
+videoUrlForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void downloadVideoFromUrl('queue');
+});
+processUrlBtn.addEventListener('click', () => {
+  void downloadVideoFromUrl('extract');
+});
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
 recordScreenBtn.addEventListener('click', () => startScreenRecording());
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
@@ -1160,7 +1208,7 @@ async function readFileVideoMetadata(file: File): Promise<VideoMeta> {
 }
 
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening || isAuthBusy;
+  return isExtracting || isBatchProcessing || isUrlDownloading || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening || isAuthBusy;
 }
 
 function openTipDialog(): void {
@@ -1336,6 +1384,196 @@ function eventName(event: unknown): string {
   if (!event || typeof event !== 'object') return '';
   const data = event as { name?: unknown; eventName?: unknown; type?: unknown };
   return String(data.name ?? data.eventName ?? data.type ?? '');
+}
+
+function setUrlDownloadStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
+  urlDownloadStatus.textContent = message;
+  urlDownloadStatus.className = `url-download-status${tone ? ` ${tone}` : ''}`;
+}
+
+function setUrlDownloadProgress(message: string, percent: number | null = null): void {
+  urlDownloadProgress.hidden = false;
+  urlDownloadProgressText.textContent = message;
+  if (percent === null) {
+    urlDownloadProgressPercent.textContent = '...';
+    urlDownloadProgressFill.classList.add('is-indeterminate');
+    urlDownloadProgressFill.style.width = '38%';
+    return;
+  }
+  const clamped = Math.round(clamp(percent, 0, 100));
+  urlDownloadProgressFill.classList.remove('is-indeterminate');
+  urlDownloadProgressFill.style.width = `${clamped}%`;
+  urlDownloadProgressPercent.textContent = `${clamped}%`;
+}
+
+function resetUrlDownloadProgress(): void {
+  urlDownloadProgress.hidden = true;
+  urlDownloadProgressFill.classList.remove('is-indeterminate');
+  urlDownloadProgressFill.style.width = '0%';
+  urlDownloadProgressText.textContent = '准备下载';
+  urlDownloadProgressPercent.textContent = '0%';
+}
+
+async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
+  if (isBusy()) return;
+  const sourceUrl = videoUrlInput.value.trim();
+  const parsedUrl = parseDownloadUrl(sourceUrl);
+  if (!parsedUrl) {
+    setUrlDownloadStatus('请输入有效的 http 或 https 视频网址。', 'error');
+    videoUrlInput.focus();
+    return;
+  }
+
+  isUrlDownloading = true;
+  updateActionState();
+  setUrlDownloadStatus(mode === 'extract' ? '正在获取视频，完成后会自动开始抽帧。' : '正在获取视频，完成后会加入队列。', 'warn');
+  setUrlDownloadProgress('正在解析链接', null);
+  let shouldExtract = false;
+
+  try {
+    const job = await startUrlDownloadJob(parsedUrl.toString());
+    const finishedJob = await waitForUrlDownloadJob(job.id);
+    const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/file/${encodeURIComponent(job.id)}`, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error(await readResponseError(response));
+
+    const filename = sanitizeDownloadedFilename(
+      finishedJob.filename
+      || response.headers.get('X-Filename')
+      || filenameFromContentDisposition(response.headers.get('Content-Disposition'))
+      || `${parsedUrl.hostname || 'online-video'}.mp4`
+    );
+    const blob = await responseToBlobWithProgress(response, (percent) => {
+      setUrlDownloadProgress('正在导入视频', percent === null ? null : 92 + percent * 0.08);
+    });
+    if (blob.size === 0) throw new Error('没有获取到可处理的视频文件。');
+    const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
+    addFiles([file], true);
+    videoUrlInput.value = '';
+    setUrlDownloadProgress('已加入 Vid2PPT 队列', 100);
+    setUrlDownloadStatus(mode === 'extract' ? `已获取 ${filename}，马上开始抽帧。` : `已获取 ${filename}，并加入视频队列。`, 'ok');
+    shouldExtract = mode === 'extract';
+  } catch (error) {
+    console.error(error);
+    setUrlDownloadStatus(localDownloaderErrorMessage(error), 'error');
+    setUrlDownloadProgress('获取失败', 100);
+  } finally {
+    isUrlDownloading = false;
+    updateActionState();
+  }
+
+  if (shouldExtract) await processCurrentFile();
+}
+
+async function startUrlDownloadJob(url: string): Promise<UrlDownloadStatus> {
+  const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/start`, {
+    method: 'POST',
+    mode: 'cors',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url })
+  });
+  if (!response.ok) throw new Error(await readResponseError(response));
+  return response.json() as Promise<UrlDownloadStatus>;
+}
+
+async function waitForUrlDownloadJob(jobId: string): Promise<UrlDownloadStatus> {
+  while (true) {
+    const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/status/${encodeURIComponent(jobId)}`, {
+      cache: 'no-store',
+      mode: 'cors'
+    });
+    if (!response.ok) throw new Error(await readResponseError(response));
+    const job = await response.json() as UrlDownloadStatus;
+    renderUrlDownloadJob(job);
+    if (job.status === 'finished') return job;
+    if (job.status === 'error') throw new Error(job.error || job.message || '链接获取失败。');
+    await sleep(URL_DOWNLOAD_POLL_INTERVAL_MS);
+  }
+}
+
+function renderUrlDownloadJob(job: UrlDownloadStatus): void {
+  const progress = Number.isFinite(job.progress) ? clamp(job.progress, 0, 100) : 0;
+  const message = job.message || (job.status === 'queued' ? '等待开始' : '正在获取视频');
+  setUrlDownloadProgress(message, job.status === 'queued' ? null : progress);
+  if (job.status === 'downloading') {
+    const sizeText = job.total_bytes ? ` · ${formatBytes(job.downloaded_bytes ?? 0)} / ${formatBytes(job.total_bytes)}` : '';
+    setUrlDownloadStatus(`${message}${sizeText}`, 'warn');
+  }
+}
+
+async function responseToBlobWithProgress(response: Response, onProgress: (percent: number | null) => void): Promise<Blob> {
+  const contentType = response.headers.get('content-type') || 'video/mp4';
+  const length = Number(response.headers.get('content-length') || '0');
+  if (!response.body || !Number.isFinite(length) || length <= 0) {
+    onProgress(null);
+    return response.blob();
+  }
+  const reader = response.body.getReader();
+  const chunks: BlobPart[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value as unknown as BlobPart);
+      received += value.byteLength;
+      onProgress((received / length) * 100);
+    }
+  }
+  return new Blob(chunks, { type: contentType });
+}
+
+function parseDownloadUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readResponseError(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown } | null;
+    const detail = data?.detail ?? data?.error;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+  }
+  const text = await response.text().catch(() => '');
+  return text.trim() || `链接获取请求失败：HTTP ${response.status}`;
+}
+
+function localDownloaderErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (!message || /failed to fetch|load failed|networkerror/i.test(message)) {
+    return `无法获取链接。请确认已打开 Vid2PPT 本地版，然后重试。`;
+  }
+  return message;
+}
+
+function filenameFromContentDisposition(header: string | null): string {
+  if (!header) return '';
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded); } catch { return encoded; }
+  }
+  return header.match(/filename="?([^";]+)"?/i)?.[1] ?? '';
+}
+
+function sanitizeDownloadedFilename(filename: string): string {
+  const cleaned = filename
+    .replace(/[\\/:*?"<>|\x00-\x1F]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  const safeName = cleaned || 'online-video.mp4';
+  return /\.(mkv|mov|mp4|webm|avi|m4v|mp3|m4a|wav)$/i.test(safeName)
+    ? safeName
+    : `${baseName(safeName)}.mp4`;
 }
 
 function addFiles(files: File[], selectAdded = false): void {
@@ -3487,6 +3725,9 @@ function updateActionState(): void {
   summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode || !authSession;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   videoInput.disabled = busy;
+  videoUrlInput.disabled = busy;
+  downloadUrlBtn.disabled = busy;
+  processUrlBtn.disabled = busy;
   imageInput.disabled = busy;
   recordScreenBtn.disabled = busy || !limits.screen_recording;
   stopRecordBtn.hidden = !isRecording;
@@ -3770,3 +4011,4 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
+function sleep(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }

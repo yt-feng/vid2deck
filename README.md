@@ -1,5 +1,25 @@
 # vid2deck
 
+## Local online-video import
+
+The website can accept YouTube, Bilibili and other video URLs without using Vid2PPT server bandwidth. The browser UI talks to a small local-only downloader on the user's machine, then imports the downloaded video into the existing in-browser frame extraction flow.
+
+Run the local downloader while testing:
+
+```bash
+python3 -m pip install -r requirements-local-downloader.txt
+python3 local_downloader.py
+```
+
+By default it listens on `http://127.0.0.1:8765`, only allows local development origins plus `https://vid2ppt.com`, `https://www.vid2ppt.com`, and `https://vid2deck.vercel.app`, and keeps temporary downloaded files only until the browser imports them. Installing `ffmpeg` locally is recommended for platforms that provide separate video/audio streams.
+
+Useful options:
+
+- `VID2PPT_ALLOWED_ORIGINS`: comma-separated allowed website origins.
+- `VID2PPT_MAX_DOWNLOAD_MB`: maximum single download size, default `2048`.
+- `VID2PPT_YTDLP_FORMAT`: custom yt-dlp format selector.
+- `VID2PPT_LOCAL_DOWNLOADER_PORT`: custom local port.
+
 ## Paddle configuration
 
 Author tips use `PADDLE_PRICE_AUTHOR_TIP_CNY_CENT` as a one-time Paddle Price ID. Configure it as a CNY 0.01 unit price; the frontend sends the selected amount as quantity in cents, so ¥10 is quantity `1000`. Custom tip input accepts ¥1 and up, but the checkout amount is rounded up to at least ¥10 to avoid low-value checkout failures.
