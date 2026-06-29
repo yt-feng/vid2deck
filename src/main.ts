@@ -118,16 +118,6 @@ type VideoMeta = { duration: number; width: number; height: number };
 type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
 type JobStatus = 'queued' | 'processing' | 'done' | 'error';
 type UrlDownloadMode = 'queue' | 'extract';
-type UrlDownloadStatus = {
-  id: string;
-  status: 'queued' | 'downloading' | 'finished' | 'error';
-  progress: number;
-  message?: string;
-  filename?: string;
-  downloaded_bytes?: number;
-  total_bytes?: number;
-  error?: string;
-};
 
 type FileJobState = {
   slides: Slide[];
@@ -152,7 +142,6 @@ const FRAME_CONCURRENCY = 3;
 const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
 const TIMELINE_PAINT_INTERVAL_MS = 220;
-const URL_DOWNLOAD_POLL_INTERVAL_MS = 700;
 const IMAGE_DECK_MAX_EDGE = 2400;
 const PPTX_SLIDE_WIDTH_EMU = 12192000;
 const PPTX_SLIDE_HEIGHT_EMU = 6858000;
@@ -164,7 +153,7 @@ const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
-const LOCAL_DOWNLOADER_URL = (localStorage.getItem('vid2deck.localDownloaderUrl') || 'http://127.0.0.1:8765').replace(/\/+$/, '');
+const CLOUD_DOWNLOADER_URL = '/api/download-video';
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 10;
@@ -1427,27 +1416,26 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
   isUrlDownloading = true;
   updateActionState();
   setUrlDownloadStatus(mode === 'extract' ? '正在获取视频，完成后会自动开始抽帧。' : '正在获取视频，完成后会加入队列。', 'warn');
-  setUrlDownloadProgress('正在解析链接', null);
+  setUrlDownloadProgress('正在获取视频', null);
   let shouldExtract = false;
 
   try {
-    const job = await startUrlDownloadJob(parsedUrl.toString());
-    const finishedJob = await waitForUrlDownloadJob(job.id);
-    const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/file/${encodeURIComponent(job.id)}`, {
-      method: 'GET',
+    const response = await fetch(CLOUD_DOWNLOADER_URL, {
+      method: 'POST',
       mode: 'cors',
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: parsedUrl.toString() })
     });
     if (!response.ok) throw new Error(await readResponseError(response));
 
     const filename = sanitizeDownloadedFilename(
-      finishedJob.filename
-      || response.headers.get('X-Filename')
+      response.headers.get('X-Filename')
       || filenameFromContentDisposition(response.headers.get('Content-Disposition'))
       || `${parsedUrl.hostname || 'online-video'}.mp4`
     );
     const blob = await responseToBlobWithProgress(response, (percent) => {
-      setUrlDownloadProgress('正在导入视频', percent === null ? null : 92 + percent * 0.08);
+      setUrlDownloadProgress('正在导入视频', percent);
     });
     if (blob.size === 0) throw new Error('没有获取到可处理的视频文件。');
     const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
@@ -1458,7 +1446,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     shouldExtract = mode === 'extract';
   } catch (error) {
     console.error(error);
-    setUrlDownloadStatus(localDownloaderErrorMessage(error), 'error');
+    setUrlDownloadStatus(urlDownloadErrorMessage(error), 'error');
     setUrlDownloadProgress('获取失败', 100);
   } finally {
     isUrlDownloading = false;
@@ -1466,43 +1454,6 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
   }
 
   if (shouldExtract) await processCurrentFile();
-}
-
-async function startUrlDownloadJob(url: string): Promise<UrlDownloadStatus> {
-  const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/start`, {
-    method: 'POST',
-    mode: 'cors',
-    cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url })
-  });
-  if (!response.ok) throw new Error(await readResponseError(response));
-  return response.json() as Promise<UrlDownloadStatus>;
-}
-
-async function waitForUrlDownloadJob(jobId: string): Promise<UrlDownloadStatus> {
-  while (true) {
-    const response = await fetch(`${LOCAL_DOWNLOADER_URL}/download/status/${encodeURIComponent(jobId)}`, {
-      cache: 'no-store',
-      mode: 'cors'
-    });
-    if (!response.ok) throw new Error(await readResponseError(response));
-    const job = await response.json() as UrlDownloadStatus;
-    renderUrlDownloadJob(job);
-    if (job.status === 'finished') return job;
-    if (job.status === 'error') throw new Error(job.error || job.message || '链接获取失败。');
-    await sleep(URL_DOWNLOAD_POLL_INTERVAL_MS);
-  }
-}
-
-function renderUrlDownloadJob(job: UrlDownloadStatus): void {
-  const progress = Number.isFinite(job.progress) ? clamp(job.progress, 0, 100) : 0;
-  const message = job.message || (job.status === 'queued' ? '等待开始' : '正在获取视频');
-  setUrlDownloadProgress(message, job.status === 'queued' ? null : progress);
-  if (job.status === 'downloading') {
-    const sizeText = job.total_bytes ? ` · ${formatBytes(job.downloaded_bytes ?? 0)} / ${formatBytes(job.total_bytes)}` : '';
-    setUrlDownloadStatus(`${message}${sizeText}`, 'warn');
-  }
 }
 
 async function responseToBlobWithProgress(response: Response, onProgress: (percent: number | null) => void): Promise<Blob> {
@@ -1547,10 +1498,10 @@ async function readResponseError(response: Response): Promise<string> {
   return text.trim() || `链接获取请求失败：HTTP ${response.status}`;
 }
 
-function localDownloaderErrorMessage(error: unknown): string {
+function urlDownloadErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '');
   if (!message || /failed to fetch|load failed|networkerror/i.test(message)) {
-    return `无法获取链接。请确认已打开 Vid2PPT 本地版，然后重试。`;
+    return `无法获取链接，请稍后重试，或先把视频下载到本地后上传。`;
   }
   return message;
 }

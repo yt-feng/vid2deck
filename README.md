@@ -1,24 +1,15 @@
 # vid2deck
 
-## Local online-video import
+## Online-video import
 
-The website can accept YouTube, Bilibili and other video URLs without using Vid2PPT server bandwidth. The browser UI talks to a small local-only downloader on the user's machine, then imports the downloaded video into the existing in-browser frame extraction flow.
+The website can accept YouTube, Bilibili and other video URLs from the same web UI. `/api/download-video` downloads one public video temporarily, returns it to the browser, and then the existing in-browser frame extraction flow continues locally.
 
-Run the local downloader while testing:
-
-```bash
-python3 -m pip install -r requirements-local-downloader.txt
-python3 local_downloader.py
-```
-
-By default it listens on `http://127.0.0.1:8765`, only allows local development origins plus `https://vid2ppt.com`, `https://www.vid2ppt.com`, and `https://vid2deck.vercel.app`, and keeps temporary downloaded files only until the browser imports them. Installing `ffmpeg` locally is recommended for platforms that provide separate video/audio streams.
+The cloud downloader is intentionally limited so it can stay inside free hosting resources: no playlists, no DRM/paywalled/login-only sources, 720p-oriented formats, and a default `180 MB` file cap. Temporary files are removed immediately after the browser receives the video.
 
 Useful options:
 
-- `VID2PPT_ALLOWED_ORIGINS`: comma-separated allowed website origins.
-- `VID2PPT_MAX_DOWNLOAD_MB`: maximum single download size, default `2048`.
-- `VID2PPT_YTDLP_FORMAT`: custom yt-dlp format selector.
-- `VID2PPT_LOCAL_DOWNLOADER_PORT`: custom local port.
+- `VID2PPT_CLOUD_MAX_DOWNLOAD_MB`: maximum single cloud download size, default `180`.
+- `VID2PPT_CLOUD_YTDLP_FORMAT`: custom yt-dlp format selector.
 
 ## Paddle configuration
 
