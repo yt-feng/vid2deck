@@ -277,6 +277,17 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
 .tip-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .tip-actions button { border-radius: 12px; }
 
+.url-fallback-dialog { border: 0; padding: 0; border-radius: 22px; box-shadow: 0 30px 90px rgba(15,23,42,0.28); }
+.url-fallback-dialog::backdrop { background: rgba(15,23,42,0.55); }
+.url-fallback-panel { width: min(520px, calc(100vw - 32px)); padding: 24px; background: white; }
+.url-fallback-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.url-fallback-heading .eyebrow { margin-bottom: 6px; color: #2563eb; }
+.url-fallback-heading h2 { margin: 0; color: #0f172a; font-size: clamp(1.5rem, 4vw, 2rem); line-height: 1.08; letter-spacing: -0.04em; }
+.url-fallback-panel p { margin: 0; color: #475569; font-weight: 800; line-height: 1.65; }
+.url-fallback-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.url-fallback-actions button { border-radius: 12px; }
+.url-fallback-actions button:nth-child(2) { background: #2563eb; }
+
 @media (max-width: 980px) {
   #app { width: min(100% - 24px, 1180px); padding-top: 24px; }
   .account-panel { grid-template-columns: 1fr; }
@@ -308,4 +319,6 @@ textarea { min-height: 260px; resize: vertical; line-height: 1.6; }
   .support-author-panel { align-items: stretch; flex-direction: column; }
   .support-author-panel button { width: 100%; }
   .tip-amount-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .url-fallback-actions { display: grid; grid-template-columns: 1fr; }
+  .url-fallback-actions button { width: 100%; }
 }

@@ -468,6 +468,23 @@ app.innerHTML = `
       </div>
     </form>
   </dialog>
+
+  <dialog id="urlFallbackDialog" class="url-fallback-dialog">
+    <form method="dialog" class="url-fallback-panel">
+      <div class="url-fallback-heading">
+        <div>
+          <p class="eyebrow">Video Link</p>
+          <h2>这个链接需要网页登录验证</h2>
+        </div>
+      </div>
+      <p id="urlFallbackMessage">Vid2PPT 无法在云端读取你的 YouTube 登录状态。可以打开原视频后，用浏览器授权录屏继续处理。</p>
+      <div class="url-fallback-actions">
+        <button id="urlFallbackOpenBtn" type="button" class="ghost-btn">打开原视频</button>
+        <button id="urlFallbackRecordBtn" type="button">开始录制并加入队列</button>
+        <button id="urlFallbackCancelBtn" value="cancel" class="ghost-btn">取消</button>
+      </div>
+    </form>
+  </dialog>
 `;
 
 const $ = <T extends Element>(selector: string) => {
@@ -571,6 +588,10 @@ const customTipLabel = $<HTMLDivElement>('#customTipLabel');
 const customTipAmount = $<HTMLInputElement>('#customTipAmount');
 const customTipPayBtn = $<HTMLButtonElement>('#customTipPayBtn');
 const tipStatus = $<HTMLDivElement>('#tipStatus');
+const urlFallbackDialog = $<HTMLDialogElement>('#urlFallbackDialog');
+const urlFallbackMessage = $<HTMLElement>('#urlFallbackMessage');
+const urlFallbackOpenBtn = $<HTMLButtonElement>('#urlFallbackOpenBtn');
+const urlFallbackRecordBtn = $<HTMLButtonElement>('#urlFallbackRecordBtn');
 const runOcrBtn = $<HTMLButtonElement>('#runOcrBtn');
 const addTextBoxBtn = $<HTMLButtonElement>('#addTextBoxBtn');
 const deleteTextBoxBtn = $<HTMLButtonElement>('#deleteTextBoxBtn');
@@ -611,6 +632,9 @@ let mediaRecorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
 let recordedChunks: Blob[] = [];
 let currentRecordingMimeType = 'video/webm';
+let recordingCompletionMode: UrlDownloadMode = 'queue';
+let fallbackSourceUrl = '';
+let fallbackUrlMode: UrlDownloadMode = 'queue';
 let tesseractLoadPromise: Promise<TesseractApi> | null = null;
 let paddleConfigPromise: Promise<PaddleConfig> | null = null;
 let paddleLoadPromise: Promise<PaddleConfig> | null = null;
@@ -777,6 +801,17 @@ customTipAmount.addEventListener('keydown', (event) => {
 
 tipDialog.addEventListener('click', (event) => {
   if (event.target === tipDialog) tipDialog.close();
+});
+
+urlFallbackDialog.addEventListener('click', (event) => {
+  if (event.target === urlFallbackDialog) urlFallbackDialog.close();
+});
+urlFallbackOpenBtn.addEventListener('click', () => {
+  if (fallbackSourceUrl) window.open(fallbackSourceUrl, '_blank', 'noopener,noreferrer');
+});
+urlFallbackRecordBtn.addEventListener('click', () => {
+  urlFallbackDialog.close();
+  void startScreenRecording(fallbackUrlMode);
 });
 
 tipDialog.querySelectorAll<HTMLButtonElement>('.tip-amount-btn').forEach((button) => {
@@ -1446,8 +1481,10 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     shouldExtract = mode === 'extract';
   } catch (error) {
     console.error(error);
-    setUrlDownloadStatus(urlDownloadErrorMessage(error), 'error');
+    const message = urlDownloadErrorMessage(error);
+    setUrlDownloadStatus(message, 'error');
     setUrlDownloadProgress('获取失败', 100);
+    if (shouldOfferRecordingFallback(message)) openUrlRecordingFallback(parsedUrl.toString(), mode, message);
   } finally {
     isUrlDownloading = false;
     updateActionState();
@@ -1504,6 +1541,19 @@ function urlDownloadErrorMessage(error: unknown): string {
     return `无法获取链接，请稍后重试，或先把视频下载到本地后上传。`;
   }
   return message;
+}
+
+function shouldOfferRecordingFallback(message: string): boolean {
+  return /youtube|登录|验证|真人|cookie/i.test(message);
+}
+
+function openUrlRecordingFallback(sourceUrl: string, mode: UrlDownloadMode, message: string): void {
+  fallbackSourceUrl = sourceUrl;
+  fallbackUrlMode = mode;
+  urlFallbackMessage.textContent = `${message} 可以打开原视频后，用浏览器授权录屏继续处理。`;
+  urlFallbackRecordBtn.textContent = mode === 'extract' ? '开始录制并直接抽帧' : '开始录制并加入队列';
+  if (typeof urlFallbackDialog.showModal === 'function') urlFallbackDialog.showModal();
+  else urlFallbackDialog.setAttribute('open', '');
 }
 
 function filenameFromContentDisposition(header: string | null): string {
@@ -3682,6 +3732,7 @@ function updateActionState(): void {
   imageInput.disabled = busy;
   recordScreenBtn.disabled = busy || !limits.screen_recording;
   stopRecordBtn.hidden = !isRecording;
+  stopRecordBtn.textContent = recordingCompletionMode === 'extract' ? '停止录制并直接抽帧' : '停止录制并加入队列';
   updateSelectionUI();
 }
 
@@ -3743,13 +3794,14 @@ function getDefaultNewSlideSelected(): boolean {
   return selectAllBox.checked;
 }
 
-async function startScreenRecording(): Promise<void> {
+async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<void> {
   if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
     setHomeStatus('当前浏览器不支持屏幕录制。请使用最新版 Chrome / Edge / Safari。');
     return;
   }
   try {
     recordedChunks = [];
+    recordingCompletionMode = mode;
     currentRecordingMimeType = getSupportedRecordingMimeType();
     recordingStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     mediaRecorder = new MediaRecorder(recordingStream, currentRecordingMimeType ? { mimeType: currentRecordingMimeType } : undefined);
@@ -3760,7 +3812,7 @@ async function startScreenRecording(): Promise<void> {
     });
     mediaRecorder.start(1000);
     isRecording = true;
-    setHomeStatus('正在录制屏幕。完成后点击“停止录制并加入队列”。');
+    setHomeStatus(mode === 'extract' ? '正在录制屏幕。完成后点击“停止录制并直接抽帧”。' : '正在录制屏幕。完成后点击“停止录制并加入队列”。');
   } catch (error) {
     console.error(error);
     cleanupRecording();
@@ -3781,6 +3833,7 @@ function stopScreenRecording(): void {
 
 function finishScreenRecording(): void {
   const chunks = recordedChunks.slice();
+  const completionMode = recordingCompletionMode;
   cleanupRecording();
   if (chunks.length === 0) {
     setHomeStatus('录制结束，但没有生成有效视频。');
@@ -3792,8 +3845,9 @@ function finishScreenRecording(): void {
   const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const file = new File([blob], `screen-recording-${timestampForFilename()}.${extension}`, { type: mimeType });
   addFiles([file], true);
-  setHomeStatus(`录制完成，已加入队列并切换到：${file.name}`);
+  setHomeStatus(completionMode === 'extract' ? `录制完成，正在处理：${file.name}` : `录制完成，已加入队列并切换到：${file.name}`);
   updateActionState();
+  if (completionMode === 'extract') void processCurrentFile();
 }
 
 function cleanupRecording(): void {
@@ -3802,6 +3856,7 @@ function cleanupRecording(): void {
   mediaRecorder = null;
   recordedChunks = [];
   isRecording = false;
+  recordingCompletionMode = 'queue';
 }
 
 function getSupportedRecordingMimeType(): string {
