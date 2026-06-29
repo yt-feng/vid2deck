@@ -151,6 +151,8 @@ def download_video(url: str) -> Path:
             raise DownloadError("这个链接暂时没有可直接处理的视频格式。") from exc
         if "File is larger than max-filesize" in message:
             raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
+        if youtube_requires_sign_in(message):
+            raise DownloadError("YouTube 要求登录或真人验证，网页版无法读取你的 YouTube Cookie。请改用屏幕录制，或先把视频保存到本地后上传。") from exc
         raise DownloadError(message or "这个链接暂时无法获取。") from exc
 
 
@@ -183,3 +185,13 @@ def content_disposition(filename: str) -> str:
 
 def clean_error(message: str) -> str:
     return re.sub(r"\s+", " ", message.replace("ERROR:", "")).strip()
+
+
+def youtube_requires_sign_in(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "sign in to confirm" in lowered
+        or "not a bot" in lowered
+        or "cookies-from-browser" in lowered
+        or "cookies for the authentication" in lowered
+    )
