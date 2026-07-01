@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import ipaddress
 import json
 import mimetypes
@@ -15,6 +16,11 @@ from typing import Any
 
 import yt_dlp
 
+try:
+    from _bilibili import BilibiliError, download_bilibili_video, is_bilibili_url
+except ModuleNotFoundError:
+    from api._bilibili import BilibiliError, download_bilibili_video, is_bilibili_url
+
 
 DEFAULT_MAX_DOWNLOAD_MB = 180
 DEFAULT_YTDLP_FORMAT = (
@@ -22,6 +28,24 @@ DEFAULT_YTDLP_FORMAT = (
     "best[height<=720][vcodec!=none][acodec!=none]/"
     "best[ext=mp4][vcodec!=none][acodec!=none]/best"
 )
+DEFAULT_YOUTUBE_PLAYER_CLIENTS = "android_vr"
+DEFAULT_YOUTUBE_PLAYER_SKIP = ""
+YOUTUBE_COOKIE_B64_ENV_NAMES = (
+    "YOUTUBE_COOKIES_NETSCAPE_B64",
+    "YOUTUBE_COOKIE_NETSCAPE_B64",
+    "VID2PPT_YOUTUBE_COOKIES_NETSCAPE_B64",
+)
+YOUTUBE_COOKIE_TEXT_ENV_NAMES = (
+    "YOUTUBE_COOKIES_NETSCAPE",
+    "YOUTUBE_COOKIE_NETSCAPE",
+    "VID2PPT_YOUTUBE_COOKIES_NETSCAPE",
+)
+YOUTUBE_PROXY_ENV_NAMES = (
+    "VID2PPT_YOUTUBE_PROXY",
+    "VID2PPT_YTDLP_PROXY",
+    "YTDLP_PROXY",
+)
+YOUTUBE_COOKIE_PLAYER_CLIENTS = "web_safari,mweb,tv"
 MEDIA_SUFFIXES = {".mp4", ".webm", ".mkv", ".mov", ".m4v", ".avi", ".mp3", ".m4a", ".wav", ".opus"}
 
 
@@ -43,8 +67,11 @@ class handler(BaseHTTPRequestHandler):
         try:
             data = self.read_json()
             url = validate_url(str(data.get("url", "")).strip())
-            downloaded = download_video(url)
+            rights_confirmed = bool(data.get("rightsConfirmed"))
+            downloaded = download_url(url, rights_confirmed=rights_confirmed)
             self.send_file(downloaded)
+        except BilibiliError as exc:
+            self.send_json({"detail": str(exc)}, 400)
         except DownloadError as exc:
             self.send_json({"detail": str(exc)}, 400)
         except Exception as exc:
@@ -117,8 +144,66 @@ def host_is_private(host: str) -> bool:
 
 
 def download_video(url: str) -> Path:
-    max_download_mb = int(os.getenv("VID2PPT_CLOUD_MAX_DOWNLOAD_MB", str(DEFAULT_MAX_DOWNLOAD_MB)))
-    max_download_bytes = max(1, max_download_mb) * 1024 * 1024
+    max_download_mb, max_download_bytes = download_size_limit()
+    youtube_url = is_youtube_url(url)
+    try:
+        return download_video_once(
+            url,
+            max_download_mb=max_download_mb,
+            max_download_bytes=max_download_bytes,
+            use_youtube_cookies=False,
+            use_youtube_proxy=False,
+        )
+    except DownloadError:
+        raise
+    except Exception as exc:
+        message = clean_error(str(exc))
+        if youtube_url and youtube_proxy_url():
+            try:
+                return download_video_once(
+                    url,
+                    max_download_mb=max_download_mb,
+                    max_download_bytes=max_download_bytes,
+                    use_youtube_cookies=False,
+                    use_youtube_proxy=True,
+                )
+            except DownloadError:
+                raise
+            except Exception as proxy_exc:
+                proxy_message = clean_error(str(proxy_exc))
+                if not youtube_requires_sign_in(proxy_message):
+                    raise_download_error(proxy_message, max_download_mb, proxy_exc)
+                message = proxy_message
+
+        if youtube_url and youtube_requires_sign_in(message):
+            if not youtube_cookie_file_content():
+                raise DownloadError("YouTube 要求登录或真人验证，服务端还没有配置 YouTube Cookie。") from exc
+            try:
+                return download_video_once(
+                    url,
+                    max_download_mb=max_download_mb,
+                    max_download_bytes=max_download_bytes,
+                    use_youtube_cookies=True,
+                    use_youtube_proxy=bool(youtube_proxy_url()),
+                )
+            except DownloadError:
+                raise
+            except Exception as cookie_exc:
+                cookie_message = clean_error(str(cookie_exc))
+                if "Requested format is not available" in cookie_message:
+                    raise DownloadError("YouTube 登录 Cookie 已尝试，但 YouTube 没有返回可处理的视频格式。") from cookie_exc
+                raise_download_error(cookie_message, max_download_mb, cookie_exc)
+        raise_download_error(message, max_download_mb, exc)
+
+
+def download_video_once(
+    url: str,
+    *,
+    max_download_mb: int,
+    max_download_bytes: int,
+    use_youtube_cookies: bool,
+    use_youtube_proxy: bool,
+) -> Path:
     tempdir = Path(tempfile.mkdtemp(prefix="vid2ppt-cloud-download-"))
     outtmpl = str(tempdir / "%(title).160B-%(id)s.%(ext)s")
     ydl_opts = {
@@ -134,6 +219,15 @@ def download_video(url: str) -> Path:
         "socket_timeout": 20,
         "cachedir": False,
     }
+    extractor_args = youtube_extractor_args(url, use_youtube_cookies=use_youtube_cookies)
+    if extractor_args:
+        ydl_opts["extractor_args"] = extractor_args
+    if use_youtube_proxy and is_youtube_url(url):
+        if proxy := youtube_proxy_url():
+            ydl_opts["proxy"] = proxy
+    if use_youtube_cookies and is_youtube_url(url):
+        if cookiefile := write_youtube_cookie_file(tempdir):
+            ydl_opts["cookiefile"] = str(cookiefile)
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(url, download=True)
@@ -146,14 +240,104 @@ def download_video(url: str) -> Path:
         raise
     except Exception as exc:
         shutil.rmtree(tempdir, ignore_errors=True)
-        message = clean_error(str(exc))
-        if "Requested format is not available" in message:
-            raise DownloadError("这个链接暂时没有可直接处理的视频格式。") from exc
-        if "File is larger than max-filesize" in message:
-            raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
-        if youtube_requires_sign_in(message):
-            raise DownloadError("YouTube 要求登录或真人验证，网页版无法读取你的 YouTube Cookie。请改用屏幕录制，或先把视频保存到本地后上传。") from exc
-        raise DownloadError(message or "这个链接暂时无法获取。") from exc
+        raise
+
+
+def raise_download_error(message: str, max_download_mb: int, exc: Exception) -> None:
+    if "Requested format is not available" in message:
+        raise DownloadError("这个链接暂时没有可直接处理的视频格式。") from exc
+    if "File is larger than max-filesize" in message:
+        raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
+    if youtube_requires_sign_in(message):
+        raise DownloadError("YouTube 要求登录或真人验证，已尝试服务端 YouTube Cookie 后仍无法获取。") from exc
+    raise DownloadError(message or "这个链接暂时无法获取。") from exc
+
+
+def download_url(url: str, *, rights_confirmed: bool = False) -> Path:
+    max_download_mb, max_download_bytes = download_size_limit()
+    if is_bilibili_url(url):
+        if not rights_confirmed:
+            raise DownloadError("请先确认你有权保存、转换或分析这个 B 站视频。")
+        try:
+            return download_bilibili_video(url, max_download_bytes=max_download_bytes)
+        except BilibiliError as exc:
+            message = str(exc)
+            if "超过当前下载大小限制" in message:
+                raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
+            raise
+    return download_video(url)
+
+
+def download_size_limit() -> tuple[int, int]:
+    max_download_mb = int(os.getenv("VID2PPT_CLOUD_MAX_DOWNLOAD_MB", str(DEFAULT_MAX_DOWNLOAD_MB)))
+    return max_download_mb, max(1, max_download_mb) * 1024 * 1024
+
+
+def youtube_extractor_args(url: str, *, use_youtube_cookies: bool = False) -> dict[str, dict[str, list[str]]] | None:
+    if not is_youtube_url(url):
+        return None
+    args: dict[str, list[str]] = {}
+    default_clients = YOUTUBE_COOKIE_PLAYER_CLIENTS if use_youtube_cookies else DEFAULT_YOUTUBE_PLAYER_CLIENTS
+    clients = csv_env("VID2PPT_YOUTUBE_PLAYER_CLIENTS", default_clients)
+    if clients:
+        args["player_client"] = clients
+    player_skip = csv_env("VID2PPT_YOUTUBE_PLAYER_SKIP", DEFAULT_YOUTUBE_PLAYER_SKIP)
+    if player_skip:
+        args["player_skip"] = player_skip
+    return {"youtube": args} if args else None
+
+
+def youtube_proxy_url() -> str:
+    for env_name in YOUTUBE_PROXY_ENV_NAMES:
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def write_youtube_cookie_file(directory: Path) -> Path | None:
+    content = youtube_cookie_file_content()
+    if not content:
+        return None
+    path = directory / "youtube-cookies.txt"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def youtube_cookie_file_content() -> str:
+    for env_name in YOUTUBE_COOKIE_B64_ENV_NAMES:
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            try:
+                decoded = base64.b64decode(value).decode("utf-8")
+            except Exception:
+                return ""
+            return normalize_netscape_cookie_text(decoded)
+
+    for env_name in YOUTUBE_COOKIE_TEXT_ENV_NAMES:
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            return normalize_netscape_cookie_text(value)
+    return ""
+
+
+def normalize_netscape_cookie_text(content: str) -> str:
+    text = content.strip()
+    if "\\n" in text and "\n" not in text:
+        text = text.replace("\\n", "\n")
+    if not text.startswith("# Netscape"):
+        text = "# Netscape HTTP Cookie File\n" + text
+    return text.rstrip() + "\n"
+
+
+def csv_env(name: str, default: str) -> list[str]:
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+def is_youtube_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com")
 
 
 def find_downloaded_media(directory: Path) -> Path:

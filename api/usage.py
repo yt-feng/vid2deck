@@ -15,7 +15,7 @@ except ModuleNotFoundError:
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-ALLOWED_EVENTS = {"video_conversion", "editable_slide", "transcribe_minute"}
+ALLOWED_EVENTS = {"video_conversion", "editable_slide", "summary_generation", "transcribe_minute"}
 
 
 class handler(BaseHTTPRequestHandler):

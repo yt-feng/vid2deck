@@ -4,17 +4,28 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler
 from typing import Any
+from datetime import datetime, timezone
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 try:
     from _auth import verify_user_token
+    from _plans import effective_plan, plan_limits
+    from _supabase import find_entitlement, insert_usage_event, list_usage_events
 except ModuleNotFoundError:
     from api._auth import verify_user_token
+    from api._plans import effective_plan, plan_limits
+    from api._supabase import find_entitlement, insert_usage_event, list_usage_events
 
 AUTH_CODE = (os.getenv("AUTH_CODE") or "").strip()
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+ACTIVE_STATUSES = {"active", "trialing"}
+SUMMARY_EVENT_TYPE = "summary_generation"
+
+
+class SummaryQuotaError(RuntimeError):
+    pass
 
 
 def make_summary(transcript: str) -> str:
@@ -72,7 +83,8 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            if not request_is_authorized(self.headers.get("x-access-code", ""), self.headers.get("authorization", "")):
+            user = authorized_user(self.headers.get("x-access-code", ""), self.headers.get("authorization", ""))
+            if user is None:
                 self.send_json({"detail": "请先登录账号。"}, 401)
                 return
 
@@ -82,7 +94,21 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json({"detail": "transcript is required"}, 400)
                 return
 
-            self.send_json({"summary": make_summary(transcript)})
+            email = str(user.get("email") or "").strip().lower()
+            if email:
+                ensure_summary_quota(email)
+
+            summary = make_summary(transcript)
+            usage = None
+            if email:
+                insert_usage_event(email, SUMMARY_EVENT_TYPE, {"source": "summary_api"}, units=1)
+                usage = usage_payload(email)
+            payload: dict[str, Any] = {"summary": summary}
+            if usage:
+                payload["usage"] = usage
+            self.send_json(payload)
+        except SummaryQuotaError as exc:
+            self.send_json({"detail": str(exc)}, 402)
         except Exception as exc:
             self.send_json({"detail": str(exc)}, 500)
 
@@ -106,17 +132,73 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def request_is_authorized(access_code_header: str, authorization_header: str) -> bool:
+def authorized_user(access_code_header: str, authorization_header: str) -> dict[str, Any] | None:
     access_code = access_code_header.strip()
     if AUTH_CODE and access_code == AUTH_CODE:
-        return True
+        return {"username": "access-code", "email": ""}
 
     prefix = "Bearer "
     if not authorization_header.startswith(prefix):
-        return False
+        return None
     token = authorization_header.removeprefix(prefix).strip()
     try:
-        verify_user_token(token)
-        return True
+        return verify_user_token(token)
     except Exception:
+        return None
+
+
+def ensure_summary_quota(email: str) -> None:
+    limits = plan_limits(effective_plan_for_email(email))
+    limit = limits.get("summary_generations_monthly")
+    if limit is None:
+        return
+    used = usage_payload(email)["monthly"].get(SUMMARY_EVENT_TYPE, 0)
+    if int(used) + 1 > int(limit):
+        raise SummaryQuotaError(f"免费 Summary 次数已用完：本月 {used}/{limit} 次。请在定价页开通或升级后继续。")
+
+
+def effective_plan_for_email(email: str) -> str:
+    row = find_entitlement(email)
+    if not row:
+        return "free"
+    plan = str(row.get("plan") or "free")
+    status = str(row.get("status") or "inactive")
+    lifetime = bool(row.get("lifetime"))
+    active = status in ACTIVE_STATUSES and (lifetime or period_is_current(row.get("current_period_end")))
+    return effective_plan(plan, active)
+
+
+def usage_payload(email: str) -> dict[str, Any]:
+    period_start = month_start_iso()
+    monthly: dict[str, int] = {
+        "video_conversion": 0,
+        "editable_slide": 0,
+        SUMMARY_EVENT_TYPE: 0,
+        "transcribe_minute": 0,
+    }
+    for event in list_usage_events(email, period_start):
+        event_type = str(event.get("event_type") or "")
+        if event_type not in monthly:
+            continue
+        monthly[event_type] += max(0, int(event.get("units") or 0))
+    return {
+        "email": email,
+        "period": "monthly",
+        "period_start": period_start,
+        "monthly": monthly,
+    }
+
+
+def month_start_iso() -> str:
+    now = datetime.now(timezone.utc)
+    return datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def period_is_current(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
         return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed > datetime.now(timezone.utc)

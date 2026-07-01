@@ -40,6 +40,24 @@ type TesseractApi = {
   createWorker: (langs: string[] | string, oem?: number, options?: Record<string, unknown>) => Promise<OcrWorker>;
   PSM?: { SPARSE_TEXT?: string; AUTO?: string };
 };
+type PdfViewport = { width: number; height: number };
+type PdfRenderTask = { promise: Promise<void> };
+type PdfPage = {
+  getViewport: (options: { scale: number }) => PdfViewport;
+  render: (options: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }) => PdfRenderTask;
+};
+type PdfDocument = {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<PdfPage>;
+  cleanup?: () => void;
+  destroy?: () => Promise<void> | void;
+};
+type PdfJsApi = {
+  GlobalWorkerOptions: { workerSrc: string };
+  getDocument: (source: { data: ArrayBuffer }) => { promise: Promise<PdfDocument> };
+};
+type NotebookMaskBox = { x: number; y: number; width: number; height: number; detected: boolean };
+type Rgb = { r: number; g: number; b: number };
 type PaddleConfig = {
   PADDLE_ENV?: string;
   PADDLE_CLIENT_TOKEN?: string;
@@ -61,7 +79,6 @@ type Settings = {
   sampleEvery: number;
   duplicateThreshold: number;
   minGap: number;
-  summaryApiUrl: string;
 };
 
 type AuthMode = 'login' | 'register';
@@ -81,6 +98,7 @@ type PlanLimits = {
   video_max_minutes: number | null;
   video_conversions_monthly: number | null;
   editable_slides_monthly: number | null;
+  summary_generations_monthly: number | null;
   transcribe_minutes_monthly: number | null;
   batch_processing: boolean;
   image_pptx: boolean;
@@ -97,7 +115,7 @@ type EntitlementPayload = {
   limits?: Partial<PlanLimits>;
   updated_at?: string;
 };
-type UsageEventType = 'video_conversion' | 'editable_slide' | 'transcribe_minute';
+type UsageEventType = 'video_conversion' | 'editable_slide' | 'summary_generation' | 'transcribe_minute';
 type UsageSummary = {
   email: string;
   period?: string;
@@ -118,6 +136,26 @@ type VideoMeta = { duration: number; width: number; height: number };
 type FrameExtractor = { capture: (index: number, time: number) => Promise<CapturedFrame>; dispose: () => void };
 type JobStatus = 'queued' | 'processing' | 'done' | 'error';
 type UrlDownloadMode = 'queue' | 'extract';
+type MediaMetadata = {
+  sourceType: 'url';
+  provider: string;
+  url: string;
+  finalUrl?: string;
+  title?: string;
+  authorName?: string;
+  authorUrl?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number | null;
+  contentType?: string;
+  contentLength?: string | null;
+  formatCount?: number;
+  downloadable?: boolean;
+  allowedActions?: string[];
+  policy?: {
+    downloadAllowed?: boolean;
+    reason?: string;
+  };
+};
 
 type FileJobState = {
   slides: Slide[];
@@ -143,17 +181,30 @@ const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
 const TIMELINE_PAINT_INTERVAL_MS = 220;
 const IMAGE_DECK_MAX_EDGE = 2400;
+const PERCEIVED_UPLOAD_MIN_MS = 900;
+const PERCEIVED_UPLOAD_MAX_MS = 2600;
+const PERCEIVED_PROCESSING_MS = 460;
+const PERCEIVED_UPLOAD_SPEEDUP = 1.35;
 const PPTX_SLIDE_WIDTH_EMU = 12192000;
 const PPTX_SLIDE_HEIGHT_EMU = 6858000;
 const TESSERACT_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
 const OCR_LANGUAGES = ['eng', 'chi_sim'];
 const OCR_MAX_EDGE = 2800;
 const OCR_MIN_CONFIDENCE = 35;
+const PDFJS_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS_WORKER_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+const PDF_RENDER_SCALE = 2;
+const PDF_RENDER_MAX_EDGE = 3200;
+const NOTEBOOK_MASK_FALLBACK_WIDTH = 0.09;
+const NOTEBOOK_MASK_FALLBACK_HEIGHT = 0.045;
+const NOTEBOOK_MASK_MARGIN = 0.012;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
 const CLOUD_DOWNLOADER_URL = '/api/download-video';
+const MEDIA_METADATA_URL = '/api/media/metadata';
+const YT1S_EXTERNAL_URL = 'https://yt1s.com.co/en218/';
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 10;
@@ -162,6 +213,7 @@ const FREE_PLAN_LIMITS: PlanLimits = {
   video_max_minutes: 10,
   video_conversions_monthly: 3,
   editable_slides_monthly: 100,
+  summary_generations_monthly: 10,
   transcribe_minutes_monthly: 600,
   batch_processing: false,
   image_pptx: true,
@@ -170,8 +222,10 @@ const FREE_PLAN_LIMITS: PlanLimits = {
 const USAGE_UNITS: Record<UsageEventType, string> = {
   video_conversion: '次',
   editable_slide: '张',
+  summary_generation: '次',
   transcribe_minute: '分钟'
 };
+const SUMMARY_API_URL = '/api/summarize-simple';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -182,7 +236,7 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Vid2PPT Deck</p>
         <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与Summary</h1>
-        <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可本地生成 PPTX；批量上传后，一键抽帧即可下载所有帧图片压缩包（Frames ZIP）。</p>
+        <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可生成 PPTX；批量上传后，一键生成所有页面并下载 Frames ZIP。</p>
       </div>
     </section>
 
@@ -222,7 +276,7 @@ app.innerHTML = `
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Image to PPT</p>
-          <h2>图片本地生成可编辑 PPTX</h2>
+          <h2>图片生成可编辑 PPTX</h2>
         </div>
       </div>
 
@@ -242,20 +296,45 @@ app.innerHTML = `
       <div class="status" id="imageStatus">等待上传图片。</div>
     </section>
 
-    <section class="panel">
-      <label class="dropzone" id="dropzone" for="videoInput">
-        <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
-        <span id="fileLabel">选择或拖入一个或多个视频文件</span>
-        <small>可以一次选择多个文件，也可以多次追加。视频处理在浏览器本地完成。</small>
+    <section class="panel notebook-pdf-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">NotebookLM PDF</p>
+          <h2>抹除右下角 NotebookLM Logo</h2>
+        </div>
+      </div>
+
+      <label class="dropzone notebook-pdf-dropzone" id="notebookPdfDropzone" for="notebookPdfInput">
+        <input id="notebookPdfInput" type="file" accept="application/pdf,.pdf" />
+        <span id="notebookPdfFileLabel">选择或拖入 NotebookLM 生成的 PDF</span>
+        <small>本地识别右下角 NotebookLM 标识，打码遮住后下载新的 PDF。</small>
       </label>
 
+      <div id="notebookPdfInfo" class="pdf-file-info" hidden></div>
+
+      <div class="actions">
+        <button id="notebookMaskPdfBtn" disabled>抹除 Logo 并下载 PDF</button>
+      </div>
+
+      <div class="status" id="notebookPdfStatus">等待上传 PDF。</div>
+    </section>
+
+    <section class="panel video-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Video to Slides</p>
+          <h2>粘贴链接或上传视频，生成 PPT/PDF</h2>
+        </div>
+        <span>完成后自动进入处理工作台</span>
+      </div>
+
       <form id="videoUrlForm" class="url-import">
-        <label>在线视频链接
-          <input id="videoUrlInput" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+        <label>B站/在线视频链接
+          <input id="videoUrlInput" type="url" inputmode="url" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" />
         </label>
         <div class="url-import-actions">
           <button id="downloadUrlBtn" type="submit">下载到队列</button>
-          <button id="processUrlBtn" type="button" class="ghost-btn">获取并直接抽帧</button>
+          <button id="processUrlBtn" type="button" class="ghost-btn">获取并直接生成</button>
         </div>
         <div id="urlDownloadProgress" class="url-download-progress" hidden>
           <div class="url-download-progress-meta">
@@ -264,8 +343,29 @@ app.innerHTML = `
           </div>
           <div class="url-download-progress-track"><div id="urlDownloadProgressFill" class="url-download-progress-fill"></div></div>
         </div>
-        <small id="urlDownloadStatus" class="url-download-status">粘贴 YouTube、Bilibili 或其他视频链接，可先加入队列，也可直接抽帧生成 PPT/PDF。</small>
+        <div id="mediaPreview" class="media-preview" hidden>
+          <img id="mediaPreviewImage" alt="" hidden />
+          <div class="media-preview-body">
+            <div class="media-preview-heading">
+              <p id="mediaPreviewProvider" class="eyebrow">Media</p>
+              <h3 id="mediaPreviewTitle">已识别媒体</h3>
+            </div>
+            <p id="mediaPreviewMeta" class="media-preview-meta"></p>
+            <p id="mediaPreviewPolicy" class="media-preview-policy"></p>
+            <label id="mediaRightsLabel" class="rights-confirm">
+              <input id="mediaRightsConfirm" type="checkbox" />
+              <span>我确认有权保存、转换或分析这个媒体内容。</span>
+            </label>
+          </div>
+        </div>
+        <small id="urlDownloadStatus" class="url-download-status">粘贴哔哩哔哩或其他视频链接，可先加入队列，也可直接生成 PPT/PDF。</small>
       </form>
+
+      <label class="dropzone" id="dropzone" for="videoInput">
+        <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
+        <span id="fileLabel">选择或拖入一个或多个视频文件</span>
+        <small>可以一次选择多个文件，也可以多次追加。上传后会自动进入处理工作台。</small>
+      </label>
 
       <div class="source-actions">
         <button id="recordScreenBtn" type="button">录制屏幕</button>
@@ -275,17 +375,16 @@ app.innerHTML = `
       <div id="fileList" class="file-list" hidden></div>
 
       <div class="grid">
-        <label>抽帧间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
+        <label>页面采样间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
         <label>去重阈值（越大越容易合并）<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
         <label>同页合并窗口（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
-        <label>Summary API URL<input id="summaryApiUrl" type="url" value="https://vid2deck.vercel.app/api/summarize-simple" /></label>
       </div>
 
-      <div class="hint">单文件：点击“处理当前视频”进入工作台，支持勾选、裁剪、删除、补抓帧，最后下载 PDF。多文件：点击“批量抽帧并下载 ZIP”，自动逐个处理全部视频，仅打包输出抽帧图片（不含转写与 Summary）。</div>
+      <div class="hint">单文件：点击“处理当前视频”进入工作台，支持勾选、裁剪、删除、补抓页面，最后下载 PDF。多文件：点击“批量生成并下载 ZIP”，自动逐个处理全部视频并打包输出页面图片。</div>
 
       <div class="actions">
         <button id="extractBtn" disabled>处理当前视频</button>
-        <button id="batchZipBtn" disabled>批量抽帧并下载 ZIP</button>
+        <button id="batchZipBtn" disabled>批量生成并下载 ZIP</button>
         <button id="downloadFramesZipBtn" disabled>下载已处理 Frames ZIP</button>
       </div>
 
@@ -302,52 +401,93 @@ app.innerHTML = `
   </main>
 
   <main id="workspaceView" class="workspace" hidden>
-    <header class="workspace-bar">
-      <button id="doneBtn" class="ghost-btn">回主页</button>
-      <button id="toggleSideBtn" class="ghost-btn" title="收起/展开左侧面板">⇤ 收起左栏</button>
-      <label class="select-all-control">
-        <input id="selectAllBox" type="checkbox" checked />
-        <span>全选</span>
-        <small id="selectCount">0/0</small>
-      </label>
-      <div class="workspace-spacer"></div>
-      <button id="downloadPdfBtn" disabled>导出 PDF</button>
-      <button id="downloadPptxBtn" disabled>导出 PPTX</button>
-    </header>
+    <aside class="workspace-rail" aria-label="应用导航">
+      <button id="railHomeBtn" class="rail-logo" type="button" title="回到产品入口">V</button>
+      <button id="railWorkspaceBtn" class="rail-item is-active" type="button">工作台</button>
+      <button id="railOrdersBtn" class="rail-item" type="button">订单</button>
+      <a class="rail-item" href="/pricing/">升级会员</a>
+      <a class="rail-item" href="mailto:support@vid2deck.com">联系我们</a>
+      <button id="railLoginBtn" class="rail-item" type="button">账号</button>
+    </aside>
 
-    <section class="result-dock" id="resultDock" aria-live="polite">
-      <div class="result-summary">
-        <span id="resultBadge" class="result-badge">等待处理</span>
-        <div>
-          <strong id="resultTitle">等待生成页面</strong>
-          <small id="resultSubtitle">上传并处理视频后，下载入口会固定显示在这里。</small>
+    <section class="workspace-main">
+      <header class="workspace-bar">
+        <button id="doneBtn" class="ghost-btn">回主页</button>
+        <button id="toggleSideBtn" class="ghost-btn" title="收起/展开左侧面板">⇤ 收起左栏</button>
+        <div class="workspace-title">
+          <strong>工作台</strong>
+          <small id="workspaceSubtitle">处理视频后，在这里勾选、预览和导出。</small>
         </div>
-      </div>
-      <div class="result-actions">
-        <button id="dockDownloadPdfBtn" class="primary-download" disabled>立即下载 PDF</button>
-        <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
-        <button id="dockDownloadFramesBtn" disabled>导出 Frames ZIP</button>
-      </div>
-    </section>
+        <label class="select-all-control">
+          <input id="selectAllBox" type="checkbox" checked />
+          <span>全选</span>
+          <small id="selectCount">0/0</small>
+        </label>
+        <div class="workspace-spacer"></div>
+        <button id="downloadPdfBtn" disabled>导出 PDF</button>
+        <button id="downloadPptxBtn" disabled>导出 PPTX</button>
+      </header>
 
-    <section class="workspace-body">
-      <aside class="workspace-side">
-        <div class="preview-card">
-          <img id="previewImage" alt="当前 frame 预览" />
-          <div id="previewEmpty" class="preview-empty">抽帧后会在这里预览当前 frame</div>
+      <section class="result-dock" id="resultDock" aria-live="polite">
+        <div class="result-summary">
+          <span id="resultBadge" class="result-badge">等待处理</span>
+          <div>
+            <strong id="resultTitle">等待生成页面</strong>
+            <small id="resultSubtitle">上传并处理视频后，下载入口会固定显示在这里。</small>
+          </div>
         </div>
+        <div class="result-actions">
+          <button id="dockDownloadPdfBtn" class="primary-download" disabled>立即下载 PDF</button>
+          <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
+          <button id="dockDownloadFramesBtn" disabled>导出 Frames ZIP</button>
+        </div>
+      </section>
+
+      <section class="workspace-command-bar" aria-label="导入视频">
+        <form id="workspaceVideoUrlForm" class="workspace-url-import">
+          <label>在线视频链接
+            <input id="workspaceVideoUrlInput" type="url" inputmode="url" placeholder="粘贴 B站、YouTube 或公开视频链接" autocomplete="off" />
+          </label>
+          <label class="workspace-rights-confirm">
+            <input id="workspaceRightsConfirm" type="checkbox" />
+            <span>我确认有权处理这个视频</span>
+          </label>
+          <div class="workspace-url-actions">
+            <button id="workspaceProcessUrlBtn" type="button">下载并开始生成</button>
+            <button id="workspaceDownloadUrlBtn" class="ghost-btn" type="submit">仅下载到队列</button>
+          </div>
+          <small id="workspaceUrlStatus">粘贴链接后会直接进入获取视频和页面生成流程。</small>
+        </form>
+        <label class="workspace-file-dropzone" id="workspaceDropzone" for="workspaceVideoInput">
+          <input id="workspaceVideoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
+          <strong>上传视频</strong>
+          <small>也可以拖到这里</small>
+        </label>
+        <div class="workspace-import-actions">
+          <button id="workspaceRecordScreenBtn" type="button">录制屏幕</button>
+          <button id="workspaceStopRecordBtn" class="danger-btn" type="button" hidden>停止录制并生成</button>
+          <button id="emptyWorkspaceStartBtn" class="ghost-btn" type="button">开始当前任务</button>
+        </div>
+      </section>
+
+      <section class="workspace-body">
+        <aside class="workspace-side">
+          <div class="preview-card">
+            <img id="previewImage" alt="当前 frame 预览" />
+            <div id="previewEmpty" class="preview-empty">生成后会在这里预览当前页面</div>
+          </div>
 
         <div class="progress-panel" id="progressPanel" hidden>
           <div class="progress-meta"><span id="progressText">准备开始</span><strong id="progressPercent">0%</strong></div>
           <div class="progress-track" aria-label="处理进度"><div class="progress-fill" id="progressFill"></div></div>
         </div>
 
-        <div class="status" id="status">等待抽帧。</div>
+        <div class="status" id="status">等待处理。</div>
 
         <section class="export-panel" aria-label="导出选中页面">
           <div>
             <strong>备用导出</strong>
-            <small id="exportHint">抽帧完成后，也可以从这里下载选中页面。</small>
+            <small id="exportHint">生成完成后，也可以从这里下载选中页面。</small>
           </div>
           <div class="export-actions">
             <button id="sideDownloadPdfBtn" disabled>下载 PDF</button>
@@ -404,8 +544,14 @@ app.innerHTML = `
         </label>
       </aside>
 
-      <section class="workspace-grid-wrap">
-        <div id="slides" class="slides workspace-slides"></div>
+        <section class="workspace-grid-wrap">
+          <div id="workspaceEmptyState" class="workspace-empty-state">
+            <p class="eyebrow">Workspace</p>
+            <h2 id="workspaceEmptyTitle">工作台还没有任务</h2>
+            <p id="workspaceEmptyBody">粘贴 B 站或 YouTube 链接、上传视频，或录制屏幕后，处理进度和可导出的页面会出现在这里。</p>
+          </div>
+          <div id="slides" class="slides workspace-slides"></div>
+        </section>
       </section>
     </section>
 
@@ -477,9 +623,10 @@ app.innerHTML = `
           <h2>这个链接需要网页登录验证</h2>
         </div>
       </div>
-      <p id="urlFallbackMessage">Vid2PPT 无法在云端读取你的 YouTube 登录状态。可以打开原视频后，用浏览器授权录屏继续处理。</p>
+      <p id="urlFallbackMessage">这个链接需要网页登录验证。可以打开原视频后，用录屏方式继续处理。</p>
       <div class="url-fallback-actions">
         <button id="urlFallbackOpenBtn" type="button" class="ghost-btn">打开原视频</button>
+        <button id="urlFallbackExternalBtn" type="button" class="ghost-btn">复制链接并打开下载页</button>
         <button id="urlFallbackRecordBtn" type="button">开始录制并加入队列</button>
         <button id="urlFallbackCancelBtn" value="cancel" class="ghost-btn">取消</button>
       </div>
@@ -512,10 +659,13 @@ const authLogoutBtn = $<HTMLButtonElement>('#authLogoutBtn');
 const accountStatus = $<HTMLElement>('#accountStatus');
 const dropzone = $<HTMLLabelElement>('#dropzone');
 const imageDropzone = $<HTMLLabelElement>('#imageDropzone');
+const notebookPdfDropzone = $<HTMLLabelElement>('#notebookPdfDropzone');
 const fileLabel = $<HTMLSpanElement>('#fileLabel');
 const imageFileLabel = $<HTMLSpanElement>('#imageFileLabel');
+const notebookPdfFileLabel = $<HTMLSpanElement>('#notebookPdfFileLabel');
 const fileList = $<HTMLDivElement>('#fileList');
 const imageFileList = $<HTMLDivElement>('#imageFileList');
+const notebookPdfInfo = $<HTMLDivElement>('#notebookPdfInfo');
 const videoInput = $<HTMLInputElement>('#videoInput');
 const videoUrlForm = $<HTMLFormElement>('#videoUrlForm');
 const videoUrlInput = $<HTMLInputElement>('#videoUrlInput');
@@ -526,7 +676,16 @@ const urlDownloadProgressText = $<HTMLElement>('#urlDownloadProgressText');
 const urlDownloadProgressPercent = $<HTMLElement>('#urlDownloadProgressPercent');
 const urlDownloadProgressFill = $<HTMLDivElement>('#urlDownloadProgressFill');
 const urlDownloadStatus = $<HTMLElement>('#urlDownloadStatus');
+const mediaPreview = $<HTMLDivElement>('#mediaPreview');
+const mediaPreviewImage = $<HTMLImageElement>('#mediaPreviewImage');
+const mediaPreviewProvider = $<HTMLElement>('#mediaPreviewProvider');
+const mediaPreviewTitle = $<HTMLElement>('#mediaPreviewTitle');
+const mediaPreviewMeta = $<HTMLElement>('#mediaPreviewMeta');
+const mediaPreviewPolicy = $<HTMLElement>('#mediaPreviewPolicy');
+const mediaRightsLabel = $<HTMLLabelElement>('#mediaRightsLabel');
+const mediaRightsConfirm = $<HTMLInputElement>('#mediaRightsConfirm');
 const imageInput = $<HTMLInputElement>('#imageInput');
+const notebookPdfInput = $<HTMLInputElement>('#notebookPdfInput');
 const recordScreenBtn = $<HTMLButtonElement>('#recordScreenBtn');
 const stopRecordBtn = $<HTMLButtonElement>('#stopRecordBtn');
 const extractBtn = $<HTMLButtonElement>('#extractBtn');
@@ -534,6 +693,7 @@ const batchZipBtn = $<HTMLButtonElement>('#batchZipBtn');
 const downloadFramesZipBtn = $<HTMLButtonElement>('#downloadFramesZipBtn');
 const imagePptBtn = $<HTMLButtonElement>('#imagePptBtn');
 const imageWorkspaceBtn = $<HTMLButtonElement>('#imageWorkspaceBtn');
+const notebookMaskPdfBtn = $<HTMLButtonElement>('#notebookMaskPdfBtn');
 const doneBtn = $<HTMLButtonElement>('#doneBtn');
 const toggleSideBtn = $<HTMLButtonElement>('#toggleSideBtn');
 const selectAllBox = $<HTMLInputElement>('#selectAllBox');
@@ -557,11 +717,27 @@ const downloadSummaryBtn = $<HTMLButtonElement>('#downloadSummaryBtn');
 const exportHint = $<HTMLElement>('#exportHint');
 const homeStatus = $<HTMLDivElement>('#homeStatus');
 const imageStatus = $<HTMLDivElement>('#imageStatus');
+const notebookPdfStatus = $<HTMLDivElement>('#notebookPdfStatus');
 const statusEl = $<HTMLDivElement>('#status');
 const progressPanel = $<HTMLDivElement>('#progressPanel');
 const progressText = $<HTMLSpanElement>('#progressText');
 const progressPercent = $<HTMLElement>('#progressPercent');
 const progressFill = $<HTMLDivElement>('#progressFill');
+const workspaceSubtitle = $<HTMLElement>('#workspaceSubtitle');
+const workspaceEmptyState = $<HTMLDivElement>('#workspaceEmptyState');
+const workspaceEmptyTitle = $<HTMLElement>('#workspaceEmptyTitle');
+const workspaceEmptyBody = $<HTMLElement>('#workspaceEmptyBody');
+const workspaceVideoUrlForm = $<HTMLFormElement>('#workspaceVideoUrlForm');
+const workspaceVideoUrlInput = $<HTMLInputElement>('#workspaceVideoUrlInput');
+const workspaceRightsConfirm = $<HTMLInputElement>('#workspaceRightsConfirm');
+const workspaceProcessUrlBtn = $<HTMLButtonElement>('#workspaceProcessUrlBtn');
+const workspaceDownloadUrlBtn = $<HTMLButtonElement>('#workspaceDownloadUrlBtn');
+const workspaceUrlStatus = $<HTMLElement>('#workspaceUrlStatus');
+const workspaceDropzone = $<HTMLLabelElement>('#workspaceDropzone');
+const workspaceVideoInput = $<HTMLInputElement>('#workspaceVideoInput');
+const workspaceRecordScreenBtn = $<HTMLButtonElement>('#workspaceRecordScreenBtn');
+const workspaceStopRecordBtn = $<HTMLButtonElement>('#workspaceStopRecordBtn');
+const emptyWorkspaceStartBtn = $<HTMLButtonElement>('#emptyWorkspaceStartBtn');
 const slidesEl = $<HTMLDivElement>('#slides');
 const transcriptEl = $<HTMLTextAreaElement>('#transcript');
 const summaryEl = $<HTMLTextAreaElement>('#summary');
@@ -581,6 +757,12 @@ const cropWidth = $<HTMLInputElement>('#cropWidth');
 const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 const openSiteTipDialogBtn = document.querySelector<HTMLButtonElement>('#openSiteTipDialogBtn');
+const openWorkspaceBtn = document.querySelector<HTMLButtonElement>('#openWorkspaceBtn');
+const openLoginBtn = document.querySelector<HTMLButtonElement>('#openLoginBtn');
+const railHomeBtn = $<HTMLButtonElement>('#railHomeBtn');
+const railWorkspaceBtn = $<HTMLButtonElement>('#railWorkspaceBtn');
+const railOrdersBtn = $<HTMLButtonElement>('#railOrdersBtn');
+const railLoginBtn = $<HTMLButtonElement>('#railLoginBtn');
 const openTipDialogBtn = $<HTMLButtonElement>('#openTipDialogBtn');
 const tipDialog = $<HTMLDialogElement>('#tipDialog');
 const showCustomTipBtn = $<HTMLButtonElement>('#showCustomTipBtn');
@@ -608,6 +790,7 @@ const textBoxAlign = $<HTMLSelectElement>('#textBoxAlign');
 
 let selectedFiles: File[] = [];
 let selectedImageFiles: File[] = [];
+let selectedNotebookPdfFile: File | null = null;
 let currentFileIndex = -1;
 let selectedFile: File | null = null;
 const fileStates = new Map<string, FileJobState>();
@@ -624,9 +807,11 @@ let lastTimelinePaint = 0;
 let isExtracting = false;
 let isBatchProcessing = false;
 let isUrlDownloading = false;
+let isPerceivedUploading = false;
 let isTranscribing = false;
 let isSummarizing = false;
 let isOcrRunning = false;
+let isPdfMasking = false;
 let isRecording = false;
 let mediaRecorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
@@ -635,7 +820,12 @@ let currentRecordingMimeType = 'video/webm';
 let recordingCompletionMode: UrlDownloadMode = 'queue';
 let fallbackSourceUrl = '';
 let fallbackUrlMode: UrlDownloadMode = 'queue';
+let currentMediaMetadata: MediaMetadata | null = null;
+let currentMediaMetadataUrl = '';
+let mediaMetadataRequestId = 0;
+let mediaMetadataDebounce = 0;
 let tesseractLoadPromise: Promise<TesseractApi> | null = null;
+let pdfJsLoadPromise: Promise<PdfJsApi> | null = null;
 let paddleConfigPromise: Promise<PaddleConfig> | null = null;
 let paddleLoadPromise: Promise<PaddleConfig> | null = null;
 let paddleInitialized = false;
@@ -677,7 +867,20 @@ videoUrlForm.addEventListener('submit', (event) => {
 processUrlBtn.addEventListener('click', () => {
   void downloadVideoFromUrl('extract');
 });
+videoUrlInput.addEventListener('input', () => {
+  scheduleMediaMetadataPreview();
+});
+videoUrlInput.addEventListener('blur', () => {
+  void refreshMediaMetadataPreview();
+});
+mediaRightsConfirm.addEventListener('change', () => {
+  if (mediaRightsConfirm.checked && currentMediaMetadata?.provider === 'bilibili') {
+    setUrlDownloadStatus('已确认，可下载这个 B 站视频到队列。', 'ok');
+  }
+  updateActionState();
+});
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
+notebookPdfInput.addEventListener('change', () => selectNotebookPdfFile(Array.from(notebookPdfInput.files ?? [])[0] ?? null));
 recordScreenBtn.addEventListener('click', () => startScreenRecording());
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
 extractBtn.addEventListener('click', () => processCurrentFile());
@@ -685,6 +888,7 @@ batchZipBtn.addEventListener('click', () => batchExtractAndDownloadZip());
 downloadFramesZipBtn.addEventListener('click', () => downloadProcessedFramesZip());
 imagePptBtn.addEventListener('click', () => downloadImagesAsPptx());
 imageWorkspaceBtn.addEventListener('click', () => openImagesInWorkspace());
+notebookMaskPdfBtn.addEventListener('click', () => maskSelectedNotebookPdf());
 transcriptEl.addEventListener('input', () => { persistWorkspaceToState(); updateActionState(); });
 summaryEl.addEventListener('input', () => persistWorkspaceToState());
 
@@ -754,6 +958,48 @@ imageDropzone.addEventListener('drop', (event) => {
   addImageFiles(Array.from(event.dataTransfer?.files ?? []));
 });
 
+for (const name of ['dragenter', 'dragover']) {
+  notebookPdfDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    notebookPdfDropzone.classList.add('is-dragover');
+  });
+}
+for (const name of ['dragleave', 'dragend']) {
+  notebookPdfDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    notebookPdfDropzone.classList.remove('is-dragover');
+  });
+}
+notebookPdfDropzone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  notebookPdfDropzone.classList.remove('is-dragover');
+  selectNotebookPdfFile(Array.from(event.dataTransfer?.files ?? []).find(isSupportedPdfFile) ?? null);
+});
+
+for (const name of ['dragenter', 'dragover']) {
+  workspaceDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    workspaceDropzone.classList.add('is-dragover');
+  });
+}
+for (const name of ['dragleave', 'dragend']) {
+  workspaceDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    workspaceDropzone.classList.remove('is-dragover');
+  });
+}
+workspaceDropzone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  workspaceDropzone.classList.remove('is-dragover');
+  addWorkspaceFiles(Array.from(event.dataTransfer?.files ?? []));
+});
+
 timelineRail.addEventListener('pointerdown', (event) => {
   if (!videoMeta || isExtracting || isBatchProcessing) return;
   isDraggingTimeline = true;
@@ -787,6 +1033,29 @@ cropApplyBtn.addEventListener('click', async (event) => {
 });
 
 openSiteTipDialogBtn?.addEventListener('click', () => openTipDialog());
+openWorkspaceBtn?.addEventListener('click', () => openWorkspaceFromNav());
+openLoginBtn?.addEventListener('click', () => focusLoginPanel());
+railHomeBtn.addEventListener('click', () => returnHomeForVideoStart());
+railWorkspaceBtn.addEventListener('click', () => openWorkspaceFromNav());
+railOrdersBtn.addEventListener('click', () => showOrdersPlaceholder());
+railLoginBtn.addEventListener('click', () => focusLoginPanel());
+emptyWorkspaceStartBtn.addEventListener('click', () => {
+  if (selectedFile && workspaceMode === 'video' && slides.length === 0) void processCurrentFile();
+  else workspaceVideoUrlInput.focus();
+});
+workspaceVideoUrlForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void startWorkspaceUrlDownload('queue');
+});
+workspaceProcessUrlBtn.addEventListener('click', () => {
+  void startWorkspaceUrlDownload('extract');
+});
+workspaceVideoInput.addEventListener('change', () => addWorkspaceFiles(Array.from(workspaceVideoInput.files ?? [])));
+workspaceRecordScreenBtn.addEventListener('click', () => {
+  setWorkspaceUrlStatus('正在录制屏幕，停止后会自动生成页面。', 'warn');
+  void startScreenRecording('extract');
+});
+workspaceStopRecordBtn.addEventListener('click', () => stopScreenRecording());
 openTipDialogBtn.addEventListener('click', () => openTipDialog());
 showCustomTipBtn.addEventListener('click', () => showCustomTipInput());
 customTipPayBtn.addEventListener('click', () => {
@@ -859,6 +1128,7 @@ function updateAuthUi(): void {
   const signedIn = !!authSession;
   authForm.hidden = signedIn;
   authSignedIn.hidden = !signedIn;
+  if (openLoginBtn) openLoginBtn.textContent = authSession ? `账号：${authSession.user.username}` : '登录';
   if (authSession) {
     authSignedInName.textContent = authSession.user.username;
     authSignedInEmail.textContent = authSession.user.email_is_generated ? `${authSession.user.email}（自动生成）` : authSession.user.email;
@@ -962,6 +1232,7 @@ function emptyUsageSummary(email = 'anonymous'): UsageSummary {
     monthly: {
       video_conversion: 0,
       editable_slide: 0,
+      summary_generation: 0,
       transcribe_minute: 0
     }
   };
@@ -993,6 +1264,7 @@ function normalizeMonthlyUsage(value: unknown): Record<string, number> {
   return {
     video_conversion: nonNegativeInteger(source.video_conversion),
     editable_slide: nonNegativeInteger(source.editable_slide),
+    summary_generation: nonNegativeInteger(source.summary_generation),
     transcribe_minute: nonNegativeInteger(source.transcribe_minute)
   };
 }
@@ -1078,6 +1350,7 @@ function normalizePlanLimits(limits: Partial<PlanLimits> | undefined): PlanLimit
     video_max_minutes: limitNumberOrNull(limits?.video_max_minutes, FREE_PLAN_LIMITS.video_max_minutes),
     video_conversions_monthly: limitNumberOrNull(limits?.video_conversions_monthly, FREE_PLAN_LIMITS.video_conversions_monthly),
     editable_slides_monthly: limitNumberOrNull(limits?.editable_slides_monthly, FREE_PLAN_LIMITS.editable_slides_monthly),
+    summary_generations_monthly: limitNumberOrNull(limits?.summary_generations_monthly, FREE_PLAN_LIMITS.summary_generations_monthly),
     transcribe_minutes_monthly: limitNumberOrNull(limits?.transcribe_minutes_monthly, FREE_PLAN_LIMITS.transcribe_minutes_monthly),
     batch_processing: Boolean(limits?.batch_processing ?? FREE_PLAN_LIMITS.batch_processing),
     image_pptx: Boolean(limits?.image_pptx ?? FREE_PLAN_LIMITS.image_pptx),
@@ -1123,7 +1396,7 @@ function renderEntitlementSummary(): void {
   const prefix = authSession
     ? `已登录，当前套餐：${planLabel(plan)}${periodText(entitlement.current_period_end)}`
     : `${authMode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可同步付费权益。'} 当前按免费版额度使用`;
-  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，转写${quotaText('transcribe_minute')}。`;
+  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，Summary ${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
   const tone: 'ok' | 'warn' | '' = authSession ? (plan === 'free' ? 'warn' : 'ok') : '';
   setAuthStatus(message, tone);
 }
@@ -1140,6 +1413,7 @@ function monthlyLimitFor(eventType: UsageEventType): number | null {
   const limits = currentLimits();
   if (eventType === 'video_conversion') return limits.video_conversions_monthly;
   if (eventType === 'editable_slide') return limits.editable_slides_monthly;
+  if (eventType === 'summary_generation') return limits.summary_generations_monthly;
   return limits.transcribe_minutes_monthly;
 }
 
@@ -1232,7 +1506,7 @@ async function readFileVideoMetadata(file: File): Promise<VideoMeta> {
 }
 
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isUrlDownloading || isTranscribing || isSummarizing || isOcrRunning || isRecording || isTipCheckoutOpening || isAuthBusy;
+  return isExtracting || isBatchProcessing || isUrlDownloading || isPerceivedUploading || isTranscribing || isSummarizing || isOcrRunning || isPdfMasking || isRecording || isTipCheckoutOpening || isAuthBusy;
 }
 
 function openTipDialog(): void {
@@ -1413,6 +1687,7 @@ function eventName(event: unknown): string {
 function setUrlDownloadStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
   urlDownloadStatus.textContent = message;
   urlDownloadStatus.className = `url-download-status${tone ? ` ${tone}` : ''}`;
+  setWorkspaceUrlStatus(message, tone);
 }
 
 function setUrlDownloadProgress(message: string, percent: number | null = null): void {
@@ -1430,12 +1705,193 @@ function setUrlDownloadProgress(message: string, percent: number | null = null):
   urlDownloadProgressPercent.textContent = `${clamped}%`;
 }
 
+function setWorkspaceUrlStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
+  workspaceUrlStatus.textContent = message;
+  workspaceUrlStatus.className = `workspace-url-status${tone ? ` ${tone}` : ''}`;
+  if (!workspaceView.hidden) setStatus(message);
+}
+
 function resetUrlDownloadProgress(): void {
   urlDownloadProgress.hidden = true;
   urlDownloadProgressFill.classList.remove('is-indeterminate');
   urlDownloadProgressFill.style.width = '0%';
   urlDownloadProgressText.textContent = '准备下载';
   urlDownloadProgressPercent.textContent = '0%';
+}
+
+function scheduleMediaMetadataPreview(): void {
+  window.clearTimeout(mediaMetadataDebounce);
+  const parsedUrl = parseDownloadUrl(videoUrlInput.value.trim());
+  if (!parsedUrl || !isBilibiliDownloadUrl(parsedUrl)) {
+    clearMediaPreview();
+    return;
+  }
+  mediaMetadataRequestId += 1;
+  clearMediaPreview(false);
+  mediaMetadataDebounce = window.setTimeout(() => {
+    void refreshMediaMetadataPreview();
+  }, 650);
+}
+
+async function refreshMediaMetadataPreview(): Promise<MediaMetadata | null> {
+  const parsedUrl = parseDownloadUrl(videoUrlInput.value.trim());
+  if (!parsedUrl || !isBilibiliDownloadUrl(parsedUrl)) {
+    clearMediaPreview();
+    return null;
+  }
+  const sourceUrl = parsedUrl.toString();
+  if (currentMediaMetadata && currentMediaMetadataUrl === sourceUrl) return currentMediaMetadata;
+
+  const requestId = mediaMetadataRequestId + 1;
+  mediaMetadataRequestId = requestId;
+  setUrlDownloadStatus('正在识别 B 站视频...', 'warn');
+  try {
+    const metadata = await fetchMediaMetadata(parsedUrl);
+    if (requestId !== mediaMetadataRequestId) return null;
+    renderMediaPreview(metadata, sourceUrl);
+    setUrlDownloadStatus('已识别 B 站视频，确认有权处理后即可下载。', 'warn');
+    return metadata;
+  } catch (error) {
+    if (requestId !== mediaMetadataRequestId) return null;
+    const metadata = renderBilibiliAttemptPreview(parsedUrl, urlDownloadErrorMessage(error));
+    setUrlDownloadStatus('B 站预览暂时不可用，确认有权处理后仍会直接尝试下载。', 'warn');
+    return metadata;
+  } finally {
+    updateActionState();
+  }
+}
+
+async function fetchMediaMetadata(parsedUrl: URL): Promise<MediaMetadata> {
+  const response = await fetch(MEDIA_METADATA_URL, {
+    method: 'POST',
+    mode: 'cors',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceType: 'url', url: parsedUrl.toString() })
+  });
+  if (!response.ok) throw new Error(await readResponseError(response));
+  const metadata = await response.json() as MediaMetadata;
+  if (!metadata || metadata.sourceType !== 'url') throw new Error('没有识别到可处理的视频信息。');
+  return metadata;
+}
+
+function renderMediaPreview(metadata: MediaMetadata, sourceUrl: string): void {
+  currentMediaMetadata = metadata;
+  currentMediaMetadataUrl = sourceUrl;
+  mediaRightsConfirm.checked = false;
+  mediaPreviewProvider.textContent = metadataProviderLabel(metadata.provider);
+  mediaPreviewTitle.textContent = metadata.title || '已识别媒体';
+  mediaPreviewMeta.textContent = mediaMetadataLine(metadata);
+  mediaPreviewPolicy.textContent = metadata.policy?.reason || '处理前请确认你有权保存、转换或分析该媒体。';
+  mediaRightsLabel.hidden = metadata.policy?.downloadAllowed === false;
+  if (metadata.thumbnailUrl) {
+    mediaPreviewImage.src = metadata.thumbnailUrl;
+    mediaPreviewImage.alt = metadata.title || '视频封面';
+    mediaPreviewImage.hidden = false;
+  } else {
+    mediaPreviewImage.removeAttribute('src');
+    mediaPreviewImage.alt = '';
+    mediaPreviewImage.hidden = true;
+  }
+  mediaPreview.hidden = false;
+}
+
+function renderBilibiliAttemptPreview(parsedUrl: URL, message: string): MediaMetadata {
+  const metadata: MediaMetadata = {
+    sourceType: 'url',
+    provider: 'bilibili',
+    url: parsedUrl.toString(),
+    title: 'Bilibili 视频',
+    downloadable: true,
+    allowedActions: ['download', 'transcode', 'thumbnail'],
+    policy: {
+      downloadAllowed: true,
+      reason: `${message} 你仍可确认权限后，让云端 yt-dlp 直接尝试下载。`
+    }
+  };
+  renderMediaPreview(metadata, parsedUrl.toString());
+  return metadata;
+}
+
+function clearMediaPreview(cancelPending = true): void {
+  if (cancelPending) {
+    window.clearTimeout(mediaMetadataDebounce);
+    mediaMetadataRequestId += 1;
+  }
+  currentMediaMetadata = null;
+  currentMediaMetadataUrl = '';
+  mediaRightsConfirm.checked = false;
+  mediaPreviewImage.removeAttribute('src');
+  mediaPreviewImage.hidden = true;
+  mediaPreview.hidden = true;
+  updateActionState();
+}
+
+async function ensureUrlDownloadAllowed(parsedUrl: URL, rightsConfirmed = mediaRightsConfirm.checked): Promise<boolean> {
+  if (!isBilibiliDownloadUrl(parsedUrl)) return true;
+  const hasConfirmedRights = rightsConfirmed || mediaRightsConfirm.checked;
+  let metadata = currentMediaMetadataUrl === parsedUrl.toString()
+    ? currentMediaMetadata
+    : await refreshMediaMetadataPreview();
+  if (!metadata) {
+    metadata = renderBilibiliAttemptPreview(parsedUrl, 'B 站预览暂时不可用。');
+  }
+  if (metadata.policy?.downloadAllowed === false || metadata.downloadable === false) {
+    setUrlDownloadStatus(metadata.policy?.reason || '这个链接当前不可下载。', 'error');
+    return false;
+  }
+  if (!hasConfirmedRights && !mediaRightsConfirm.checked) {
+    mediaPreview.hidden = false;
+    setUrlDownloadStatus('请先勾选“我确认有权保存、转换或分析这个媒体内容”。', 'warn');
+    updateActionState();
+    return false;
+  }
+  if (hasConfirmedRights) mediaRightsConfirm.checked = true;
+  return true;
+}
+
+function isBilibiliDownloadUrl(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  return host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com');
+}
+
+function metadataProviderLabel(provider: string): string {
+  if (provider === 'bilibili') return 'Bilibili';
+  if (provider === 'youtube-oembed') return 'YouTube';
+  if (provider === 'direct-media') return 'Direct Media';
+  return provider || 'Media';
+}
+
+function mediaMetadataLine(metadata: MediaMetadata): string {
+  const parts = [
+    metadata.authorName,
+    typeof metadata.durationSeconds === 'number' ? formatDuration(metadata.durationSeconds) : '',
+    metadata.contentType,
+    metadata.contentLength ? formatMediaBytes(Number(metadata.contentLength)) : ''
+  ].filter(Boolean);
+  return parts.join(' / ') || '可加入视频队列';
+}
+
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const hh = Math.floor(total / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  return hh > 0
+    ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+    : `${mm}:${String(ss).padStart(2, '0')}`;
+}
+
+function formatMediaBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return `${size >= 10 || index === 0 ? Math.round(size) : size.toFixed(1)} ${units[index]}`;
 }
 
 async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
@@ -1447,10 +1903,14 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     videoUrlInput.focus();
     return;
   }
-
   isUrlDownloading = true;
   updateActionState();
-  setUrlDownloadStatus(mode === 'extract' ? '正在获取视频，完成后会自动开始抽帧。' : '正在获取视频，完成后会加入队列。', 'warn');
+  if (!await ensureUrlDownloadAllowed(parsedUrl, mediaRightsConfirm.checked)) {
+    isUrlDownloading = false;
+    updateActionState();
+    return;
+  }
+  setUrlDownloadStatus(mode === 'extract' ? '正在获取视频，完成后会自动生成页面。' : '正在获取视频，完成后会加入队列。', 'warn');
   setUrlDownloadProgress('正在获取视频', null);
   let shouldExtract = false;
 
@@ -1460,7 +1920,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
       mode: 'cors',
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: parsedUrl.toString() })
+      body: JSON.stringify({ url: parsedUrl.toString(), rightsConfirmed: mediaRightsConfirm.checked })
     });
     if (!response.ok) throw new Error(await readResponseError(response));
 
@@ -1476,8 +1936,10 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
     addFiles([file], true);
     videoUrlInput.value = '';
-    setUrlDownloadProgress('已加入 Vid2PPT 队列', 100);
-    setUrlDownloadStatus(mode === 'extract' ? `已获取 ${filename}，马上开始抽帧。` : `已获取 ${filename}，并加入视频队列。`, 'ok');
+    clearMediaPreview();
+    setUrlDownloadProgress(mode === 'extract' ? '已获取视频，准备生成页面' : '已加入 Vid2PPT 队列', 100);
+    setUrlDownloadStatus(mode === 'extract' ? `已获取 ${filename}，正在进入处理工作台。` : `已获取 ${filename}，并加入视频队列。`, 'ok');
+    setHomeStatus(mode === 'extract' ? `已获取 ${filename}，正在准备生成页面。` : `已获取 ${filename}，点击“处理当前视频”开始生成页面。`);
     shouldExtract = mode === 'extract';
   } catch (error) {
     console.error(error);
@@ -1490,7 +1952,16 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     updateActionState();
   }
 
-  if (shouldExtract) await processCurrentFile();
+  if (shouldExtract) {
+    setUrlDownloadStatus('视频已获取，正在检查并生成页面。进度会显示在工作台左侧。', 'warn');
+    setUrlDownloadProgress('正在进入处理工作台', 100);
+    const started = await processCurrentFile();
+    if (started) {
+      setUrlDownloadStatus('页面生成完成，已在工作台展示。', 'ok');
+    } else {
+      setUrlDownloadStatus('视频已加入队列，但这次没有开始生成页面。请查看工作台或主页状态提示。', 'warn');
+    }
+  }
 }
 
 async function responseToBlobWithProgress(response: Response, onProgress: (percent: number | null) => void): Promise<Blob> {
@@ -1527,8 +1998,8 @@ function parseDownloadUrl(value: string): URL | null {
 async function readResponseError(response: Response): Promise<string> {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown } | null;
-    const detail = data?.detail ?? data?.error;
+    const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown; message?: unknown } | null;
+    const detail = data?.detail ?? data?.message ?? data?.error;
     if (typeof detail === 'string' && detail.trim()) return detail;
   }
   const text = await response.text().catch(() => '');
@@ -1538,7 +2009,7 @@ async function readResponseError(response: Response): Promise<string> {
 function urlDownloadErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '');
   if (!message || /failed to fetch|load failed|networkerror/i.test(message)) {
-    return `无法获取链接，请稍后重试，或先把视频下载到本地后上传。`;
+    return `无法获取链接，请稍后重试，或先保存视频文件后上传。`;
   }
   return message;
 }
@@ -1550,8 +2021,8 @@ function shouldOfferRecordingFallback(message: string): boolean {
 function openUrlRecordingFallback(sourceUrl: string, mode: UrlDownloadMode, message: string): void {
   fallbackSourceUrl = sourceUrl;
   fallbackUrlMode = mode;
-  urlFallbackMessage.textContent = `${message} 可以打开原视频后，用浏览器授权录屏继续处理。`;
-  urlFallbackRecordBtn.textContent = mode === 'extract' ? '开始录制并直接抽帧' : '开始录制并加入队列';
+  urlFallbackMessage.textContent = `${message} 可以打开原视频后，用录屏方式继续处理。`;
+  urlFallbackRecordBtn.textContent = mode === 'extract' ? '开始录制并直接生成' : '开始录制并加入队列';
   if (typeof urlFallbackDialog.showModal === 'function') urlFallbackDialog.showModal();
   else urlFallbackDialog.setAttribute('open', '');
 }
@@ -1588,15 +2059,19 @@ function addFiles(files: File[], selectAdded = false): void {
   let firstAddedIndex = -1;
   for (const file of validFiles) {
     const key = fileKey(file);
-    if (existingKeys.has(key)) continue;
+    if (existingKeys.has(key)) {
+      if (selectAdded && firstAddedIndex < 0) firstAddedIndex = selectedFiles.findIndex((item) => fileKey(item) === key);
+      continue;
+    }
     selectedFiles.push(file);
     existingKeys.add(key);
     ensureState(file);
     if (firstAddedIndex < 0) firstAddedIndex = selectedFiles.length - 1;
   }
 
-  if (currentFileIndex < 0 && selectedFiles.length > 0) chooseFile(0);
-  else if (selectAdded && firstAddedIndex >= 0) chooseFile(firstAddedIndex);
+  const allowBusySelection = selectAdded && isUrlDownloading;
+  if (currentFileIndex < 0 && selectedFiles.length > 0) chooseFile(0, allowBusySelection);
+  else if (selectAdded && firstAddedIndex >= 0) chooseFile(firstAddedIndex, allowBusySelection);
   else {
     renderFileList();
     updateHomeFileStatus();
@@ -1639,9 +2114,9 @@ function removeImageFile(index: number): void {
   updateActionState();
 }
 
-function chooseFile(index: number): void {
+function chooseFile(index: number, allowBusySelection = false): void {
   if (index < 0 || index >= selectedFiles.length) return;
-  if (isBusy()) {
+  if (isBusy() && !allowBusySelection) {
     setHomeStatus('当前有任务正在运行，完成后再切换视频。');
     return;
   }
@@ -1676,24 +2151,59 @@ function removeFile(index: number): void {
   chooseFile(Math.min(index, selectedFiles.length - 1));
 }
 
-async function processCurrentFile(): Promise<void> {
-  if (!selectedFile || isBusy()) return;
+async function processCurrentFile(): Promise<boolean> {
+  if (!selectedFile || isBusy()) return false;
   const file = selectedFile;
-  if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', setHomeStatus)) return;
-  if (!await ensureVideoDurationAllowed(file, setHomeStatus)) return;
-  const settings = readSettings();
   setWorkspaceMode('video');
   showWorkspace();
+  setProgress('上传中', 3, true);
+  setStatus(`上传中：${file.name}`);
+
+  const reportGateStatus = (message: string) => {
+    setStatus(message);
+    setHomeStatus(message);
+    setProgress(message, 1, true);
+  };
+  if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', reportGateStatus)) {
+    setProgress('未开始生成', 100);
+    return false;
+  }
+  if (!await ensureVideoDurationAllowed(file, reportGateStatus)) {
+    setProgress('未开始生成', 100);
+    return false;
+  }
+
+  const settings = readSettings();
+  isPerceivedUploading = true;
+  updateActionState();
+  try {
+    await runPerceivedUploadStage({
+      label: '上传视频中',
+      doneLabel: '上传完成，正在处理。',
+      totalBytes: file.size,
+      onProgress: (label, percent) => setProgress(label, percent, true),
+      onStatus: setStatus
+    });
+    await runPerceivedProcessingStage({
+      label: '快速处理视频中',
+      doneLabel: '处理完成，正在生成页面。',
+      onProgress: (label, percent) => setProgress(label, percent, true),
+      onStatus: setStatus
+    });
+  } finally {
+    isPerceivedUploading = false;
+  }
   resetFrameOutputs();
 
   isExtracting = true;
   setStateStatus(file, 'processing');
   updateActionState();
   renderFileList();
+  let completed = false;
 
   try {
-    setProgress('开始抽帧', 2);
-    setStatus(`正在处理：${file.name}。正在抽帧并保守去重，最多并发 ${FRAME_CONCURRENCY} 路解码...`);
+    setProgress('页面生成中', 73, true);
+    setStatus(`页面生成中：${file.name}。关键页面会陆续显示。`);
     const result = await extractSlidesFromFile(file, settings, {
       onMetadata: (meta) => {
         videoMeta = meta;
@@ -1706,16 +2216,16 @@ async function processCurrentFile(): Promise<void> {
         updateTimelineMarkers();
       },
       onProgress: ({ completed, total, time, duration, kept }) => {
-        setProgress(`抽帧保守去重：${completed} / ${total}，已保留 ${kept} 张`, 3 + Math.round((completed / Math.max(total, 1)) * 70));
-        setStatus(`抽帧中：${formatTime(time)} / ${formatTime(duration)}，已保留 ${kept} 张`);
+        setProgress(`页面生成中：${completed} / ${total}，已生成 ${kept} 页`, 73 + Math.round((completed / Math.max(total, 1)) * 23));
+        setStatus(`页面生成中：${formatTime(time)} / ${formatTime(duration)}，已生成 ${kept} 页`);
         updateExtractionTimeline(time);
       }
     });
     slides = result.slides;
     videoMeta = result.meta;
     forceTimelineToEnd();
-    setProgress('抽帧完成', 100);
-    setStatus(`抽帧完成：保留 ${slides.length} 张页面。顶部导出栏可直接下载 PDF、PPTX 或 Frames ZIP。`);
+    setProgress('页面生成完成', 100);
+    setStatus(`页面生成完成：共 ${slides.length} 页。顶部导出栏可直接下载 PDF、PPTX 或 Frames ZIP。`);
     setStateForFile(file, {
       slides,
       transcript: transcriptEl.value,
@@ -1729,10 +2239,11 @@ async function processCurrentFile(): Promise<void> {
       duration_seconds: Math.round(videoMeta.duration),
       slides: slides.length
     });
+    completed = true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : '抽帧失败，请查看控制台。';
+    const message = error instanceof Error ? error.message : '页面生成失败，请查看控制台。';
     console.error(error);
-    setProgress('抽帧失败', 100);
+    setProgress('页面生成失败', 100);
     setStatus(message);
     setStateStatus(file, 'error', message);
   } finally {
@@ -1740,12 +2251,13 @@ async function processCurrentFile(): Promise<void> {
     renderFileList();
     updateActionState();
   }
+  return completed;
 }
 
 async function batchExtractAndDownloadZip(): Promise<void> {
   if (selectedFiles.length === 0 || isBusy()) return;
   if (!currentLimits().batch_processing) {
-    setHomeStatus('当前套餐不支持批量处理；专业版或终身版可批量抽帧并打包 ZIP。');
+    setHomeStatus('当前套餐不支持批量处理；专业版或终身版可批量生成并打包 ZIP。');
     return;
   }
   if (!await ensureUsageCapacity('video_conversion', selectedFiles.length, '视频转换次数', setHomeStatus)) return;
@@ -1765,7 +2277,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
       selectedFile = file;
       setStateStatus(file, 'processing');
       renderFileList();
-      setHomeStatus(`批量抽帧 ${index + 1}/${files.length}：${file.name}`);
+      setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name}`);
 
       const result = await extractSlidesFromFile(file, settings, {
         onMetadata: (meta) => {
@@ -1774,7 +2286,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
         },
         onProgress: ({ completed, total, time, duration, kept }) => {
           const filePercent = Math.round((completed / Math.max(total, 1)) * 100);
-          setHomeStatus(`批量抽帧 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 保留 ${kept} 张`);
+          setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 已生成 ${kept} 页`);
         }
       });
 
@@ -1800,7 +2312,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
     setHomeStatus(`批量完成：已处理 ${files.length} 个视频，并下载 frames zip。`);
   } catch (error) {
     console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : '批量抽帧失败。');
+    setHomeStatus(error instanceof Error ? error.message : '批量生成失败。');
   } finally {
     isBatchProcessing = false;
     if (successfulFiles.length > 0) {
@@ -1858,8 +2370,8 @@ async function transcribeCurrentFile(): Promise<void> {
     isTranscribing = true;
     updateActionState();
     transcriptEl.value = '';
-    setProgress('准备本地分块转写音频', 0);
-    setStatus(`正在本地转写：${file.name}，会按 30 秒一段流式输出。`);
+    setProgress('准备转写音频', 0);
+    setStatus(`正在转写：${file.name}，结果会分段输出。`);
     const transcriptText = await transcribeLocally(file, setStatus);
     setProgress('转写完成', 100);
     setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
@@ -1881,18 +2393,18 @@ async function transcribeCurrentFile(): Promise<void> {
 transcribeBtn.addEventListener('click', () => transcribeCurrentFile());
 
 summarizeBtn.addEventListener('click', async () => {
-  const settings = readSettings();
   const transcriptForSummary = transcriptEl.value.trim();
   if (!transcriptForSummary || isBusy()) {
     if (!transcriptForSummary) setStatus('没有逐字稿可总结。');
     return;
   }
+  if (!await ensureUsageCapacity('summary_generation', 1, 'Summary 次数', setStatus)) return;
   try {
     isSummarizing = true;
     updateActionState();
-    setProgress('正在请求 DeepSeek summary', 50, true);
-    setStatus('正在请求 DeepSeek summary...');
-    summaryEl.value = await summarizeWithApi(settings, transcriptForSummary);
+    setProgress('正在生成 Summary', 50, true);
+    setStatus('正在生成 Summary...');
+    summaryEl.value = await summarizeWithApi(transcriptForSummary);
     setProgress('Summary 完成', 100);
     setStatus('Summary 已生成。');
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
@@ -2115,9 +2627,24 @@ async function downloadImagesAsPptx(): Promise<void> {
   isBatchProcessing = true;
   updateActionState();
   try {
-    setImageStatus('正在本地渲染图片页...');
+    await runPerceivedUploadStage({
+      label: '上传图片中',
+      doneLabel: '上传完成，正在处理。',
+      totalBytes: totalFileBytes(selectedImageFiles),
+      itemCount: selectedImageFiles.length,
+      onProgress: (label, percent) => setImageStatus(`${label}：${percent}%`),
+      onStatus: setImageStatus
+    });
+    await runPerceivedProcessingStage({
+      label: '快速处理图片中',
+      doneLabel: '处理完成，正在生成 PPTX。',
+      onProgress: (label, percent) => setImageStatus(`${label}：${percent}%`),
+      onStatus: setImageStatus,
+      durationMs: 380
+    });
+    setImageStatus('正在生成图片页...');
     const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
-      setImageStatus(`正在本地渲染图片页：${index} / ${total}`);
+      setImageStatus(`正在生成图片页：${index} / ${total}`);
     });
     setImageStatus('正在生成图片版 PPTX...');
     const pptxBlob = await makePptx(imageSlides);
@@ -2136,6 +2663,7 @@ async function openImagesInWorkspace(): Promise<void> {
   if (selectedImageFiles.length === 0 || isBusy()) return;
   if (!await ensureUsageCapacity('editable_slide', selectedImageFiles.length, '可编辑幻灯片', setImageStatus)) return;
   isBatchProcessing = true;
+  isPerceivedUploading = true;
   updateActionState();
   try {
     setWorkspaceMode('image');
@@ -2143,22 +2671,47 @@ async function openImagesInWorkspace(): Promise<void> {
     currentFileIndex = -1;
     resetCurrentFileState();
     showWorkspace();
-    setProgress('正在本地渲染图片页', 10, true);
-    setStatus('正在把图片转换成可编辑 PPT 页面。');
-    slides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
-      setProgress(`本地渲染图片页：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 80), true);
+    await runPerceivedUploadStage({
+      label: '上传图片中',
+      doneLabel: '上传完成，正在处理。',
+      totalBytes: totalFileBytes(selectedImageFiles),
+      itemCount: selectedImageFiles.length,
+      onProgress: (label, percent) => setProgress(label, percent, true),
+      onStatus: setStatus
     });
+    await runPerceivedProcessingStage({
+      label: '快速处理图片中',
+      doneLabel: '处理完成，正在加载页面。',
+      onProgress: (label, percent) => setProgress(label, percent, true),
+      onStatus: setStatus,
+      durationMs: 380
+    });
+    isPerceivedUploading = false;
+    updateActionState();
+
+    setProgress('页面加载中', 73, true);
+    setStatus('页面加载中，图片页会陆续出现。');
+    slides = [];
+    slidesEl.innerHTML = '';
+    const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
+      setProgress(`页面加载中：${index} / ${total}`, 73 + Math.round((index / Math.max(total, 1)) * 12), true);
+    }, (slide) => {
+      slides.push(slide);
+      appendSlideCard(slide);
+      if (slides.length === 1) setPreview(slide);
+      updateSelectionUI();
+    });
+    slides = imageSlides;
     videoMeta = null;
-    renderSlides();
     if (slides[0]) setPreview(slides[0]);
-    setProgress('图片页已准备，正在自动 OCR', 84, true);
-    setStatus('正在自动 OCR 图片文字，并按位置生成可编辑文本框。首次使用会下载 OCR 引擎和中英文语言包。');
+    setProgress('图片页已准备，正在识别文字', 86, true);
+    setStatus('正在识别图片文字，并生成可编辑文本框。');
     const textBoxCount = await recognizeSlidesToTextBoxes(slides, {
       replaceExisting: true,
       onProgress: (index, total, message) => {
-        const base = 84;
-        const span = 15;
-        setProgress(`自动 OCR：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
+        const base = 86;
+        const span = 13;
+        setProgress(`识别文字：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
       }
     });
     renderSlides();
@@ -2176,8 +2729,387 @@ async function openImagesInWorkspace(): Promise<void> {
     setStatus(error instanceof Error ? error.message : '图片进入编辑模式失败。');
   } finally {
     isBatchProcessing = false;
+    isPerceivedUploading = false;
     updateActionState();
   }
+}
+
+function selectNotebookPdfFile(file: File | null): void {
+  if (isBusy()) {
+    setNotebookPdfStatus('当前有任务正在运行，完成后再选择 PDF。');
+    notebookPdfInput.value = '';
+    return;
+  }
+  if (!file || !isSupportedPdfFile(file)) {
+    selectedNotebookPdfFile = null;
+    notebookPdfFileLabel.textContent = '选择或拖入 NotebookLM 生成的 PDF';
+    notebookPdfInfo.hidden = true;
+    notebookPdfInfo.textContent = '';
+    setNotebookPdfStatus('请选择 PDF 文件。');
+    updateActionState();
+    notebookPdfInput.value = '';
+    return;
+  }
+  selectedNotebookPdfFile = file;
+  notebookPdfFileLabel.textContent = file.name;
+  notebookPdfInfo.hidden = false;
+  notebookPdfInfo.textContent = `${file.name} · ${formatBytes(file.size)}`;
+  setNotebookPdfStatus('PDF 已选择，可以开始抹除右下角 Logo。');
+  updateActionState();
+  notebookPdfInput.value = '';
+}
+
+async function maskSelectedNotebookPdf(): Promise<void> {
+  const file = selectedNotebookPdfFile;
+  if (!file || isBusy()) return;
+  isPdfMasking = true;
+  updateActionState();
+  try {
+    setNotebookPdfStatus('正在加载 PDF 引擎...');
+    const result = await maskNotebookPdf(file, (page, total, detectedCount) => {
+      setNotebookPdfStatus(`正在处理 PDF：${page} / ${total} 页，已识别 ${detectedCount} 页 Logo。`);
+    });
+    downloadBlob(result.blob, `${baseName(file.name)}-no-notebooklm.pdf`);
+    setNotebookPdfStatus(`已生成处理版 PDF：共 ${result.pageCount} 页，识别到 ${result.detectedPageCount} 页 Logo。`);
+  } catch (error) {
+    console.error(error);
+    setNotebookPdfStatus(error instanceof Error ? error.message : 'PDF 处理失败。');
+  } finally {
+    isPdfMasking = false;
+    updateActionState();
+  }
+}
+
+async function maskNotebookPdf(
+  file: File,
+  onProgress: (page: number, total: number, detectedCount: number) => void
+): Promise<{ blob: Blob; pageCount: number; detectedPageCount: number }> {
+  const pdfjs = await loadPdfJs();
+  const documentData = await file.arrayBuffer();
+  const pdfDocument = await pdfjs.getDocument({ data: documentData }).promise;
+  let outputPdf: jsPDF | null = null;
+  let detectedPageCount = 0;
+
+  try {
+    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+      const page = await pdfDocument.getPage(pageNumber);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = Math.max(1, Math.min(PDF_RENDER_SCALE, PDF_RENDER_MAX_EDGE / Math.max(baseViewport.width, baseViewport.height)));
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.ceil(viewport.width));
+      canvas.height = Math.max(1, Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) throw new Error('浏览器不支持 PDF 渲染所需的 Canvas。');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const maskBox = detectNotebookMaskBox(ctx, canvas.width, canvas.height);
+      if (maskBox.detected) detectedPageCount += 1;
+      coverNotebookMaskBox(ctx, canvas.width, canvas.height, maskBox);
+
+      const pageWidth = baseViewport.width;
+      const pageHeight = baseViewport.height;
+      const orientation = pageWidth >= pageHeight ? 'landscape' : 'portrait';
+      if (!outputPdf) {
+        outputPdf = new jsPDF({ orientation, unit: 'pt', format: [pageWidth, pageHeight] });
+      } else {
+        outputPdf.addPage([pageWidth, pageHeight], orientation);
+      }
+      outputPdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, pageWidth, pageHeight);
+      onProgress(pageNumber, pdfDocument.numPages, detectedPageCount);
+      await yieldToBrowser();
+    }
+  } finally {
+    pdfDocument.cleanup?.();
+    await Promise.resolve(pdfDocument.destroy?.()).catch(() => undefined);
+  }
+
+  if (!outputPdf) throw new Error('PDF 没有可处理的页面。');
+  return {
+    blob: outputPdf.output('blob'),
+    pageCount: pdfDocument.numPages,
+    detectedPageCount
+  };
+}
+
+function loadPdfJs(): Promise<PdfJsApi> {
+  const existing = (window as Window & { pdfjsLib?: PdfJsApi }).pdfjsLib;
+  if (existing) {
+    existing.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+    return Promise.resolve(existing);
+  }
+  if (pdfJsLoadPromise) return pdfJsLoadPromise;
+  pdfJsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = PDFJS_SCRIPT_URL;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => {
+      const api = (window as Window & { pdfjsLib?: PdfJsApi }).pdfjsLib;
+      if (api) {
+        api.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+        resolve(api);
+      } else {
+        pdfJsLoadPromise = null;
+        reject(new Error('PDF 脚本已加载，但没有找到 PDF.js API。'));
+      }
+    };
+    script.onerror = () => {
+      pdfJsLoadPromise = null;
+      reject(new Error('无法加载 PDF 引擎。请检查网络或稍后重试。'));
+    };
+    document.head.appendChild(script);
+  });
+  return pdfJsLoadPromise;
+}
+
+function detectNotebookMaskBox(ctx: CanvasRenderingContext2D, width: number, height: number): NotebookMaskBox {
+  const searchX = Math.floor(width * 0.68);
+  const searchY = Math.floor(height * 0.72);
+  const searchWidth = width - searchX;
+  const searchHeight = height - searchY;
+  if (searchWidth <= 20 || searchHeight <= 20) return fallbackNotebookMaskBox(width, height);
+
+  const imageData = ctx.getImageData(searchX, searchY, searchWidth, searchHeight).data;
+  const rowCounts = new Array<number>(searchHeight).fill(0);
+  for (let y = Math.floor(searchHeight * 0.35); y < searchHeight; y += 1) {
+    for (let x = 0; x < searchWidth; x += 1) {
+      if (isNotebookCandidatePixel(imageData, searchWidth, searchHeight, x, y)) rowCounts[y] += 1;
+    }
+  }
+
+  const rowThreshold = Math.max(8, Math.floor(searchWidth * 0.008));
+  const rowBands = findSignalBands(rowCounts, rowThreshold, 3)
+    .filter((band) => band.end > searchHeight * 0.48 && band.total > 70 && band.end - band.start >= 4);
+  const rowBand = rowBands[rowBands.length - 1];
+  if (!rowBand) return fallbackNotebookMaskBox(width, height);
+
+  const colCounts = new Array<number>(searchWidth).fill(0);
+  for (let y = rowBand.start; y <= rowBand.end; y += 1) {
+    for (let x = 0; x < searchWidth; x += 1) {
+      if (isNotebookCandidatePixel(imageData, searchWidth, searchHeight, x, y)) colCounts[x] += 1;
+    }
+  }
+
+  const bandHeight = rowBand.end - rowBand.start + 1;
+  const colThreshold = Math.max(2, Math.floor(bandHeight * 0.08));
+  const minWidth = Math.max(36, Math.floor(width * 0.035));
+  const colBands = findSignalBands(colCounts, colThreshold, 14)
+    .filter((band) => band.end > searchWidth * 0.45 && band.end - band.start >= minWidth && band.total > 45);
+  const colBand = colBands[colBands.length - 1];
+  if (!colBand) return fallbackNotebookMaskBox(width, height);
+
+  return normalizeNotebookMaskBox({
+    x: searchX + colBand.start,
+    y: searchY + rowBand.start,
+    width: colBand.end - colBand.start + 1,
+    height: rowBand.end - rowBand.start + 1,
+    detected: true
+  }, width, height);
+}
+
+function isNotebookCandidatePixel(data: Uint8ClampedArray, width: number, height: number, x: number, y: number): boolean {
+  const index = (y * width + x) * 4;
+  const alpha = data[index + 3];
+  if (alpha < 24) return false;
+  const r = data[index];
+  const g = data[index + 1];
+  const b = data[index + 2];
+  const luminance = pixelLuminance(r, g, b);
+  const colorSpread = Math.max(r, g, b) - Math.min(r, g, b);
+  if (colorSpread > 88 && luminance > 95 && luminance < 225) return false;
+
+  const neighborLuminance = averageNeighborLuminance(data, width, height, x, y, 4);
+  const contrast = Math.abs(luminance - neighborLuminance);
+  return contrast > 28 && (luminance < 150 || luminance > 165);
+}
+
+function averageNeighborLuminance(data: Uint8ClampedArray, width: number, height: number, x: number, y: number, distance: number): number {
+  const points = [
+    [clamp(x - distance, 0, width - 1), y],
+    [clamp(x + distance, 0, width - 1), y],
+    [x, clamp(y - distance, 0, height - 1)],
+    [x, clamp(y + distance, 0, height - 1)]
+  ];
+  let total = 0;
+  for (const [px, py] of points) {
+    const index = (py * width + px) * 4;
+    total += pixelLuminance(data[index], data[index + 1], data[index + 2]);
+  }
+  return total / points.length;
+}
+
+function findSignalBands(counts: number[], threshold: number, mergeGap: number): Array<{ start: number; end: number; total: number }> {
+  const bands: Array<{ start: number; end: number; total: number }> = [];
+  let start = -1;
+  let end = -1;
+  let total = 0;
+  let gap = 0;
+
+  counts.forEach((count, index) => {
+    if (count >= threshold) {
+      if (start < 0) start = index;
+      end = index;
+      total += count;
+      gap = 0;
+      return;
+    }
+    if (start >= 0) {
+      gap += 1;
+      if (gap > mergeGap) {
+        bands.push({ start, end, total });
+        start = -1;
+        end = -1;
+        total = 0;
+        gap = 0;
+      }
+    }
+  });
+
+  if (start >= 0) bands.push({ start, end, total });
+  return bands;
+}
+
+function fallbackNotebookMaskBox(width: number, height: number): NotebookMaskBox {
+  const margin = Math.round(Math.min(width, height) * NOTEBOOK_MASK_MARGIN);
+  const boxWidth = Math.round(width * NOTEBOOK_MASK_FALLBACK_WIDTH);
+  const boxHeight = Math.round(height * NOTEBOOK_MASK_FALLBACK_HEIGHT);
+  return {
+    x: width - boxWidth - margin,
+    y: height - boxHeight - margin,
+    width: boxWidth,
+    height: boxHeight,
+    detected: false
+  };
+}
+
+function normalizeNotebookMaskBox(box: NotebookMaskBox, canvasWidth: number, canvasHeight: number): NotebookMaskBox {
+  const padding = Math.round(Math.min(canvasWidth, canvasHeight) * 0.014);
+  let x = box.x - padding;
+  let y = box.y - padding;
+  let width = box.width + padding * 2;
+  let height = box.height + padding * 2;
+
+  const minWidth = Math.round(canvasWidth * 0.08);
+  const minHeight = Math.round(canvasHeight * 0.035);
+  const maxWidth = Math.round(canvasWidth * 0.09);
+  const maxHeight = Math.round(canvasHeight * 0.05);
+  if (width < minWidth) {
+    const right = Math.min(canvasWidth - padding, x + width);
+    x = right - minWidth;
+    width = minWidth;
+  }
+  if (height < minHeight) {
+    const center = y + height / 2;
+    y = center - minHeight / 2;
+    height = minHeight;
+  }
+  if (width > maxWidth) {
+    const right = Math.min(canvasWidth, x + width);
+    x = right - maxWidth;
+    width = maxWidth;
+  }
+  if (height > maxHeight) {
+    const bottom = Math.min(canvasHeight, y + height);
+    y = bottom - maxHeight;
+    height = maxHeight;
+  }
+
+  x = clamp(Math.round(x), 0, canvasWidth - 1);
+  y = clamp(Math.round(y), 0, canvasHeight - 1);
+  width = clamp(Math.round(width), 1, canvasWidth - x);
+  height = clamp(Math.round(height), 1, canvasHeight - y);
+  return { x, y, width, height, detected: box.detected };
+}
+
+function coverNotebookMaskBox(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, box: NotebookMaskBox): void {
+  const x = Math.round(box.x);
+  const y = Math.round(box.y);
+  const width = Math.round(box.width);
+  const height = Math.round(box.height);
+  if (width <= 0 || height <= 0) return;
+
+  const fill = sampleMaskFillColor(ctx, canvasWidth, canvasHeight, { x, y, width, height, detected: box.detected });
+  const cellSize = Math.max(10, Math.min(34, Math.round(Math.min(width, height) * 0.48)));
+  const source = document.createElement('canvas');
+  source.width = width;
+  source.height = height;
+  const sourceCtx = source.getContext('2d');
+  if (sourceCtx) {
+    sourceCtx.drawImage(ctx.canvas, x, y, width, height, 0, 0, width, height);
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.ceil(width / cellSize));
+    small.height = Math.max(1, Math.ceil(height / cellSize));
+    const smallCtx = small.getContext('2d');
+    if (smallCtx) {
+      smallCtx.imageSmoothingEnabled = false;
+      smallCtx.drawImage(source, 0, 0, small.width, small.height);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(small, x, y, width, height);
+      ctx.restore();
+    }
+  }
+
+  ctx.save();
+  ctx.fillStyle = `rgba(${fill.r}, ${fill.g}, ${fill.b}, 0.9)`;
+  ctx.fillRect(x, y, width, height);
+  for (let yy = y; yy < y + height; yy += cellSize) {
+    for (let xx = x; xx < x + width; xx += cellSize) {
+      const shade = ((Math.floor(xx / cellSize) + Math.floor(yy / cellSize)) % 2 === 0) ? 8 : -8;
+      ctx.fillStyle = `rgba(${clamp(fill.r + shade, 0, 255)}, ${clamp(fill.g + shade, 0, 255)}, ${clamp(fill.b + shade, 0, 255)}, 0.24)`;
+      ctx.fillRect(xx, yy, Math.min(cellSize, x + width - xx), Math.min(cellSize, y + height - yy));
+    }
+  }
+  ctx.restore();
+}
+
+function sampleMaskFillColor(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  box: NotebookMaskBox
+): Rgb {
+  const margin = Math.max(6, Math.round(Math.min(canvasWidth, canvasHeight) * 0.012));
+  const sx = clamp(box.x - margin, 0, canvasWidth - 1);
+  const sy = clamp(box.y - margin, 0, canvasHeight - 1);
+  const ex = clamp(box.x + box.width + margin, sx + 1, canvasWidth);
+  const ey = clamp(box.y + box.height + margin, sy + 1, canvasHeight);
+  const data = ctx.getImageData(sx, sy, ex - sx, ey - sy).data;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+
+  for (let y = 0; y < ey - sy; y += 3) {
+    for (let x = 0; x < ex - sx; x += 3) {
+      const globalX = sx + x;
+      const globalY = sy + y;
+      const inside = globalX >= box.x && globalX <= box.x + box.width && globalY >= box.y && globalY <= box.y + box.height;
+      if (inside) continue;
+      const index = (y * (ex - sx) + x) * 4;
+      const alpha = data[index + 3] / 255;
+      if (alpha < 0.1) continue;
+      r += data[index] * alpha;
+      g += data[index + 1] * alpha;
+      b += data[index + 2] * alpha;
+      count += alpha;
+    }
+  }
+
+  if (count <= 0) return { r: 248, g: 250, b: 252 };
+  return {
+    r: Math.round(r / count),
+    g: Math.round(g / count),
+    b: Math.round(b / count)
+  };
+}
+
+function pixelLuminance(r: number, g: number, b: number): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function updateHomeFileStatus(): void {
@@ -2185,17 +3117,91 @@ function updateHomeFileStatus(): void {
   setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
 }
 
+async function startWorkspaceUrlDownload(mode: UrlDownloadMode): Promise<void> {
+  const value = workspaceVideoUrlInput.value.trim();
+  const parsedUrl = parseDownloadUrl(value);
+  if (!parsedUrl) {
+    setWorkspaceUrlStatus('请输入有效的视频链接。', 'error');
+    workspaceVideoUrlInput.focus();
+    return;
+  }
+  if (isBilibiliDownloadUrl(parsedUrl) && !workspaceRightsConfirm.checked) {
+    setWorkspaceUrlStatus('B 站视频请先勾选“我确认有权处理这个视频”。', 'warn');
+    workspaceRightsConfirm.focus();
+    return;
+  }
+  videoUrlInput.value = parsedUrl.toString();
+  mediaRightsConfirm.checked = workspaceRightsConfirm.checked;
+  setWorkspaceUrlStatus(mode === 'extract' ? '正在获取视频并准备生成页面。' : '正在下载到队列。', 'warn');
+  await downloadVideoFromUrl(mode);
+  if (!isUrlDownloading) {
+    workspaceVideoUrlInput.value = '';
+    workspaceRightsConfirm.checked = false;
+  }
+}
+
+function addWorkspaceFiles(files: File[]): void {
+  addFiles(files, true);
+  workspaceVideoInput.value = '';
+  setWorkspaceMode('video');
+  showWorkspace();
+  if (selectedFile && slides.length === 0) {
+    setWorkspaceUrlStatus(`已加入：${selectedFile.name}。点击“开始当前任务”即可生成页面。`, 'ok');
+    emptyWorkspaceStartBtn.focus();
+  }
+}
+
+function openWorkspaceFromNav(): void {
+  setWorkspaceMode(workspaceMode);
+  showWorkspace();
+  if (!selectedFile && slides.length === 0) {
+    setStatus('工作台还没有任务。请先回主页粘贴链接、上传视频或录制屏幕。');
+  }
+  updateActionState();
+}
+
+function showOrdersPlaceholder(): void {
+  setWorkspaceMode(workspaceMode);
+  showWorkspace();
+  setStatus('订单入口已在左侧。当前版本会把会员状态显示在顶部账号区；订单明细页下一步接支付后台。');
+}
+
+function focusLoginPanel(): void {
+  workspaceView.hidden = true;
+  homeView.hidden = false;
+  requestAnimationFrame(() => {
+    document.querySelector('.account-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!authSession) authUsername.focus({ preventScroll: true });
+  });
+}
+
+function returnHomeForVideoStart(): void {
+  workspaceView.hidden = true;
+  homeView.hidden = false;
+  hideProgress();
+  requestAnimationFrame(() => {
+    document.querySelector('.video-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    videoUrlInput.focus({ preventScroll: true });
+  });
+  setHomeStatus('在这里粘贴视频链接、上传文件或录制屏幕，处理后会自动进入工作台。');
+}
+
 function showWorkspace(): void {
   homeView.hidden = true;
   workspaceView.hidden = false;
-  captureTimeline.hidden = workspaceMode !== 'video';
+  captureTimeline.hidden = workspaceMode !== 'video' || !selectedFile;
+  updateWorkspaceEmptyState();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function setWorkspaceMode(mode: WorkspaceMode): void {
   workspaceMode = mode;
   workspaceView.classList.toggle('image-mode', mode === 'image');
-  captureTimeline.hidden = mode !== 'video';
+  workspaceSubtitle.textContent = mode === 'image'
+    ? '图片页会在这里勾选、编辑文本框并导出 PPTX。'
+    : '视频生成页面后，在这里勾选、预览、补抓和导出。';
+  captureTimeline.hidden = mode !== 'video' || !selectedFile;
+  updateWorkspaceEmptyState();
 }
 
 function getState(file: File): FileJobState {
@@ -2559,11 +3565,17 @@ async function makePdf(items: Slide[]): Promise<Blob> {
   return pdf.output('blob');
 }
 
-async function buildSlidesFromImages(files: File[], onProgress?: (index: number, total: number) => void): Promise<Slide[]> {
+async function buildSlidesFromImages(
+  files: File[],
+  onProgress?: (index: number, total: number) => void,
+  onSlide?: (slide: Slide, index: number, total: number) => void
+): Promise<Slide[]> {
   const imageSlides: Slide[] = [];
   for (const [index, file] of files.entries()) {
     onProgress?.(index + 1, files.length);
-    imageSlides.push(await imageFileToSlide(file, index));
+    const slide = await imageFileToSlide(file, index);
+    imageSlides.push(slide);
+    onSlide?.(slide, index + 1, files.length);
     await yieldToBrowser();
   }
   return imageSlides;
@@ -3200,8 +4212,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
     const contextSize = TRANSCRIBE_CONTEXT_SECONDS * sampleRate;
     const totalChunks = Math.ceil(audio.length / chunkSize);
     let lastText = '';
-    onProgress('加载本地 ASR 模型：Xenova/whisper-tiny...');
-    setProgress('加载本地转写模型', 5, true);
+    onProgress('准备转写引擎...');
+    setProgress('准备转写引擎', 5, true);
     await loadTranscriptionWorker(worker);
 
     for (let index = 0; index < totalChunks; index += 1) {
@@ -3707,12 +4719,14 @@ function updateActionState(): void {
   const imageMode = workspaceMode === 'image';
   const limits = currentLimits();
   const selectedCount = slides.filter((slide) => slide.selected).length;
+  const waitingForMediaRights = !mediaPreview.hidden && !mediaRightsConfirm.checked && currentMediaMetadata?.provider === 'bilibili';
   extractBtn.disabled = !hasVideoFile || busy;
   batchZipBtn.disabled = selectedFiles.length === 0 || busy || !limits.batch_processing;
   batchZipBtn.title = limits.batch_processing ? '' : '批量处理属于专业版和终身版权益';
   downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
   imagePptBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
   imageWorkspaceBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
+  notebookMaskPdfBtn.disabled = !selectedNotebookPdfFile || busy;
   transcribeBtn.disabled = !hasVideoFile || busy || imageMode;
   downloadPdfBtn.disabled = selectedCount === 0 || busy;
   downloadPptxBtn.disabled = selectedCount === 0 || busy;
@@ -3727,13 +4741,88 @@ function updateActionState(): void {
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   videoInput.disabled = busy;
   videoUrlInput.disabled = busy;
-  downloadUrlBtn.disabled = busy;
-  processUrlBtn.disabled = busy;
+  downloadUrlBtn.disabled = busy || waitingForMediaRights;
+  processUrlBtn.disabled = busy || waitingForMediaRights;
+  workspaceVideoUrlInput.disabled = busy;
+  workspaceRightsConfirm.disabled = busy;
+  workspaceDownloadUrlBtn.disabled = busy;
+  workspaceProcessUrlBtn.disabled = busy;
+  workspaceVideoInput.disabled = busy;
+  workspaceRecordScreenBtn.disabled = busy || !limits.screen_recording;
+  workspaceStopRecordBtn.hidden = !isRecording;
   imageInput.disabled = busy;
+  notebookPdfInput.disabled = busy;
   recordScreenBtn.disabled = busy || !limits.screen_recording;
   stopRecordBtn.hidden = !isRecording;
-  stopRecordBtn.textContent = recordingCompletionMode === 'extract' ? '停止录制并直接抽帧' : '停止录制并加入队列';
+  stopRecordBtn.textContent = recordingCompletionMode === 'extract' ? '停止录制并直接生成' : '停止录制并加入队列';
   updateSelectionUI();
+}
+
+function updateWorkspaceEmptyState(): void {
+  const hasSlides = slides.length > 0;
+  const busy = isUrlDownloading || isPerceivedUploading || isExtracting || isBatchProcessing || isRecording;
+  workspaceEmptyState.hidden = hasSlides;
+  slidesEl.hidden = !hasSlides;
+  workspaceEmptyState.classList.toggle('is-busy', busy);
+  emptyWorkspaceStartBtn.disabled = isBusy();
+
+  if (hasSlides) {
+    emptyWorkspaceStartBtn.textContent = '继续导入';
+    return;
+  }
+
+  if (isUrlDownloading) {
+    workspaceEmptyTitle.textContent = '正在获取视频';
+    workspaceEmptyBody.textContent = '下载完成后会自动进入页面生成，左侧会显示处理进度；完成后页面会出现在这里。';
+    emptyWorkspaceStartBtn.textContent = '正在获取视频';
+    emptyWorkspaceStartBtn.disabled = true;
+    return;
+  }
+
+  if (isPerceivedUploading) {
+    workspaceEmptyTitle.textContent = '上传中';
+    workspaceEmptyBody.textContent = '正在上传并准备页面，完成后会进入快速处理，随后页面会陆续出现在这里。';
+    emptyWorkspaceStartBtn.textContent = '上传中';
+    emptyWorkspaceStartBtn.disabled = true;
+    return;
+  }
+
+  if (isExtracting || isBatchProcessing) {
+    workspaceEmptyTitle.textContent = '正在生成页面';
+    workspaceEmptyBody.textContent = '关键页面会陆续加载出来，完成后可直接勾选、预览和导出。';
+    emptyWorkspaceStartBtn.textContent = '生成中';
+    emptyWorkspaceStartBtn.disabled = true;
+    return;
+  }
+
+  if (isRecording) {
+    workspaceEmptyTitle.textContent = '正在录制屏幕';
+    workspaceEmptyBody.textContent = '录制完成后会自动进入页面生成流程，页面会显示在这里。';
+    emptyWorkspaceStartBtn.textContent = '录制中';
+    emptyWorkspaceStartBtn.disabled = true;
+    return;
+  }
+
+  if (selectedFile && workspaceMode === 'video') {
+    workspaceEmptyTitle.textContent = '当前视频还没有生成页面';
+    workspaceEmptyBody.textContent = `当前视频：${selectedFile.name}。点击下方按钮开始生成页面，进度会显示在左侧。`;
+    emptyWorkspaceStartBtn.textContent = '开始生成';
+    emptyWorkspaceStartBtn.disabled = false;
+    return;
+  }
+
+  if (workspaceMode === 'image' && selectedImageFiles.length > 0) {
+    workspaceEmptyTitle.textContent = '图片工作台还没有页面';
+    workspaceEmptyBody.textContent = '选择图片后进入编辑模式，图片页和可编辑文本框会显示在这里。';
+    emptyWorkspaceStartBtn.textContent = '返回图片上传';
+    emptyWorkspaceStartBtn.disabled = false;
+    return;
+  }
+
+  workspaceEmptyTitle.textContent = '工作台还没有任务';
+  workspaceEmptyBody.textContent = '在顶部横向输入框粘贴 B 站或 YouTube 链接，也可以上传视频或录制屏幕。处理后生成进度和可导出的页面会出现在这里。';
+  emptyWorkspaceStartBtn.textContent = '去粘贴链接';
+  emptyWorkspaceStartBtn.disabled = false;
 }
 
 function updateSelectionUI(): void {
@@ -3741,10 +4830,11 @@ function updateSelectionUI(): void {
   selectCount.textContent = `${selectedCount}/${slides.length}`;
   exportHint.textContent = slides.length > 0
     ? `已选 ${selectedCount} / ${slides.length} 张。默认全选；取消勾选可排除页面。`
-    : '抽帧完成后，也可以从这里下载选中页面。';
+    : '生成完成后，也可以从这里下载选中页面。';
   selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
   selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
   updateResultDock(selectedCount);
+  updateWorkspaceEmptyState();
   updateTextBoxPanel();
 }
 
@@ -3763,9 +4853,11 @@ function updateResultDock(selectedCount: number): void {
   }
 
   if (!hasSlides) {
-    resultBadge.textContent = '等待处理';
-    resultTitle.textContent = '等待生成页面';
-    resultSubtitle.textContent = '上传并处理视频后，下载入口会固定显示在这里。';
+    resultBadge.textContent = selectedFile ? '等待处理' : '工作台';
+    resultTitle.textContent = selectedFile ? '等待生成页面' : '还没有任务';
+    resultSubtitle.textContent = selectedFile
+      ? '点击开始生成后，进度和下载入口会固定显示在这里。'
+      : '先粘贴链接、上传视频或录制屏幕，处理后这里会出现页面和导出按钮。';
     return;
   }
 
@@ -3812,7 +4904,7 @@ async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<vo
     });
     mediaRecorder.start(1000);
     isRecording = true;
-    setHomeStatus(mode === 'extract' ? '正在录制屏幕。完成后点击“停止录制并直接抽帧”。' : '正在录制屏幕。完成后点击“停止录制并加入队列”。');
+    setHomeStatus(mode === 'extract' ? '正在录制屏幕。完成后点击“停止录制并直接生成”。' : '正在录制屏幕。完成后点击“停止录制并加入队列”。');
   } catch (error) {
     console.error(error);
     cleanupRecording();
@@ -3881,16 +4973,20 @@ function isNearDuplicate(current: string, previous: string): boolean {
   return false;
 }
 
-async function summarizeWithApi(settings: Settings, transcript: string): Promise<string> {
+async function summarizeWithApi(transcript: string): Promise<string> {
   const token = authSession?.token;
   if (!token) throw new Error('请先注册或登录账号，再生成 Summary。');
-  const response = await fetch(settings.summaryApiUrl, {
+  const response = await fetch(SUMMARY_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ transcript })
   });
-  if (!response.ok) throw new Error(`Summary API 请求失败：${response.status} ${await response.text()}`);
-  const data = await response.json() as { summary?: string };
+  const data = await response.json().catch(() => ({})) as { detail?: string; summary?: string; usage?: UsageSummary };
+  if (!response.ok) throw new Error(data.detail || `Summary 生成失败：${response.status}`);
+  if (data.usage && authSession) {
+    usageSummary = normalizeUsageSummary(data.usage, authSession.user.email);
+    renderEntitlementSummary();
+  }
   return data.summary ?? '';
 }
 
@@ -3898,9 +4994,84 @@ function readSettings(): Settings {
   return {
     sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
     duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
-    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3)),
-    summaryApiUrl: $<HTMLInputElement>('#summaryApiUrl').value.trim()
+    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3))
   };
+}
+
+function totalFileBytes(files: File[] | FileList | File): number {
+  if (files instanceof File) return files.size;
+  return Array.from(files).reduce((total, file) => total + file.size, 0);
+}
+
+function currentNetworkMbpsHint(): number {
+  const navigatorWithConnection = navigator as Navigator & { connection?: { downlink?: number } };
+  const downlink = Number(navigatorWithConnection.connection?.downlink);
+  return Number.isFinite(downlink) && downlink > 0 ? downlink : 12;
+}
+
+function perceivedUploadDurationMs(totalBytes: number, itemCount = 1): number {
+  const fastMbps = Math.max(4, currentNetworkMbpsHint() * PERCEIVED_UPLOAD_SPEEDUP);
+  const estimatedMs = (Math.max(totalBytes, 256_000) * 8 / (fastMbps * 1_000_000)) * 1000;
+  const itemWarmupMs = Math.min(360, Math.max(0, itemCount - 1) * 45);
+  return clamp(estimatedMs + itemWarmupMs, PERCEIVED_UPLOAD_MIN_MS, PERCEIVED_UPLOAD_MAX_MS);
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function runPerceivedUploadStage(options: {
+  label: string;
+  doneLabel?: string;
+  totalBytes: number;
+  itemCount?: number;
+  from?: number;
+  to?: number;
+  onProgress: (label: string, percent: number) => void;
+  onStatus: (message: string) => void;
+}): Promise<void> {
+  const from = options.from ?? 3;
+  const to = options.to ?? 56;
+  const duration = perceivedUploadDurationMs(options.totalBytes, options.itemCount ?? 1);
+  const start = performance.now();
+  let elapsed = 0;
+  while (elapsed < duration) {
+    const ratio = clamp(elapsed / duration, 0, 1);
+    const eased = 1 - Math.pow(1 - ratio, 2.2);
+    const percent = Math.round(from + (to - from) * eased);
+    options.onProgress(options.label, percent);
+    options.onStatus(`${options.label}：${percent}%`);
+    await wait(72);
+    elapsed = performance.now() - start;
+  }
+  options.onProgress(options.doneLabel ?? '上传完成', to);
+  options.onStatus(options.doneLabel ?? '上传完成，正在处理。');
+}
+
+async function runPerceivedProcessingStage(options: {
+  label: string;
+  doneLabel?: string;
+  from?: number;
+  to?: number;
+  durationMs?: number;
+  onProgress: (label: string, percent: number) => void;
+  onStatus: (message: string) => void;
+}): Promise<void> {
+  const from = options.from ?? 58;
+  const to = options.to ?? 72;
+  const duration = options.durationMs ?? PERCEIVED_PROCESSING_MS;
+  const start = performance.now();
+  let elapsed = 0;
+  while (elapsed < duration) {
+    const ratio = clamp(elapsed / duration, 0, 1);
+    const percent = Math.round(from + (to - from) * ratio);
+    options.onProgress(options.label, percent);
+    options.onStatus(`${options.label}：${percent}%`);
+    await wait(64);
+    elapsed = performance.now() - start;
+  }
+  options.onProgress(options.doneLabel ?? '处理完成', to);
+  options.onStatus(options.doneLabel ?? '处理完成，正在生成页面。');
 }
 
 function setProgress(label: string, percent?: number, indeterminate = false): void {
@@ -3928,6 +5099,7 @@ function hideProgress(): void {
 function setStatus(message: string): void { statusEl.textContent = message; }
 function setHomeStatus(message: string): void { homeStatus.textContent = message; }
 function setImageStatus(message: string): void { imageStatus.textContent = message; }
+function setNotebookPdfStatus(message: string): void { notebookPdfStatus.textContent = message; }
 
 function waitForEvent(target: EventTarget, eventName: string, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -3995,6 +5167,9 @@ function isSupportedMediaFile(file: File): boolean {
 }
 function isSupportedImageFile(file: File): boolean {
   return file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+}
+function isSupportedPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 }
 function fileKey(file: File): string { return `${file.name}:${file.size}:${file.lastModified}`; }
 function clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
