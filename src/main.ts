@@ -203,6 +203,7 @@ const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
 const CLOUD_DOWNLOADER_URL = '/api/download-video';
+const YOUTUBE_FALLBACK_URL = '/api/youtube-fallback';
 const MEDIA_METADATA_URL = '/api/media/metadata';
 const YT1S_EXTERNAL_URL = 'https://yt1s.com.co/en218/';
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
@@ -1915,13 +1916,42 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
   let shouldExtract = false;
 
   try {
-    const response = await fetch(CLOUD_DOWNLOADER_URL, {
-      method: 'POST',
-      mode: 'cors',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: parsedUrl.toString(), rightsConfirmed: mediaRightsConfirm.checked })
-    });
+    let response: Response | null = null;
+    let primaryError = '';
+    const youtubeDownload = isYoutubeDownloadUrl(parsedUrl);
+    try {
+      response = await fetch(youtubeDownload ? YOUTUBE_FALLBACK_URL : CLOUD_DOWNLOADER_URL, {
+        method: 'POST',
+        mode: 'cors',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(youtubeDownload ? {
+          action: 'video',
+          rightsConfirmed: mediaRightsConfirm.checked,
+          url: parsedUrl.toString()
+        } : {
+          url: parsedUrl.toString(),
+          rightsConfirmed: mediaRightsConfirm.checked
+        })
+      });
+      if (!response.ok) primaryError = await readResponseError(response);
+    } catch (error) {
+      primaryError = error instanceof Error ? error.message : String(error || '');
+    }
+
+    if ((!response || !response.ok) && youtubeDownload) {
+      setUrlDownloadStatus('VPS 下载链未获取到视频，正在尝试原有云端引擎。', 'warn');
+      setUrlDownloadProgress('正在切换云端下载引擎', null);
+      response = await fetch(CLOUD_DOWNLOADER_URL, {
+        method: 'POST',
+        mode: 'cors',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: parsedUrl.toString(), rightsConfirmed: mediaRightsConfirm.checked })
+      });
+    }
+
+    if (!response) throw new Error(primaryError || '无法连接视频下载服务。');
     if (!response.ok) throw new Error(await readResponseError(response));
 
     const filename = sanitizeDownloadedFilename(
@@ -1962,6 +1992,11 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
       setUrlDownloadStatus('视频已加入队列，但这次没有开始生成页面。请查看工作台或主页状态提示。', 'warn');
     }
   }
+}
+
+function isYoutubeDownloadUrl(url: URL): boolean {
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
 }
 
 async function responseToBlobWithProgress(response: Response, onProgress: (percent: number | null) => void): Promise<Blob> {

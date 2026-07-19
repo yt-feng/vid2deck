@@ -2,6 +2,9 @@
   "functions": {
     "api/download-video.py": {
       "maxDuration": 300
+    },
+    "api/youtube-fallback.ts": {
+      "maxDuration": 300
     }
   }
 }

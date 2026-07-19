@@ -1,0 +1,22 @@
+downloader.vid2ppt.com {
+    @download {
+        method POST OPTIONS
+        path /download
+    }
+    handle @download {
+        request_body {
+            max_size 8KB
+        }
+        reverse_proxy 127.0.0.1:8787
+    }
+
+    @health {
+        method GET
+        path /health
+    }
+    handle @health {
+        reverse_proxy 127.0.0.1:8787
+    }
+
+    respond 404
+}

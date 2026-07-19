@@ -28,7 +28,7 @@ DEFAULT_YTDLP_FORMAT = (
     "best[height<=720][vcodec!=none][acodec!=none]/"
     "best[ext=mp4][vcodec!=none][acodec!=none]/best"
 )
-DEFAULT_YOUTUBE_PLAYER_CLIENTS = "android_vr"
+DEFAULT_YOUTUBE_PLAYER_CLIENTS = ""
 DEFAULT_YOUTUBE_PLAYER_SKIP = ""
 YOUTUBE_COOKIE_B64_ENV_NAMES = (
     "YOUTUBE_COOKIES_NETSCAPE_B64",
@@ -146,54 +146,51 @@ def host_is_private(host: str) -> bool:
 def download_video(url: str) -> Path:
     max_download_mb, max_download_bytes = download_size_limit()
     youtube_url = is_youtube_url(url)
-    try:
-        return download_video_once(
-            url,
-            max_download_mb=max_download_mb,
-            max_download_bytes=max_download_bytes,
-            use_youtube_cookies=False,
-            use_youtube_proxy=False,
-        )
-    except DownloadError:
-        raise
-    except Exception as exc:
-        message = clean_error(str(exc))
-        if youtube_url and youtube_proxy_url():
-            try:
-                return download_video_once(
-                    url,
-                    max_download_mb=max_download_mb,
-                    max_download_bytes=max_download_bytes,
-                    use_youtube_cookies=False,
-                    use_youtube_proxy=True,
-                )
-            except DownloadError:
-                raise
-            except Exception as proxy_exc:
-                proxy_message = clean_error(str(proxy_exc))
-                if not youtube_requires_sign_in(proxy_message):
-                    raise_download_error(proxy_message, max_download_mb, proxy_exc)
-                message = proxy_message
+    if not youtube_url:
+        try:
+            return download_video_once(
+                url,
+                max_download_mb=max_download_mb,
+                max_download_bytes=max_download_bytes,
+                use_youtube_cookies=False,
+                use_youtube_proxy=False,
+            )
+        except DownloadError:
+            raise
+        except Exception as exc:
+            raise_download_error(clean_error(str(exc)), max_download_mb, exc)
 
-        if youtube_url and youtube_requires_sign_in(message):
-            if not youtube_cookie_file_content():
-                raise DownloadError("YouTube 要求登录或真人验证，服务端还没有配置 YouTube Cookie。") from exc
-            try:
-                return download_video_once(
-                    url,
-                    max_download_mb=max_download_mb,
-                    max_download_bytes=max_download_bytes,
-                    use_youtube_cookies=True,
-                    use_youtube_proxy=bool(youtube_proxy_url()),
-                )
-            except DownloadError:
+    has_cookies = bool(youtube_cookie_file_content())
+    has_proxy = bool(youtube_proxy_url())
+    attempts = [(False, False)]
+    if has_cookies:
+        attempts.append((True, False))
+    if has_proxy:
+        attempts.append((False, True))
+    if has_cookies and has_proxy:
+        attempts.append((True, True))
+
+    errors: list[tuple[str, Exception]] = []
+    for use_cookies, use_proxy in attempts:
+        try:
+            return download_video_once(
+                url,
+                max_download_mb=max_download_mb,
+                max_download_bytes=max_download_bytes,
+                use_youtube_cookies=use_cookies,
+                use_youtube_proxy=use_proxy,
+            )
+        except DownloadError as exc:
+            message = clean_error(str(exc))
+            if "超过" in message and "MB" in message:
                 raise
-            except Exception as cookie_exc:
-                cookie_message = clean_error(str(cookie_exc))
-                if "Requested format is not available" in cookie_message:
-                    raise DownloadError("YouTube 登录 Cookie 已尝试，但 YouTube 没有返回可处理的视频格式。") from cookie_exc
-                raise_download_error(cookie_message, max_download_mb, cookie_exc)
-        raise_download_error(message, max_download_mb, exc)
+            errors.append((message, exc))
+        except Exception as exc:
+            errors.append((clean_error(str(exc)), exc))
+
+    messages = [message for message, _ in errors if message]
+    cause = errors[-1][1] if errors else RuntimeError("YouTube download failed")
+    raise DownloadError(friendly_youtube_error(messages, max_download_mb, has_cookies)) from cause
 
 
 def download_video_once(
@@ -251,6 +248,19 @@ def raise_download_error(message: str, max_download_mb: int, exc: Exception) -> 
     if youtube_requires_sign_in(message):
         raise DownloadError("YouTube 要求登录或真人验证，已尝试服务端 YouTube Cookie 后仍无法获取。") from exc
     raise DownloadError(message or "这个链接暂时无法获取。") from exc
+
+
+def friendly_youtube_error(messages: list[str], max_download_mb: int, has_cookies: bool) -> str:
+    combined = " ".join(messages)
+    if "File is larger than max-filesize" in combined or ("超过" in combined and "MB" in combined):
+        return f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。"
+    if "Requested format is not available" in combined:
+        return "YouTube 当前没有返回可处理的视频格式，请稍后重试。"
+    if youtube_requires_sign_in(combined):
+        return "YouTube 当前要求登录或真人验证，已尝试登录态后仍未获取到视频。" if has_cookies else "YouTube 当前要求登录或真人验证，请稍后重试。"
+    if "403" in combined or "Forbidden" in combined or "proxy" in combined.lower():
+        return "YouTube 暂时拒绝了云端视频请求，已自动尝试备用线路，请稍后重试。"
+    return "YouTube 暂时没有返回可处理的视频流，请稍后重试。"
 
 
 def download_url(url: str, *, rights_confirmed: bool = False) -> Path:
