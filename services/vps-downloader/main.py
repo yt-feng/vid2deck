@@ -93,7 +93,7 @@ async def health() -> dict[str, object]:
     }
 
 
-@app.post("/download")
+@app.post("/download", response_model=None)
 async def download(
     payload: DownloadPayload,
     authorization: str | None = Header(default=None),
