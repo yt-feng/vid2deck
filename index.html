@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vid2PPT Deck - 视频转幻灯片 PDF</title>
-    <meta name="description" content="把视频一键生成去重版 PPT、PDF、逐字稿与 Summary。支持批量生成页面、屏幕录制、图片转 PPTX 和 Frames ZIP。" />
+    <meta name="description" content="把视频一键生成去重版 PPT、PDF、逐字稿、摘要与图文笔记。支持批量生成页面、屏幕录制、图片转 PPTX 和 Frames ZIP。" />
     <style>
       :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #0f172a; background: #f8fafc; }
       body { margin: 0; }
@@ -14,6 +14,7 @@
       .site-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
       .site-links a, .site-links button { color: #475569; background: transparent; border: 0; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
       .site-links .nav-action { padding: 10px 12px; color: #0f172a; background: #eef2ff; border-radius: 999px; }
+      .site-links .nav-action[hidden] { display: none; }
       .site-links .login-btn { padding: 10px 16px; color: #fff; background: #0f172a; border-radius: 999px; box-shadow: 0 10px 24px rgba(15, 23, 42, .14); }
       .site-links .sponsor-btn { padding: 10px 16px; color: #fff; background: #16a34a; border: 0; border-radius: 999px; font: inherit; font-weight: 900; cursor: pointer; box-shadow: 0 10px 24px rgba(22, 163, 74, .18); }
       .site-links .pricing-link { color: #fff; background: #0f172a; padding: 10px 16px; border-radius: 999px; }
@@ -34,8 +35,9 @@
         <a href="#cases">案例</a>
         <a href="#reviews">用户反馈</a>
         <a class="pricing-link" href="/pricing/">定价</a>
+        <a class="nav-action" href="/admin/" target="_blank" rel="noopener" hidden>后台</a>
         <button id="openLoginBtn" class="login-btn" type="button">登录</button>
-        <button id="openSiteTipDialogBtn" class="sponsor-btn" type="button">赞助</button>
+        <a class="sponsor-btn" href="/sponsor/">赞助</a>
       </div>
     </nav>
     <section class="product-strip">
@@ -51,5 +53,26 @@
     </footer>
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/landing.ts"></script>
+    <script>
+      (function () {
+        function adminTokenIsCurrent(token) {
+          try {
+            var payloadPart = String(token || '').split('.')[0] || '';
+            var padded = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+            padded += '='.repeat((4 - padded.length % 4) % 4);
+            var payload = JSON.parse(atob(padded));
+            return payload && payload.kind === 'admin' && payload.sub === 'twotigers_vid';
+          } catch (error) {
+            return false;
+          }
+        }
+        try {
+          if (!adminTokenIsCurrent(localStorage.getItem('vid2deck.admin.token'))) return;
+          document.querySelectorAll('.nav-action[href="/admin/"]').forEach(function (link) {
+            link.hidden = false;
+          });
+        } catch (error) {}
+      }());
+    </script>
   </body>
 </html>

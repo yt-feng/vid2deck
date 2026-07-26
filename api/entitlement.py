@@ -9,11 +9,13 @@ from http.server import BaseHTTPRequestHandler
 from typing import Any
 
 try:
+    from _auth import verify_user_token
     from _supabase import find_entitlement
-    from _plans import effective_plan, plan_limits
+    from _plans import effective_plan, is_owner_identity, plan_limits
 except ModuleNotFoundError:
+    from api._auth import verify_user_token
     from api._supabase import find_entitlement
-    from api._plans import effective_plan, plan_limits
+    from api._plans import effective_plan, is_owner_identity, plan_limits
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -27,6 +29,11 @@ class handler(BaseHTTPRequestHandler):
             email = normalize_email((params.get("email") or [""])[0])
             if not email:
                 self.send_json({"detail": "Valid email is required"}, 400)
+                return
+
+            identity = bearer_identity(self.headers.get("authorization", ""))
+            if is_owner_identity(email, str(identity.get("username") or "")):
+                self.send_json(owner_payload(email))
                 return
 
             row = find_entitlement(email)
@@ -47,7 +54,7 @@ class handler(BaseHTTPRequestHandler):
     def send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", os.getenv("CORS_ORIGINS", "*"))
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -77,6 +84,30 @@ def free_payload(email: str) -> dict[str, Any]:
         "active": False,
         "limits": plan_limits("free"),
     }
+
+
+def owner_payload(email: str) -> dict[str, Any]:
+    return {
+        "email": email,
+        "plan": "lifetime",
+        "effective_plan": "lifetime",
+        "status": "active",
+        "lifetime": True,
+        "current_period_end": None,
+        "active": True,
+        "limits": plan_limits("lifetime"),
+        "owner": True,
+    }
+
+
+def bearer_identity(header: str) -> dict[str, Any]:
+    prefix = "Bearer "
+    if not header.startswith(prefix):
+        return {}
+    try:
+        return verify_user_token(header.removeprefix(prefix).strip())
+    except Exception:
+        return {}
 
 
 def public_entitlement(row: dict[str, Any]) -> dict[str, Any]:

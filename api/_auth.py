@@ -181,6 +181,8 @@ def public_user(row: dict[str, Any]) -> dict[str, Any]:
         "username": row.get("username"),
         "email": email,
         "email_is_generated": bool(row.get("email_is_generated")) or is_generated_email(email),
+        "site_origin": row.get("site_origin") or "vid2ppt",
+        "registered_site": row.get("registered_site") or row.get("site_origin") or "vid2ppt",
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }

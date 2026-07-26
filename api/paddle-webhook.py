@@ -6,19 +6,22 @@ import json
 import os
 import re
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
 try:
-    from _supabase import insert_usage_event, save_entitlement
+    from _supabase import insert_usage_event, save_entitlement, save_sponsor_order, utc_now_iso
     from _email import send_manual_order_notification
 except ModuleNotFoundError:
-    from api._supabase import insert_usage_event, save_entitlement
+    from api._supabase import insert_usage_event, save_entitlement, save_sponsor_order, utc_now_iso
     from api._email import send_manual_order_notification
 
 
 HANDLED_EVENTS = {
+    "transaction.paid",
     "transaction.completed",
     "subscription.created",
     "subscription.updated",
@@ -29,6 +32,7 @@ HANDLED_EVENTS = {
 }
 ACTIVE_STATUSES = {"active", "trialing"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+KCDESK_GIFT_PLAN_CODES = {"NOVA-3D", "NOVA-M", "NOVA-Q", "NOVA-Y", "NOVA-2Y"}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -125,7 +129,7 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     tip_info = resolve_author_tip(price_ids)
     plan_info = resolve_plan(price_ids)
 
-    if tip_info and event_type == "transaction.completed":
+    if tip_info and event_type in {"transaction.paid", "transaction.completed"}:
         return process_author_tip(event, data, custom_data, email, price_ids, tip_info)
     if not email:
         return {"processed": False, "event_type": event_type, "detail": "missing email"}
@@ -147,6 +151,9 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
     plan, lifetime = plan_info
     status = resolve_status(event_type, data)
     fields = {
+        "site_origin": "vid2ppt",
+        "source_site": "vid2ppt",
+        "grant_source": "paddle",
         "plan": plan,
         "status": status,
         "lifetime": lifetime,
@@ -161,6 +168,9 @@ def process_event(event: dict[str, Any]) -> dict[str, Any]:
         event_type,
         {
             "event_id": event.get("event_id"),
+            "site_origin": "vid2ppt",
+            "source_site": "vid2ppt",
+            "grant_source": "paddle",
             "plan": plan,
             "status": status,
             "price_ids": price_ids,
@@ -236,18 +246,83 @@ def process_author_tip(
 ) -> dict[str, Any]:
     quantity = parse_positive_int(custom_data.get("quantity"), max_value=999999) or quantity_for_price(data, tip_info["price_id"], max_value=999999) or 1
     amount_cny = quantity / 100
+    transaction_id = transaction_id_for_event(str(event.get("event_type") or ""), data)
+    request_id = clean_request_id(custom_data.get("request_id")) or f"paddle_{transaction_id or event.get('event_id') or int(time.time())}"
+    plan_code = clean_plan_code(custom_data.get("plan_code")) or "SUPPORT"
+    source = clean_text(custom_data.get("source"), limit=80) or "author_tip"
+    benefit_site = "kcdesk" if is_kcdesk_gift_plan(plan_code) else "vid2ppt"
+    benefit_plan = kcdesk_benefit_plan(plan_code) if is_kcdesk_gift_plan(plan_code) else "redeem_code"
+    code = create_redeem_code(request_id, transaction_id or "", plan_code, quantity)
+    completed_at = utc_now_iso()
+    order_error = ""
+    kcdesk_grant = grant_kcdesk_nova(
+        email=email,
+        plan_code=plan_code,
+        request_id=request_id,
+        transaction_id=transaction_id or "",
+        event_id=str(event.get("event_id") or ""),
+        completed_at=completed_at,
+        amount_cny=f"{amount_cny:.2f}",
+        quantity=quantity,
+    )
+    try:
+        save_sponsor_order(
+            {
+                "request_id": request_id,
+                "email": email or "anonymous",
+                "plan_code": plan_code,
+                "site_origin": "vid2ppt",
+                "benefit_site": benefit_site,
+                "benefit_plan": benefit_plan,
+                "status": "completed",
+                "code": code,
+                "amount_cny": f"{amount_cny:.2f}",
+                "requested_amount_cny": clean_text(custom_data.get("requested_amount_cny"), limit=40)
+                or clean_text(custom_data.get("amount_cny"), limit=40)
+                or f"{amount_cny:.2f}",
+                "quantity": quantity,
+                "source": source,
+                "paddle_customer_id": first_text(data.get("customer_id"), custom_data.get("paddle_customer_id")),
+                "paddle_transaction_id": transaction_id,
+                "completed_at": completed_at,
+                "metadata": {
+                    "event_id": event.get("event_id"),
+                    "event_type": event.get("event_type"),
+                    "site_origin": "vid2ppt",
+                    "source_site": "vid2ppt",
+                    "legal_purchase_site": "vid2ppt.com",
+                    "gift_benefit_site": "kcdesk.com" if benefit_site == "kcdesk" else "",
+                    "price_ids": price_ids,
+                    "custom_data": custom_data,
+                    "kcdesk_grant": kcdesk_grant,
+                },
+            }
+        )
+    except Exception as exc:
+        order_error = str(exc)[:500]
+
+    paddle_event_type = str(event.get("event_type") or "")
     insert_usage_event(
         email or "anonymous",
-        "author_tip.completed",
+        "author_tip.paid" if paddle_event_type == "transaction.paid" else "author_tip.completed",
         {
             "event_id": event.get("event_id"),
             "event_type": event.get("event_type"),
+            "site_origin": "vid2ppt",
+            "source_site": "vid2ppt",
             "plan": tip_info["plan"],
+            "request_id": request_id,
+            "plan_code": plan_code,
+            "benefit_site": benefit_site,
+            "benefit_plan": benefit_plan,
+            "redeem_code": code,
             "amount_cny": amount_cny,
             "quantity": quantity,
             "price_ids": price_ids,
             "paddle_customer_id": first_text(data.get("customer_id"), custom_data.get("paddle_customer_id")),
-            "paddle_transaction_id": transaction_id_for_event(str(event.get("event_type") or ""), data),
+            "paddle_transaction_id": transaction_id,
+            "sponsor_order_error": order_error,
+            "kcdesk_grant": kcdesk_grant,
         },
     )
     return {
@@ -257,6 +332,9 @@ def process_author_tip(
         "plan": tip_info["plan"],
         "author_tip": True,
         "amount_cny": amount_cny,
+        "redeem_code": code,
+        "benefit_site": benefit_site,
+        "kcdesk_grant": kcdesk_grant,
     }
 
 
@@ -330,6 +408,78 @@ def resolve_author_tip(price_ids: list[str]) -> dict[str, str] | None:
             "plan": "author_tip",
         }
     return None
+
+
+def is_kcdesk_gift_plan(plan_code: str) -> bool:
+    return clean_plan_code(plan_code) in KCDESK_GIFT_PLAN_CODES
+
+
+def kcdesk_benefit_plan(plan_code: str) -> str:
+    return "kcdesk_trial_3d" if clean_plan_code(plan_code) == "NOVA-3D" else "kcdesk_member"
+
+
+def grant_kcdesk_nova(
+    *,
+    email: str,
+    plan_code: str,
+    request_id: str,
+    transaction_id: str,
+    event_id: str,
+    completed_at: str,
+    amount_cny: str,
+    quantity: int,
+) -> dict[str, Any]:
+    if not email or not is_kcdesk_gift_plan(plan_code):
+        return {"attempted": False, "ok": False, "reason": "not_nova_or_missing_email"}
+
+    secret = (os.getenv("VID2PPT_KCDESK_GRANT_SECRET") or "").strip()
+    if not secret:
+        return {"attempted": False, "ok": False, "reason": "missing_secret"}
+
+    url = (
+        os.getenv("KCDESK_NOVA_GRANT_URL")
+        or os.getenv("KCDESK_ATLAS_GRANT_URL")
+        or "https://kcdesk.com/api/vid2ppt/nova-grant"
+    ).strip()
+    payload = {
+        "email": email,
+        "plan_code": clean_plan_code(plan_code),
+        "request_id": request_id,
+        "paddle_transaction_id": transaction_id,
+        "event_id": event_id,
+        "completed_at": completed_at,
+        "amount_cny": amount_cny,
+        "quantity": quantity,
+        "legal_purchase_site": "vid2ppt.com",
+        "gift_benefit_site": "kcdesk.com",
+    }
+    raw_body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    request = urllib.request.Request(
+        url,
+        data=raw_body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "Mozilla/5.0 (compatible; Vid2PPT-KCdesk-Grant/1.0; +https://vid2ppt.com)",
+            "X-Vid2PPT-Signature": f"sha256={signature}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            data = json.loads(body) if body else {}
+            return {
+                "attempted": True,
+                "ok": 200 <= response.status < 300 and bool(data.get("ok", True)),
+                "status": response.status,
+                "response": data,
+            }
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        return {"attempted": True, "ok": False, "status": exc.code, "response": body[:500]}
+    except Exception as exc:
+        return {"attempted": True, "ok": False, "status": 0, "response": str(exc)[:500]}
 
 
 def resolve_status(event_type: str, data: dict[str, Any]) -> str:
@@ -455,6 +605,33 @@ def clean_text(value: Any, *, limit: int) -> str:
     if not isinstance(value, str):
         return ""
     return value.strip()[:limit]
+
+
+def clean_request_id(value: Any) -> str:
+    text = clean_text(value, limit=96)
+    if re.match(r"^[A-Za-z0-9._:-]{8,96}$", text):
+        return text
+    return ""
+
+
+def clean_plan_code(value: Any) -> str:
+    text = clean_text(value, limit=32).upper()
+    if re.match(r"^[A-Z0-9][A-Z0-9-]{1,31}$", text):
+        return text
+    return ""
+
+
+def create_redeem_code(request_id: str, transaction_id: str, plan_code: str, quantity: int) -> str:
+    secret = (
+        os.getenv("SPONSOR_CODE_SECRET")
+        or os.getenv("PADDLE_WEBHOOK_SECRET")
+        or os.getenv("AUTH_SECRET")
+        or os.getenv("AUTH_CODE")
+        or "vid2ppt-sponsor-code"
+    )
+    seed = f"{request_id}|{transaction_id}|{plan_code}|{quantity}".encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), seed, hashlib.sha256).hexdigest().upper()
+    return f"V2D-{digest[0:4]}-{digest[4:8]}-{digest[8:12]}"
 
 
 def as_dict(value: Any) -> dict[str, Any]:

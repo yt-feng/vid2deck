@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -53,6 +54,26 @@ PLAN_LABELS = {
     "pro": "专业版",
     "lifetime": "终身版",
 }
+
+
+DEFAULT_OWNER_USERNAMES = {"kcdesk", "twotigers_vid"}
+
+
+def is_owner_identity(email: str = "", username: str = "") -> bool:
+    configured_usernames = csv_set(os.getenv("VID2PPT_OWNER_USERNAMES", ""))
+    configured_emails = csv_set(os.getenv("VID2PPT_OWNER_EMAILS", ""))
+    owner_usernames = DEFAULT_OWNER_USERNAMES | configured_usernames
+    normalized_username = (username or "").strip().lower().removeprefix("@")
+    normalized_email = (email or "").strip().lower()
+    if normalized_username and normalized_username in owner_usernames:
+        return True
+    if normalized_email and normalized_email in configured_emails:
+        return True
+    return normalized_email in {f"{name}@users.vid2ppt.com" for name in owner_usernames}
+
+
+def csv_set(value: str) -> set[str]:
+    return {item.strip().lower() for item in value.split(",") if item.strip()}
 
 
 def effective_plan(plan: str, active: bool) -> str:

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any
+
+
+SAFE_TABLE_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
+SITE_ORIGIN = os.getenv("SITE_ORIGIN", "vid2ppt")
 
 
 class SupabaseError(RuntimeError):
@@ -101,7 +106,14 @@ def list_usage_events(email: str, since_iso: str | None = None) -> list[dict[str
 def save_entitlement(email: str, fields: dict[str, Any]) -> dict[str, Any]:
     now = utc_now_iso()
     existing = find_entitlement(email)
-    payload = {**fields, "email": email, "updated_at": now}
+    payload = {
+        "site_origin": SITE_ORIGIN,
+        "source_site": SITE_ORIGIN,
+        "grant_source": fields.get("grant_source") or "vid2ppt",
+        **fields,
+        "email": email,
+        "updated_at": now,
+    }
 
     if existing and existing.get("id"):
         query = query_string({"id": f"eq.{existing['id']}", "select": "*"})
@@ -114,31 +126,103 @@ def save_entitlement(email: str, fields: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def insert_usage_event(email: str, event_type: str, metadata: dict[str, Any] | None = None, *, units: int = 1) -> None:
+def insert_usage_event(email: str, event_type: str, metadata: dict[str, Any] | None = None, *, units: int = 1, site_origin: str | None = None) -> None:
+    origin = (site_origin or SITE_ORIGIN).strip() or SITE_ORIGIN
     payload = {
         "email": email,
         "event_type": event_type,
         "units": max(1, int(units)),
-        "metadata": metadata or {},
+        "metadata": {"site_origin": origin, **(metadata or {})},
+        "site_origin": origin,
     }
     supabase_request("POST", "/rest/v1/usage_events", payload)
 
 
-def find_site_user_by_username(username: str) -> dict[str, Any] | None:
+def list_recent_rows(table: str, *, select: str = "*", order_column: str = "created_at", limit: int = 500) -> list[dict[str, Any]]:
+    if not SAFE_TABLE_RE.match(table):
+        raise ValueError("Invalid table name")
+    params = {
+        "select": select,
+        "order": f"{order_column}.desc",
+        "limit": str(max(1, min(int(limit), 5000))),
+    }
+    rows = supabase_request("GET", f"/rest/v1/{table}?{query_string(params)}")
+    return rows if isinstance(rows, list) else []
+
+
+def find_sponsor_order_by_request_id(request_id: str) -> dict[str, Any] | None:
     query = query_string(
         {
-            "username": f"eq.{username}",
+            "request_id": f"eq.{request_id}",
+            "select": "*",
             "limit": "1",
         }
     )
+    rows = supabase_request("GET", f"/rest/v1/sponsor_orders?{query}")
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return None
+
+
+def find_sponsor_order_by_code(code: str) -> dict[str, Any] | None:
+    query = query_string(
+        {
+            "code": f"eq.{code}",
+            "select": "*",
+            "limit": "1",
+        }
+    )
+    rows = supabase_request("GET", f"/rest/v1/sponsor_orders?{query}")
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return None
+
+
+def save_sponsor_order(fields: dict[str, Any]) -> dict[str, Any]:
+    request_id = str(fields.get("request_id") or "").strip()
+    if not request_id:
+        raise ValueError("request_id is required")
+
+    payload = {**fields, "updated_at": utc_now_iso()}
+    existing = find_sponsor_order_by_request_id(request_id)
+    if existing and existing.get("id"):
+        query = query_string({"id": f"eq.{existing['id']}", "select": "*"})
+        rows = supabase_request("PATCH", f"/rest/v1/sponsor_orders?{query}", payload, prefer_return=True)
+    else:
+        rows = supabase_request("POST", "/rest/v1/sponsor_orders?select=*", payload, prefer_return=True)
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return payload
+
+
+def update_sponsor_order(order_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    payload = {**fields, "updated_at": utc_now_iso()}
+    query = query_string({"id": f"eq.{order_id}", "select": "*"})
+    rows = supabase_request("PATCH", f"/rest/v1/sponsor_orders?{query}", payload, prefer_return=True)
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return payload
+
+
+def find_site_user_by_username(username: str) -> dict[str, Any] | None:
+    query = query_string({"username": f"eq.{username}", "site_origin": f"eq.{SITE_ORIGIN}", "limit": "1"})
     rows = supabase_request("GET", f"/rest/v1/site_users?{query}")
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    fallback = query_string({"username": f"eq.{username}", "limit": "1"})
+    rows = supabase_request("GET", f"/rest/v1/site_users?{fallback}")
     if isinstance(rows, list) and rows:
         return rows[0]
     return None
 
 
 def create_site_user(fields: dict[str, Any]) -> dict[str, Any]:
-    rows = supabase_request("POST", "/rest/v1/site_users?select=*", fields, prefer_return=True)
+    payload = {
+        "site_origin": SITE_ORIGIN,
+        "registered_site": SITE_ORIGIN,
+        **fields,
+    }
+    rows = supabase_request("POST", "/rest/v1/site_users?select=*", payload, prefer_return=True)
     if isinstance(rows, list) and rows:
         return rows[0]
     return fields

@@ -81,6 +81,11 @@ type Settings = {
   minGap: number;
 };
 
+type OutputLanguage = 'zh-CN' | 'zh-TW' | 'en' | 'ja' | 'ko';
+type UserPreferences = {
+  outputLanguage: OutputLanguage;
+};
+
 type AuthMode = 'login' | 'register';
 type AuthUser = {
   id?: string;
@@ -91,6 +96,12 @@ type AuthUser = {
 type AuthSession = {
   token: string;
   user: AuthUser;
+};
+type AuthResponse = {
+  token?: string;
+  user?: AuthUser;
+  admin_token?: string;
+  detail?: string;
 };
 
 type PlanKey = 'free' | 'day_pass' | 'pro' | 'lifetime';
@@ -112,6 +123,7 @@ type EntitlementPayload = {
   lifetime?: boolean;
   current_period_end?: string | null;
   active: boolean;
+  owner?: boolean;
   limits?: Partial<PlanLimits>;
   updated_at?: string;
 };
@@ -161,6 +173,7 @@ type FileJobState = {
   slides: Slide[];
   transcript: string;
   summary: string;
+  illustratedNotes: string;
   videoMeta: VideoMeta | null;
   status: JobStatus;
   error?: string;
@@ -200,6 +213,9 @@ const NOTEBOOK_MASK_FALLBACK_HEIGHT = 0.045;
 const NOTEBOOK_MASK_MARGIN = 0.012;
 const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 const AUTH_STORAGE_KEY = 'vid2deck.auth.session';
+const ADMIN_TOKEN_STORAGE_KEY = 'vid2deck.admin.token';
+const ADMIN_USERNAME = 'twotigers_vid';
+const PREFERENCES_STORAGE_PREFIX = 'vid2deck.preferences';
 const CHECKOUT_EMAIL_STORAGE_KEY = 'vid2deck.checkout.email';
 const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
 const CLOUD_DOWNLOADER_URL = '/api/download-video';
@@ -227,6 +243,14 @@ const USAGE_UNITS: Record<UsageEventType, string> = {
   transcribe_minute: '分钟'
 };
 const SUMMARY_API_URL = '/api/summarize-simple';
+const OUTPUT_LANGUAGE_LABELS: Record<OutputLanguage, string> = {
+  'zh-CN': '简体中文',
+  'zh-TW': '繁体中文',
+  en: 'English',
+  ja: '日本語',
+  ko: '한국어'
+};
+const DEFAULT_USER_PREFERENCES: UserPreferences = { outputLanguage: 'zh-CN' };
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -236,7 +260,7 @@ app.innerHTML = `
     <section class="hero">
       <div>
         <p class="eyebrow">Vid2PPT Deck</p>
-        <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与Summary</h1>
+        <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与图文笔记</h1>
         <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可生成 PPTX；批量上传后，一键生成所有页面并下载 Frames ZIP。</p>
       </div>
     </section>
@@ -245,7 +269,7 @@ app.innerHTML = `
       <div class="account-copy">
         <p class="eyebrow">Account</p>
         <h2>用户名登录</h2>
-        <p id="accountStatus" class="account-status">登录后可直接生成 Summary，付款也会绑定到同一账号。</p>
+        <p id="accountStatus" class="account-status">登录后可直接生成摘要与图文笔记，付款也会绑定到同一账号。</p>
       </div>
       <form id="authForm" class="auth-form">
         <label>用户名<input id="authUsername" type="text" autocomplete="username" placeholder="yourname" /></label>
@@ -269,7 +293,10 @@ app.innerHTML = `
           <strong id="authSignedInName">-</strong>
           <small id="authSignedInEmail">-</small>
         </div>
-        <button id="authLogoutBtn" class="ghost-btn" type="button">退出登录</button>
+        <div class="auth-signed-in-actions">
+          <button id="openAccountSettingsBtn" class="ghost-btn" type="button">偏好设置</button>
+          <button id="authLogoutBtn" class="ghost-btn" type="button">退出登录</button>
+        </div>
       </div>
     </section>
 
@@ -397,7 +424,7 @@ app.innerHTML = `
         <p class="eyebrow">Support</p>
         <h2>觉得 Vid2PPT Deck 有用，可以赞助本站继续维护</h2>
       </div>
-      <button id="openTipDialogBtn" type="button">赞助本站</button>
+      <button id="openTipDialogBtn" type="button">打开赞助页</button>
     </section>
   </main>
 
@@ -408,6 +435,7 @@ app.innerHTML = `
       <button id="railOrdersBtn" class="rail-item" type="button">订单</button>
       <a class="rail-item" href="/pricing/">升级会员</a>
       <a class="rail-item" href="mailto:support@vid2deck.com">联系我们</a>
+      <button id="railSettingsBtn" class="rail-item" type="button">设置</button>
       <button id="railLoginBtn" class="rail-item" type="button">账号</button>
     </aside>
 
@@ -441,6 +469,7 @@ app.innerHTML = `
           <button id="dockDownloadPdfBtn" class="primary-download" disabled>立即下载 PDF</button>
           <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
           <button id="dockDownloadFramesBtn" disabled>导出 Frames ZIP</button>
+          <button id="dockNotesBtn" disabled>生成图文笔记</button>
         </div>
       </section>
 
@@ -531,17 +560,18 @@ app.innerHTML = `
         </section>
 
         <div class="workspace-actions">
-          <button id="transcribeBtn" disabled>Transcribe</button>
+          <button id="transcribeBtn" disabled>生成逐字稿</button>
           <button id="downloadTranscriptBtn" disabled>下载逐字稿</button>
-          <button id="summarizeBtn" disabled>生成 Summary</button>
-          <button id="downloadSummaryBtn" disabled>下载 Summary</button>
+          <button id="summarizeBtn" disabled>生成摘要</button>
+          <button id="downloadSummaryBtn" disabled>下载摘要</button>
+          <button id="generateNotesBtn" disabled>生成图文笔记</button>
         </div>
 
         <label class="workspace-text-label">逐字稿
-          <textarea id="transcript" placeholder="点击 Transcribe 后，转写结果会分段流式输出；也可以手动粘贴文字再生成 summary。"></textarea>
+          <textarea id="transcript" placeholder="点击“生成逐字稿”后，识别结果会分段输出；也可以手动粘贴文字再生成摘要或图文笔记。"></textarea>
         </label>
-        <label class="workspace-text-label">Summary
-          <textarea id="summary" placeholder="summary 会出现在这里。"></textarea>
+        <label class="workspace-text-label">摘要
+          <textarea id="summary" placeholder="摘要会出现在这里，并使用设置中的偏好语言。"></textarea>
         </label>
       </aside>
 
@@ -633,6 +663,50 @@ app.innerHTML = `
       </div>
     </form>
   </dialog>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form id="settingsForm" method="dialog" class="settings-panel">
+      <div class="settings-heading">
+        <div>
+          <p class="eyebrow">Settings</p>
+          <h2>输出偏好</h2>
+        </div>
+        <button id="settingsCloseBtn" type="button" class="ghost-btn" aria-label="关闭设置">关闭</button>
+      </div>
+      <label>摘要与图文笔记语言
+        <select id="outputLanguageSelect">
+          <option value="zh-CN">简体中文</option>
+          <option value="zh-TW">繁体中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+        </select>
+      </label>
+      <p id="settingsAccountHint" class="settings-account-hint">偏好会保存到当前账号。</p>
+      <div class="settings-actions">
+        <button id="settingsSaveBtn" type="submit">保存设置</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="notesDialog" class="notes-dialog">
+    <section class="notes-panel">
+      <header class="notes-toolbar">
+        <div>
+          <p class="eyebrow">Illustrated Notes</p>
+          <h2>图文笔记</h2>
+          <small id="notesLanguageLabel">简体中文</small>
+        </div>
+        <div class="notes-toolbar-actions">
+          <button id="regenerateNotesBtn" type="button" class="ghost-btn">重新生成</button>
+          <button id="downloadNotesHtmlBtn" type="button">下载 HTML</button>
+          <button id="printNotesBtn" type="button" class="ghost-btn">打印 / PDF</button>
+          <button id="closeNotesBtn" type="button" class="ghost-btn">关闭</button>
+        </div>
+      </header>
+      <article id="illustratedNotesPreview" class="illustrated-note-preview"></article>
+    </section>
+  </dialog>
 `;
 
 const $ = <T extends Element>(selector: string) => {
@@ -656,6 +730,7 @@ const authModeToggleBtn = $<HTMLButtonElement>('#authModeToggleBtn');
 const authSignedIn = $<HTMLDivElement>('#authSignedIn');
 const authSignedInName = $<HTMLElement>('#authSignedInName');
 const authSignedInEmail = $<HTMLElement>('#authSignedInEmail');
+const openAccountSettingsBtn = $<HTMLButtonElement>('#openAccountSettingsBtn');
 const authLogoutBtn = $<HTMLButtonElement>('#authLogoutBtn');
 const accountStatus = $<HTMLElement>('#accountStatus');
 const dropzone = $<HTMLLabelElement>('#dropzone');
@@ -706,6 +781,7 @@ const downloadPptxBtn = $<HTMLButtonElement>('#downloadPptxBtn');
 const dockDownloadPdfBtn = $<HTMLButtonElement>('#dockDownloadPdfBtn');
 const dockDownloadPptxBtn = $<HTMLButtonElement>('#dockDownloadPptxBtn');
 const dockDownloadFramesBtn = $<HTMLButtonElement>('#dockDownloadFramesBtn');
+const dockNotesBtn = $<HTMLButtonElement>('#dockNotesBtn');
 const resultDock = $<HTMLElement>('#resultDock');
 const resultBadge = $<HTMLElement>('#resultBadge');
 const resultTitle = $<HTMLElement>('#resultTitle');
@@ -715,6 +791,7 @@ const sideDownloadPptxBtn = $<HTMLButtonElement>('#sideDownloadPptxBtn');
 const sideDownloadFramesBtn = $<HTMLButtonElement>('#sideDownloadFramesBtn');
 const downloadTranscriptBtn = $<HTMLButtonElement>('#downloadTranscriptBtn');
 const downloadSummaryBtn = $<HTMLButtonElement>('#downloadSummaryBtn');
+const generateNotesBtn = $<HTMLButtonElement>('#generateNotesBtn');
 const exportHint = $<HTMLElement>('#exportHint');
 const homeStatus = $<HTMLDivElement>('#homeStatus');
 const imageStatus = $<HTMLDivElement>('#imageStatus');
@@ -763,6 +840,7 @@ const openLoginBtn = document.querySelector<HTMLButtonElement>('#openLoginBtn');
 const railHomeBtn = $<HTMLButtonElement>('#railHomeBtn');
 const railWorkspaceBtn = $<HTMLButtonElement>('#railWorkspaceBtn');
 const railOrdersBtn = $<HTMLButtonElement>('#railOrdersBtn');
+const railSettingsBtn = $<HTMLButtonElement>('#railSettingsBtn');
 const railLoginBtn = $<HTMLButtonElement>('#railLoginBtn');
 const openTipDialogBtn = $<HTMLButtonElement>('#openTipDialogBtn');
 const tipDialog = $<HTMLDialogElement>('#tipDialog');
@@ -775,6 +853,18 @@ const urlFallbackDialog = $<HTMLDialogElement>('#urlFallbackDialog');
 const urlFallbackMessage = $<HTMLElement>('#urlFallbackMessage');
 const urlFallbackOpenBtn = $<HTMLButtonElement>('#urlFallbackOpenBtn');
 const urlFallbackRecordBtn = $<HTMLButtonElement>('#urlFallbackRecordBtn');
+const settingsDialog = $<HTMLDialogElement>('#settingsDialog');
+const settingsForm = $<HTMLFormElement>('#settingsForm');
+const settingsCloseBtn = $<HTMLButtonElement>('#settingsCloseBtn');
+const outputLanguageSelect = $<HTMLSelectElement>('#outputLanguageSelect');
+const settingsAccountHint = $<HTMLElement>('#settingsAccountHint');
+const notesDialog = $<HTMLDialogElement>('#notesDialog');
+const notesLanguageLabel = $<HTMLElement>('#notesLanguageLabel');
+const illustratedNotesPreview = $<HTMLElement>('#illustratedNotesPreview');
+const regenerateNotesBtn = $<HTMLButtonElement>('#regenerateNotesBtn');
+const downloadNotesHtmlBtn = $<HTMLButtonElement>('#downloadNotesHtmlBtn');
+const printNotesBtn = $<HTMLButtonElement>('#printNotesBtn');
+const closeNotesBtn = $<HTMLButtonElement>('#closeNotesBtn');
 const runOcrBtn = $<HTMLButtonElement>('#runOcrBtn');
 const addTextBoxBtn = $<HTMLButtonElement>('#addTextBoxBtn');
 const deleteTextBoxBtn = $<HTMLButtonElement>('#deleteTextBoxBtn');
@@ -811,6 +901,7 @@ let isUrlDownloading = false;
 let isPerceivedUploading = false;
 let isTranscribing = false;
 let isSummarizing = false;
+let isGeneratingNotes = false;
 let isOcrRunning = false;
 let isPdfMasking = false;
 let isRecording = false;
@@ -833,6 +924,8 @@ let paddleInitialized = false;
 let isTipCheckoutOpening = false;
 let authMode: AuthMode = 'login';
 let authSession: AuthSession | null = loadAuthSession();
+let userPreferences: UserPreferences = loadUserPreferences();
+let illustratedNotesMarkdown = '';
 let authCaptchaToken = '';
 let isAuthBusy = false;
 let entitlement: EntitlementPayload = freeEntitlement(authSession?.user.email ?? '');
@@ -848,15 +941,39 @@ refreshAuthCaptchaBtn.addEventListener('click', () => {
   void loadAuthCaptcha();
 });
 authLogoutBtn.addEventListener('click', () => {
+  const wasAdminUser = authSession?.user.username === ADMIN_USERNAME;
   authSession = null;
+  userPreferences = loadUserPreferences();
   entitlement = freeEntitlement();
   usageSummary = loadLocalUsageSummary();
   entitlementFetchedAt = 0;
   localStorage.removeItem(AUTH_STORAGE_KEY);
+  if (wasAdminUser) localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  syncAdminNav();
   setAuthStatus('已退出登录。', '');
   updateAuthUi();
   void loadAuthCaptcha();
 });
+openAccountSettingsBtn.addEventListener('click', () => openSettingsDialog());
+settingsForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  savePreferencesFromDialog();
+});
+settingsCloseBtn.addEventListener('click', () => settingsDialog.close());
+settingsDialog.addEventListener('click', (event) => {
+  if (event.target === settingsDialog) settingsDialog.close();
+});
+closeNotesBtn.addEventListener('click', () => notesDialog.close());
+notesDialog.addEventListener('click', (event) => {
+  if (event.target === notesDialog) notesDialog.close();
+});
+regenerateNotesBtn.addEventListener('click', () => {
+  notesDialog.close();
+  void generateIllustratedNotes(true);
+});
+downloadNotesHtmlBtn.addEventListener('click', () => downloadIllustratedNotesHtml());
+printNotesBtn.addEventListener('click', () => printIllustratedNotes());
+syncAdminNav();
 updateAuthUi();
 void refreshEntitlement();
 
@@ -892,6 +1009,14 @@ imageWorkspaceBtn.addEventListener('click', () => openImagesInWorkspace());
 notebookMaskPdfBtn.addEventListener('click', () => maskSelectedNotebookPdf());
 transcriptEl.addEventListener('input', () => { persistWorkspaceToState(); updateActionState(); });
 summaryEl.addEventListener('input', () => persistWorkspaceToState());
+dockNotesBtn.addEventListener('click', () => {
+  if (illustratedNotesMarkdown.trim()) openIllustratedNotes();
+  else void generateIllustratedNotes();
+});
+generateNotesBtn.addEventListener('click', () => {
+  if (illustratedNotesMarkdown.trim()) openIllustratedNotes();
+  else void generateIllustratedNotes();
+});
 
 doneBtn.addEventListener('click', () => {
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
@@ -1039,6 +1164,7 @@ openLoginBtn?.addEventListener('click', () => focusLoginPanel());
 railHomeBtn.addEventListener('click', () => returnHomeForVideoStart());
 railWorkspaceBtn.addEventListener('click', () => openWorkspaceFromNav());
 railOrdersBtn.addEventListener('click', () => showOrdersPlaceholder());
+railSettingsBtn.addEventListener('click', () => openSettingsDialog());
 railLoginBtn.addEventListener('click', () => focusLoginPanel());
 emptyWorkspaceStartBtn.addEventListener('click', () => {
   if (selectedFile && workspaceMode === 'video' && slides.length === 0) void processCurrentFile();
@@ -1057,7 +1183,9 @@ workspaceRecordScreenBtn.addEventListener('click', () => {
   void startScreenRecording('extract');
 });
 workspaceStopRecordBtn.addEventListener('click', () => stopScreenRecording());
-openTipDialogBtn.addEventListener('click', () => openTipDialog());
+openTipDialogBtn.addEventListener('click', () => {
+  window.location.href = '/sponsor/';
+});
 showCustomTipBtn.addEventListener('click', () => showCustomTipInput());
 customTipPayBtn.addEventListener('click', () => {
   void openTipCheckout(readCustomTipAmount());
@@ -1102,11 +1230,84 @@ function loadAuthSession(): AuthSession | null {
   }
 }
 
-function saveAuthSession(session: AuthSession): void {
+function preferencesStorageKey(): string {
+  const identity = authSession?.user.username?.trim().toLowerCase() || 'guest';
+  return `${PREFERENCES_STORAGE_PREFIX}.${identity}`;
+}
+
+function loadUserPreferences(): UserPreferences {
+  try {
+    const raw = localStorage.getItem(preferencesStorageKey());
+    if (!raw) return { ...DEFAULT_USER_PREFERENCES };
+    const parsed = JSON.parse(raw) as Partial<UserPreferences>;
+    return {
+      outputLanguage: isOutputLanguage(parsed.outputLanguage) ? parsed.outputLanguage : DEFAULT_USER_PREFERENCES.outputLanguage
+    };
+  } catch {
+    return { ...DEFAULT_USER_PREFERENCES };
+  }
+}
+
+function isOutputLanguage(value: unknown): value is OutputLanguage {
+  return typeof value === 'string' && value in OUTPUT_LANGUAGE_LABELS;
+}
+
+function syncPreferencesUi(): void {
+  outputLanguageSelect.value = userPreferences.outputLanguage;
+  const languageLabel = OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage];
+  settingsAccountHint.textContent = authSession
+    ? `已为账号 ${authSession.user.username} 保存，之后的摘要和图文笔记默认使用${languageLabel}。`
+    : `当前使用${languageLabel}。登录后会为每个账号分别保存偏好。`;
+  notesLanguageLabel.textContent = languageLabel;
+}
+
+function openSettingsDialog(): void {
+  syncPreferencesUi();
+  if (typeof settingsDialog.showModal === 'function') settingsDialog.showModal();
+  else settingsDialog.setAttribute('open', '');
+}
+
+function savePreferencesFromDialog(): void {
+  const outputLanguage = isOutputLanguage(outputLanguageSelect.value)
+    ? outputLanguageSelect.value
+    : DEFAULT_USER_PREFERENCES.outputLanguage;
+  userPreferences = { outputLanguage };
+  localStorage.setItem(preferencesStorageKey(), JSON.stringify(userPreferences));
+  syncPreferencesUi();
+  settingsDialog.close();
+  const message = `输出语言已设置为${OUTPUT_LANGUAGE_LABELS[outputLanguage]}。`;
+  if (workspaceView.hidden) setHomeStatus(message);
+  else setStatus(message);
+}
+
+function saveAuthSession(session: AuthSession, adminToken = ''): void {
   authSession = session;
+  userPreferences = loadUserPreferences();
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  if (adminToken && adminTokenIsCurrent(adminToken)) {
+    localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
+  }
+  syncAdminNav();
   localStorage.setItem(CHECKOUT_EMAIL_STORAGE_KEY, session.user.email);
   void refreshEntitlement();
+}
+
+function adminTokenIsCurrent(token: string | null): boolean {
+  try {
+    const payloadPart = String(token || '').split('.')[0] || '';
+    const padded = payloadPart.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - payloadPart.length % 4) % 4);
+    const payload = JSON.parse(atob(padded)) as { kind?: string; sub?: string };
+    return payload.kind === 'admin' && payload.sub === ADMIN_USERNAME;
+  } catch {
+    return false;
+  }
+}
+
+function syncAdminNav(): void {
+  const unlocked = adminTokenIsCurrent(localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY));
+  document.querySelectorAll<HTMLAnchorElement>('.nav-action[href="/admin/"]').forEach((link) => {
+    link.hidden = !unlocked;
+  });
 }
 
 function setAuthStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = ''): void {
@@ -1137,6 +1338,7 @@ function updateAuthUi(): void {
   } else {
     setAuthMode(authMode);
   }
+  syncPreferencesUi();
   updateActionState();
 }
 
@@ -1186,9 +1388,9 @@ async function submitAuthForm(): Promise<void> {
         captcha_answer: captchaAnswer
       })
     });
-    const data = await response.json() as { token?: string; user?: AuthUser; detail?: string };
+    const data = await response.json() as AuthResponse;
     if (!response.ok || !data.token || !data.user) throw new Error(data.detail || '账号请求失败。');
-    saveAuthSession({ token: data.token, user: data.user });
+    saveAuthSession({ token: data.token, user: data.user }, data.admin_token || '');
     authPassword.value = '';
     authCaptchaAnswer.value = '';
     updateAuthUi();
@@ -1296,7 +1498,7 @@ async function refreshEntitlement(): Promise<void> {
   const email = authSession.user.email;
   try {
     const [entitlementResponse, usageResponse] = await Promise.all([
-      fetch(`/api/entitlement?email=${encodeURIComponent(email)}`, { cache: 'no-store' }),
+      fetch(`/api/entitlement?email=${encodeURIComponent(email)}`, { cache: 'no-store', headers: authHeaders() }),
       fetch(`/api/usage?email=${encodeURIComponent(email)}`, { cache: 'no-store', headers: authHeaders() })
     ]);
     if (!entitlementResponse.ok) throw new Error('权益接口异常。');
@@ -1330,7 +1532,8 @@ function normalizeEntitlement(value: unknown, email: string): EntitlementPayload
     status: typeof data.status === 'string' ? data.status : 'inactive',
     lifetime: Boolean(data.lifetime),
     current_period_end: typeof data.current_period_end === 'string' ? data.current_period_end : null,
-    active: Boolean(data.active),
+      active: Boolean(data.active),
+      owner: Boolean(data.owner),
     limits: normalizePlanLimits(data.limits),
     updated_at: typeof data.updated_at === 'string' ? data.updated_at : undefined
   };
@@ -1395,9 +1598,9 @@ function periodText(value: string | null | undefined): string {
 function renderEntitlementSummary(): void {
   const plan = currentPlan();
   const prefix = authSession
-    ? `已登录，当前套餐：${planLabel(plan)}${periodText(entitlement.current_period_end)}`
+    ? `已登录，当前权限：${entitlement.owner ? '所有者' : planLabel(plan)}${periodText(entitlement.current_period_end)}`
     : `${authMode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可同步付费权益。'} 当前按免费版额度使用`;
-  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，Summary ${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
+  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，摘要与笔记${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
   const tone: 'ok' | 'warn' | '' = authSession ? (plan === 'free' ? 'warn' : 'ok') : '';
   setAuthStatus(message, tone);
 }
@@ -1507,7 +1710,7 @@ async function readFileVideoMetadata(file: File): Promise<VideoMeta> {
 }
 
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isUrlDownloading || isPerceivedUploading || isTranscribing || isSummarizing || isOcrRunning || isPdfMasking || isRecording || isTipCheckoutOpening || isAuthBusy;
+  return isExtracting || isBatchProcessing || isUrlDownloading || isPerceivedUploading || isTranscribing || isSummarizing || isGeneratingNotes || isOcrRunning || isPdfMasking || isRecording || isTipCheckoutOpening || isAuthBusy;
 }
 
 function openTipDialog(): void {
@@ -1927,6 +2130,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(youtubeDownload ? {
           action: 'video',
+          language: userPreferences.outputLanguage,
           rightsConfirmed: mediaRightsConfirm.checked,
           url: parsedUrl.toString()
         } : {
@@ -1965,6 +2169,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     if (blob.size === 0) throw new Error('没有获取到可处理的视频文件。');
     const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
     addFiles([file], true);
+    if (youtubeDownload) void importYoutubeTranscript(parsedUrl, file);
     videoUrlInput.value = '';
     clearMediaPreview();
     setUrlDownloadProgress(mode === 'extract' ? '已获取视频，准备生成页面' : '已加入 Vid2PPT 队列', 100);
@@ -1999,10 +2204,45 @@ function isYoutubeDownloadUrl(url: URL): boolean {
   return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
 }
 
+async function importYoutubeTranscript(sourceUrl: URL, file: File): Promise<void> {
+  try {
+    const response = await fetch(YOUTUBE_FALLBACK_URL, {
+      method: 'POST',
+      mode: 'cors',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'transcript',
+        language: userPreferences.outputLanguage,
+        rightsConfirmed: true,
+        url: sourceUrl.toString()
+      })
+    });
+    if (!response.ok) return;
+    const data = await response.json().catch(() => null) as { transcript?: unknown } | null;
+    const transcript = typeof data?.transcript === 'string' ? cleanTranscriptText(data.transcript) : '';
+    if (!transcript) return;
+    const state = ensureState(file);
+    if (!state.transcript.trim()) state.transcript = transcript;
+    if (selectedFile === file && !transcriptEl.value.trim() && !isTranscribing) {
+      transcriptEl.value = transcript;
+      persistWorkspaceToState({ markProcessed: slides.length > 0 });
+      updateActionState();
+      if (!isBusy()) setStatus('已自动导入 YouTube 字幕，可直接生成中文摘要或图文笔记。');
+    }
+  } catch (error) {
+    console.info('YouTube 字幕未导入，将保留本地转写方式。', error);
+  }
+}
+
 async function responseToBlobWithProgress(response: Response, onProgress: (percent: number | null) => void): Promise<Blob> {
   const contentType = response.headers.get('content-type') || 'video/mp4';
   const length = Number(response.headers.get('content-length') || '0');
-  if (!response.body || !Number.isFinite(length) || length <= 0) {
+  const estimatedLength = Number(response.headers.get('x-estimated-bytes') || '0');
+  const progressLength = Number.isFinite(length) && length > 0
+    ? length
+    : Number.isFinite(estimatedLength) && estimatedLength > 0 ? estimatedLength : 0;
+  if (!response.body || progressLength <= 0) {
     onProgress(null);
     return response.blob();
   }
@@ -2015,9 +2255,11 @@ async function responseToBlobWithProgress(response: Response, onProgress: (perce
     if (value) {
       chunks.push(value as unknown as BlobPart);
       received += value.byteLength;
-      onProgress((received / length) * 100);
+      const percent = (received / progressLength) * 100;
+      onProgress(length > 0 ? Math.min(100, percent) : Math.min(96, percent));
     }
   }
+  onProgress(100);
   return new Blob(chunks, { type: contentType });
 }
 
@@ -2045,6 +2287,12 @@ function urlDownloadErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '');
   if (!message || /failed to fetch|load failed|networkerror/i.test(message)) {
     return `无法获取链接，请稍后重试，或先保存视频文件后上传。`;
+  }
+  if (/unable to connect to proxy|tunnel connection failed|proxyerror/i.test(message)) {
+    return 'YouTube 备用线路暂时不可用，系统已保留其他获取方式，请稍后重试。';
+  }
+  if (/please report this issue|confirm you are on the latest version/i.test(message)) {
+    return '这个视频暂时没有返回可处理的视频流，请稍后重试。';
   }
   return message;
 }
@@ -2265,6 +2513,7 @@ async function processCurrentFile(): Promise<boolean> {
       slides,
       transcript: transcriptEl.value,
       summary: summaryEl.value,
+      illustratedNotes: illustratedNotesMarkdown,
       videoMeta,
       status: 'done',
       processedAt: new Date().toISOString()
@@ -2329,6 +2578,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
         slides: result.slides,
         transcript: getState(file).transcript,
         summary: getState(file).summary,
+        illustratedNotes: getState(file).illustratedNotes,
         videoMeta: result.meta,
         status: 'done',
         processedAt: new Date().toISOString()
@@ -2388,8 +2638,8 @@ async function downloadProcessedFramesZip(): Promise<void> {
   }
 }
 
-async function transcribeCurrentFile(): Promise<void> {
-  if (!selectedFile || isBusy()) return;
+async function transcribeCurrentFile(): Promise<boolean> {
+  if (!selectedFile || isBusy()) return false;
   const file = selectedFile;
   let transcribeMinutes = 1;
   try {
@@ -2397,9 +2647,9 @@ async function transcribeCurrentFile(): Promise<void> {
     transcribeMinutes = Math.max(1, Math.ceil(meta.duration / 60));
   } catch (error) {
     setStatus(error instanceof Error ? error.message : '无法读取视频时长。');
-    return;
+    return false;
   }
-  if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return;
+  if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return false;
 
   try {
     isTranscribing = true;
@@ -2423,35 +2673,90 @@ async function transcribeCurrentFile(): Promise<void> {
     isTranscribing = false;
     updateActionState();
   }
+  return Boolean(transcriptEl.value.trim());
 }
 
 transcribeBtn.addEventListener('click', () => transcribeCurrentFile());
 
-summarizeBtn.addEventListener('click', async () => {
+summarizeBtn.addEventListener('click', () => {
+  void generateSummary();
+});
+
+async function generateSummary(): Promise<void> {
   const transcriptForSummary = transcriptEl.value.trim();
   if (!transcriptForSummary || isBusy()) {
     if (!transcriptForSummary) setStatus('没有逐字稿可总结。');
     return;
   }
-  if (!await ensureUsageCapacity('summary_generation', 1, 'Summary 次数', setStatus)) return;
+  if (!await ensureUsageCapacity('summary_generation', 1, '摘要次数', setStatus)) return;
   try {
     isSummarizing = true;
     updateActionState();
-    setProgress('正在生成 Summary', 50, true);
-    setStatus('正在生成 Summary...');
-    summaryEl.value = await summarizeWithApi(transcriptForSummary);
-    setProgress('Summary 完成', 100);
-    setStatus('Summary 已生成。');
+    setProgress('正在生成摘要', 50, true);
+    setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成摘要...`);
+    summaryEl.value = await summarizeWithApi(transcriptForSummary, 'summary', selectedFile?.name ?? '');
+    setProgress('摘要完成', 100);
+    setStatus('摘要已生成。');
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
   } catch (error) {
     console.error(error);
-    setProgress('Summary 失败', 100);
-    setStatus(error instanceof Error ? error.message : 'Summary 失败，请查看控制台。');
+    setProgress('摘要失败', 100);
+    setStatus(error instanceof Error ? error.message : '摘要生成失败。');
   } finally {
     isSummarizing = false;
     updateActionState();
   }
-});
+}
+
+async function generateIllustratedNotes(forceRegenerate = false): Promise<void> {
+  if (!selectedFile || workspaceMode !== 'video') {
+    setStatus('请先选择并处理一个视频。');
+    return;
+  }
+  if (!authSession) {
+    setStatus('请先登录账号，再生成图文笔记。');
+    return;
+  }
+  if (isBusy()) return;
+  if (illustratedNotesMarkdown.trim() && !forceRegenerate) {
+    openIllustratedNotes();
+    return;
+  }
+
+  if (!transcriptEl.value.trim()) {
+    setStatus('正在先生成逐字稿，完成后会继续生成图文笔记。');
+    const transcribed = await transcribeCurrentFile();
+    if (!transcribed) {
+      setStatus('没有识别到可用于生成笔记的逐字稿。');
+      return;
+    }
+  }
+  if (!await ensureUsageCapacity('summary_generation', 1, '图文笔记次数', setStatus)) return;
+
+  try {
+    isGeneratingNotes = true;
+    updateActionState();
+    setProgress('正在生成图文笔记', 56, true);
+    setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成图文笔记...`);
+    illustratedNotesMarkdown = await summarizeWithApi(
+      transcriptEl.value.trim(),
+      'illustrated_notes',
+      selectedFile.name
+    );
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+    renderIllustratedNotes();
+    setProgress('图文笔记完成', 100);
+    setStatus('图文笔记已生成，可预览、打印或下载 HTML。');
+    openIllustratedNotes();
+  } catch (error) {
+    console.error(error);
+    setProgress('图文笔记生成失败', 100);
+    setStatus(error instanceof Error ? error.message : '图文笔记生成失败。');
+  } finally {
+    isGeneratingNotes = false;
+    updateActionState();
+  }
+}
 
 downloadPdfBtn.addEventListener('click', () => downloadSelectedPdf());
 downloadPptxBtn.addEventListener('click', () => downloadSelectedPptx());
@@ -3247,7 +3552,7 @@ function ensureState(file: File): FileJobState {
   const key = fileKey(file);
   const existing = fileStates.get(key);
   if (existing) return existing;
-  const created: FileJobState = { slides: [], transcript: '', summary: '', videoMeta: null, status: 'queued' };
+  const created: FileJobState = { slides: [], transcript: '', summary: '', illustratedNotes: '', videoMeta: null, status: 'queued' };
   fileStates.set(key, created);
   return created;
 }
@@ -3263,6 +3568,7 @@ function setStateForFile(file: File, state: FileJobState): void {
     slides: cloneSlides(state.slides),
     transcript: state.transcript,
     summary: state.summary,
+    illustratedNotes: state.illustratedNotes,
     videoMeta: state.videoMeta ? { ...state.videoMeta } : null,
     status: state.status,
     error: state.error,
@@ -3277,6 +3583,7 @@ function persistWorkspaceToState(options: { markProcessed?: boolean } = {}): voi
     slides,
     transcript: transcriptEl.value,
     summary: summaryEl.value,
+    illustratedNotes: illustratedNotesMarkdown,
     videoMeta,
     status: slides.length > 0 ? 'done' : previous.status,
     error: previous.error,
@@ -3295,6 +3602,7 @@ function loadStateIntoWorkspace(file: File): void {
   lastTimelinePaint = 0;
   transcriptEl.value = state.transcript;
   summaryEl.value = state.summary;
+  illustratedNotesMarkdown = state.illustratedNotes;
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
   hideProgress();
@@ -3321,6 +3629,7 @@ function resetCurrentFileState(): void {
   slidesEl.innerHTML = '';
   transcriptEl.value = '';
   summaryEl.value = '';
+  illustratedNotesMarkdown = '';
   previewImage.removeAttribute('src');
   previewEmpty.hidden = false;
   timelineMarkers.innerHTML = '';
@@ -3331,6 +3640,7 @@ function resetCurrentFileState(): void {
 
 function resetFrameOutputs(): void {
   slides = [];
+  illustratedNotesMarkdown = '';
   activeSlideId = null;
   activeTextBoxId = null;
   slidesEl.innerHTML = '';
@@ -4768,12 +5078,16 @@ function updateActionState(): void {
   dockDownloadPdfBtn.disabled = selectedCount === 0 || busy;
   dockDownloadPptxBtn.disabled = selectedCount === 0 || busy;
   dockDownloadFramesBtn.disabled = selectedCount === 0 || busy;
+  dockNotesBtn.disabled = !hasVideoFile || slides.length === 0 || busy || !authSession;
+  dockNotesBtn.textContent = illustratedNotesMarkdown.trim() ? '查看图文笔记' : '生成图文笔记';
   sideDownloadPdfBtn.disabled = selectedCount === 0 || busy;
   sideDownloadPptxBtn.disabled = selectedCount === 0 || busy;
   sideDownloadFramesBtn.disabled = selectedCount === 0 || busy;
   downloadTranscriptBtn.disabled = !transcriptEl.value.trim() || isTranscribing || imageMode;
   summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode || !authSession;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
+  generateNotesBtn.disabled = !hasVideoFile || slides.length === 0 || busy || !authSession;
+  generateNotesBtn.textContent = illustratedNotesMarkdown.trim() ? '查看图文笔记' : '生成图文笔记';
   videoInput.disabled = busy;
   videoUrlInput.disabled = busy;
   downloadUrlBtn.disabled = busy || waitingForMediaRights;
@@ -4882,8 +5196,16 @@ function updateResultDock(selectedCount: number): void {
 
   if (busy) {
     resultBadge.textContent = '正在处理';
-    resultTitle.textContent = hasSlides ? `已生成 ${slides.length} 页，继续处理中` : '正在生成页面';
-    resultSubtitle.textContent = '处理完成后，立即下载按钮会自动可用。';
+    resultTitle.textContent = isGeneratingNotes
+      ? '正在生成图文笔记'
+      : isSummarizing
+        ? '正在生成摘要'
+        : isTranscribing
+          ? '正在生成逐字稿'
+          : hasSlides ? `已生成 ${slides.length} 页，继续处理中` : '正在生成页面';
+    resultSubtitle.textContent = isGeneratingNotes
+      ? `正在整理为${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}并匹配关键页面。`
+      : '处理完成后，立即下载按钮会自动可用。';
     return;
   }
 
@@ -5008,21 +5330,200 @@ function isNearDuplicate(current: string, previous: string): boolean {
   return false;
 }
 
-async function summarizeWithApi(transcript: string): Promise<string> {
+async function summarizeWithApi(
+  transcript: string,
+  mode: 'summary' | 'illustrated_notes' = 'summary',
+  sourceTitle = ''
+): Promise<string> {
   const token = authSession?.token;
-  if (!token) throw new Error('请先注册或登录账号，再生成 Summary。');
+  if (!token) throw new Error('请先注册或登录账号，再生成内容。');
   const response = await fetch(SUMMARY_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ transcript })
+    body: JSON.stringify({
+      transcript,
+      mode,
+      language: userPreferences.outputLanguage,
+      source_title: sourceTitle
+    })
   });
   const data = await response.json().catch(() => ({})) as { detail?: string; summary?: string; usage?: UsageSummary };
-  if (!response.ok) throw new Error(data.detail || `Summary 生成失败：${response.status}`);
+  if (!response.ok) throw new Error(data.detail || `内容生成失败：${response.status}`);
   if (data.usage && authSession) {
     usageSummary = normalizeUsageSummary(data.usage, authSession.user.email);
     renderEntitlementSummary();
   }
   return data.summary ?? '';
+}
+
+function openIllustratedNotes(): void {
+  if (!illustratedNotesMarkdown.trim()) {
+    setStatus('还没有图文笔记，点击“生成图文笔记”开始。');
+    return;
+  }
+  renderIllustratedNotes();
+  if (typeof notesDialog.showModal === 'function') notesDialog.showModal();
+  else notesDialog.setAttribute('open', '');
+}
+
+function renderIllustratedNotes(): void {
+  illustratedNotesPreview.innerHTML = '';
+  notesLanguageLabel.textContent = OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage];
+  const lines = illustratedNotesMarkdown.replace(/\r\n?/g, '\n').split('\n');
+  const sectionCount = lines.filter((line) => /^##\s+/.test(line.trim())).length;
+  const illustrations = selectNoteIllustrations(Math.min(8, Math.max(1, sectionCount + 1)));
+  let illustrationIndex = 0;
+  let currentList: HTMLUListElement | HTMLOListElement | null = null;
+  let sawTitle = false;
+
+  const appendIllustration = () => {
+    const slide = illustrations[illustrationIndex];
+    if (!slide) return;
+    illustratedNotesPreview.appendChild(createNoteFigure(slide, illustrationIndex + 1));
+    illustrationIndex += 1;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      currentList = null;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      currentList = null;
+      const level = heading[1].length;
+      const element = document.createElement(level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3');
+      appendMarkdownInline(element, heading[2]);
+      illustratedNotesPreview.appendChild(element);
+      if (level === 1) {
+        sawTitle = true;
+        appendIllustration();
+      } else if (level === 2) {
+        appendIllustration();
+      }
+      continue;
+    }
+
+    const unorderedItem = line.match(/^[-*]\s+(.+)$/);
+    const orderedItem = line.match(/^\d+[.)]\s+(.+)$/);
+    if (unorderedItem || orderedItem) {
+      const listTag = orderedItem ? 'OL' : 'UL';
+      if (!currentList || currentList.tagName !== listTag) {
+        currentList = document.createElement(orderedItem ? 'ol' : 'ul');
+        illustratedNotesPreview.appendChild(currentList);
+      }
+      const item = document.createElement('li');
+      appendMarkdownInline(item, (orderedItem ?? unorderedItem)?.[1] ?? line);
+      currentList.appendChild(item);
+      continue;
+    }
+
+    currentList = null;
+    const element = document.createElement(line.startsWith('> ') ? 'blockquote' : 'p');
+    appendMarkdownInline(element, line.replace(/^>\s*/, ''));
+    illustratedNotesPreview.appendChild(element);
+  }
+
+  if (!sawTitle) {
+    const title = document.createElement('h1');
+    title.textContent = selectedFile ? `${baseName(selectedFile.name)} · 图文笔记` : '图文笔记';
+    illustratedNotesPreview.prepend(title);
+    if (illustrationIndex === 0 && illustrations[0]) title.after(createNoteFigure(illustrations[0], 1));
+  }
+}
+
+function appendMarkdownInline(element: HTMLElement, text: string): void {
+  const matcher = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let cursor = 0;
+  for (const match of text.matchAll(matcher)) {
+    const index = match.index ?? 0;
+    if (index > cursor) element.append(document.createTextNode(text.slice(cursor, index)));
+    const token = match[0];
+    const child = document.createElement(token.startsWith('**') ? 'strong' : 'code');
+    child.textContent = token.startsWith('**') ? token.slice(2, -2) : token.slice(1, -1);
+    element.append(child);
+    cursor = index + token.length;
+  }
+  if (cursor < text.length) element.append(document.createTextNode(text.slice(cursor)));
+}
+
+function selectNoteIllustrations(maxCount: number): Slide[] {
+  const selected = slides.filter((slide) => slide.selected);
+  const pool = selected.length > 0 ? selected : slides;
+  if (pool.length <= maxCount) return pool.slice();
+  const result: Slide[] = [];
+  for (let index = 0; index < maxCount; index += 1) {
+    const poolIndex = Math.round((index * (pool.length - 1)) / Math.max(1, maxCount - 1));
+    const slide = pool[poolIndex];
+    if (slide && !result.some((item) => item.id === slide.id)) result.push(slide);
+  }
+  return result;
+}
+
+function createNoteFigure(slide: Slide, index: number): HTMLElement {
+  const figure = document.createElement('figure');
+  figure.className = 'note-figure';
+  const image = document.createElement('img');
+  image.src = slide.dataUrl;
+  image.alt = `视频关键页面 ${index}`;
+  const caption = document.createElement('figcaption');
+  caption.textContent = `视频关键页面 ${index} · ${formatTime(slide.time)}`;
+  figure.append(image, caption);
+  return figure;
+}
+
+function illustratedNotesDocument(): string {
+  const title = illustratedNotesMarkdown.match(/^#\s+(.+)$/m)?.[1]?.trim()
+    || (selectedFile ? `${baseName(selectedFile.name)} · 图文笔记` : '图文笔记');
+  return `<!doctype html>
+<html lang="${escapeXml(userPreferences.outputLanguage)}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeXml(title)}</title>
+  <style>
+    :root{font-family:Inter,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#172033;background:#eef2f7}
+    *{box-sizing:border-box}body{margin:0;padding:40px 18px}main{width:min(860px,100%);margin:auto;padding:54px 64px;background:#fff;box-shadow:0 18px 60px rgba(15,23,42,.12)}
+    h1{margin:0 0 24px;font-size:42px;line-height:1.15}h2{margin:42px 0 14px;padding-top:20px;border-top:1px solid #dbe3ef;font-size:27px}h3{margin:28px 0 10px;font-size:21px}
+    p,li,blockquote{font-size:17px;line-height:1.85}p{margin:12px 0}li{margin:7px 0}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid #2563eb;background:#eff6ff}
+    figure{margin:24px 0 32px;background:#f8fafc;border:1px solid #dbe3ef}figure img{display:block;width:100%;height:auto}figcaption{padding:10px 14px;color:#64748b;font-size:13px;font-weight:700}
+    code{padding:2px 5px;background:#f1f5f9}@media(max-width:640px){body{padding:0}main{padding:28px 20px}h1{font-size:32px}}
+    @media print{body{padding:0;background:#fff}main{width:100%;padding:0;box-shadow:none}figure{break-inside:avoid}h2{break-after:avoid}}
+  </style>
+</head>
+<body><main>${illustratedNotesPreview.innerHTML}</main></body>
+</html>`;
+}
+
+function downloadIllustratedNotesHtml(): void {
+  if (!illustratedNotesMarkdown.trim()) return;
+  renderIllustratedNotes();
+  const filename = `${selectedFile ? baseName(selectedFile.name) : 'vid2ppt'}-illustrated-notes.html`;
+  downloadBlob(new Blob([illustratedNotesDocument()], { type: 'text/html;charset=utf-8' }), filename);
+}
+
+function printIllustratedNotes(): void {
+  if (!illustratedNotesMarkdown.trim()) return;
+  renderIllustratedNotes();
+  const frame = document.createElement('iframe');
+  frame.hidden = true;
+  document.body.appendChild(frame);
+  const documentRef = frame.contentDocument;
+  if (!documentRef) {
+    frame.remove();
+    setStatus('无法打开打印视图，请下载 HTML 后打印。');
+    return;
+  }
+  documentRef.open();
+  documentRef.write(illustratedNotesDocument());
+  documentRef.close();
+  window.setTimeout(() => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    window.setTimeout(() => frame.remove(), 1200);
+  }, 400);
 }
 
 function readSettings(): Settings {

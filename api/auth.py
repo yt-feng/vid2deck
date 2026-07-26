@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hmac
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
@@ -19,6 +20,7 @@ try:
         verify_user_token,
     )
     from _supabase import SupabaseError, create_site_user, find_site_user_by_username, update_site_user, utc_now_iso
+    from usage import create_admin_token
 except ModuleNotFoundError:
     from api._auth import (
         create_user_token,
@@ -33,6 +35,11 @@ except ModuleNotFoundError:
         verify_user_token,
     )
     from api._supabase import SupabaseError, create_site_user, find_site_user_by_username, update_site_user, utc_now_iso
+    from api.usage import create_admin_token
+
+
+ADMIN_USERNAME = normalize_username(os.getenv("VID2PPT_ADMIN_USERNAME", "twotigers_vid"))
+ADMIN_PASSWORD = os.getenv("VID2PPT_ADMIN_PASSWORD", "1108")
 
 
 class handler(BaseHTTPRequestHandler):
@@ -124,6 +131,12 @@ class handler(BaseHTTPRequestHandler):
         self.send_session(user, status=201)
 
     def login(self, username: str, password: str) -> None:
+        if is_admin_login(username, password):
+            user = ensure_admin_site_user(username, password)
+            updated = update_site_user(str(user.get("id")), {"last_login_at": utc_now_iso()}) if user.get("id") else user
+            self.send_session({**user, **updated}, admin_token=create_admin_token(username))
+            return
+
         user = find_site_user_by_username(username)
         if not user or not verify_password(password, str(user.get("password_salt") or ""), str(user.get("password_hash") or "")):
             self.send_json({"detail": "用户名或密码不正确。"}, 401)
@@ -131,8 +144,13 @@ class handler(BaseHTTPRequestHandler):
         updated = update_site_user(str(user.get("id")), {"last_login_at": utc_now_iso()}) if user.get("id") else user
         self.send_session({**user, **updated})
 
-    def send_session(self, user: dict[str, Any], status: int = 200) -> None:
-        self.send_json({"token": create_user_token(user), "user": public_user(user)}, status)
+    def send_session(self, user: dict[str, Any], status: int = 200, admin_token: str = "") -> None:
+        payload = {"token": create_user_token(user), "user": public_user(user)}
+        if not admin_token and normalize_username(str(user.get("username") or "")) == ADMIN_USERNAME:
+            admin_token = create_admin_token(ADMIN_USERNAME)
+        if admin_token:
+            payload["admin_token"] = admin_token
+        self.send_json(payload, status)
 
     def read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("content-length", "0") or "0")
@@ -159,3 +177,28 @@ def bearer_token(header: str) -> str:
     if not header.startswith(prefix):
         return ""
     return header.removeprefix(prefix).strip()
+
+
+def is_admin_login(username: str, password: str) -> bool:
+    return hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD)
+
+
+def ensure_admin_site_user(username: str, password: str) -> dict[str, Any]:
+    existing = find_site_user_by_username(username)
+    if existing:
+        return existing
+
+    salt, password_hash = hash_password(password)
+    now = utc_now_iso()
+    return create_site_user(
+        {
+            "username": username,
+            "email": generated_email_for_username(username),
+            "email_is_generated": True,
+            "password_salt": salt,
+            "password_hash": password_hash,
+            "created_at": now,
+            "updated_at": now,
+            "last_login_at": now,
+        }
+    )
