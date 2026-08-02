@@ -1,0 +1,26 @@
+[Unit]
+Description=Vid2PPT YouTube downloader
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=vid2ppt-downloader
+Group=vid2ppt-downloader
+WorkingDirectory=/opt/vid2ppt-downloader
+EnvironmentFile=/etc/vid2ppt-downloader.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=DENO_DIR=/tmp/deno-cache
+ExecStart=/opt/vid2ppt-downloader/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8787 --no-access-log --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+UMask=0077
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vid2ppt-downloader
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

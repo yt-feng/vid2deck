@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/redeem-code",
+      "destination": "/api/usage?action=redeem_code"
+    }
+  ],
+  "functions": {
+    "api/download-video.py": {
+      "maxDuration": 300
+    },
+    "api/youtube-fallback.ts": {
+      "maxDuration": 300
+    }
+  }
+}

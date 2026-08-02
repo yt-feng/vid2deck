@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vid2PPT Deck Admin</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    :root { color: #111827; background: #f5f7fb; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button, input { font: inherit; }
+    .wrap { width: min(1440px, calc(100% - 24px)); margin: 0 auto; padding: 18px 0 48px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: #0f172a; font-weight: 950; text-decoration: none; }
+    .logo { width: 34px; height: 34px; display: grid; place-items: center; color: #fff; background: #0f172a; border-radius: 8px; }
+    .top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+    .btn { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; color: #fff; background: #0f172a; border: 0; border-radius: 8px; cursor: pointer; font-weight: 900; text-decoration: none; }
+    .btn.secondary { color: #0f172a; background: #e8eef7; }
+    .btn.danger { color: #991b1b; background: #fee2e2; }
+    .btn:disabled { cursor: wait; opacity: .62; }
+    .login-shell { min-height: calc(100vh - 120px); display: grid; place-items: center; }
+    .login-card { width: min(420px, 100%); padding: 22px; background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; box-shadow: 0 18px 48px rgba(15, 23, 42, .08); }
+    h1, h2 { margin: 0; letter-spacing: 0; }
+    .login-card h1 { font-size: 1.7rem; }
+    .muted { color: #64748b; line-height: 1.55; }
+    .login-form { display: grid; gap: 12px; margin-top: 18px; }
+    label { display: grid; gap: 7px; color: #334155; font-weight: 900; }
+    input { width: 100%; min-height: 42px; padding: 0 12px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 750; }
+    input:focus { outline: 3px solid rgba(37, 99, 235, .18); border-color: #2563eb; }
+    .status { min-height: 22px; color: #64748b; font-weight: 850; line-height: 1.5; }
+    .status.ok { color: #047857; }
+    .status.warn { color: #b45309; }
+    .status.error { color: #b91c1c; }
+    .dashboard[hidden], .login-shell[hidden] { display: none; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .metric { padding: 14px; background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; }
+    .metric span { display: block; color: #64748b; font-size: .86rem; font-weight: 900; }
+    .metric b { display: block; margin-top: 6px; font-size: 1.9rem; letter-spacing: 0; }
+    .toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .table-section { margin-top: 12px; background: #fff; border: 1px solid #dbe3ef; border-radius: 8px; overflow: hidden; }
+    .table-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; }
+    .table-heading h2 { font-size: 1.1rem; }
+    .table-heading span { color: #64748b; font-weight: 850; }
+    .table-wrap { overflow: auto; }
+    table { width: 100%; min-width: 960px; border-collapse: collapse; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; font-size: .9rem; }
+    th { position: sticky; top: 0; z-index: 1; color: #334155; background: #f8fafc; font-weight: 950; }
+    tr:last-child td { border-bottom: 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+    .pill { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; color: #0f172a; background: #eef2ff; border-radius: 8px; font-weight: 900; }
+    .pill.completed { color: #065f46; background: #d1fae5; }
+    .pill.checkout_opened { color: #92400e; background: #fef3c7; }
+    .json-cell { max-width: 520px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .error-line { padding: 12px 16px; color: #b91c1c; background: #fef2f2; border-bottom: 1px solid #fecaca; font-weight: 850; }
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toolbar { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .top-actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="logo">V</span><span>Vid2PPT Deck Admin</span></a>
+      <div class="top-actions">
+        <a class="btn secondary" href="/sponsor/">赞助页</a>
+        <button class="btn secondary" id="refreshBtn" type="button" hidden>刷新</button>
+        <button class="btn secondary" id="exportBtn" type="button" hidden>导出 JSON</button>
+        <button class="btn danger" id="logoutBtn" type="button" hidden>退出</button>
+      </div>
+    </header>
+
+    <section class="login-shell" id="loginShell">
+      <div class="login-card">
+        <h1>超级管理员登录</h1>
+        <p class="muted">登录后可查看赞助订单、兑换码、支付回调、用户权益和站内行为日志。</p>
+        <form class="login-form" id="loginForm">
+          <label>账号
+            <input id="username" autocomplete="username" value="twotigers_vid" required />
+          </label>
+          <label>密码
+            <input id="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="btn" id="loginBtn" type="submit">登录后台</button>
+          <div class="status" id="loginStatus" aria-live="polite">等待登录。</div>
+        </form>
+      </div>
+    </section>
+
+    <main class="dashboard" id="dashboard" hidden>
+      <section class="summary-grid" id="summaryGrid" aria-label="赞助汇总"></section>
+      <section class="toolbar">
+        <label>过滤
+          <input id="filterInput" placeholder="搜索邮箱、代号、兑换码、交易号、事件类型" />
+        </label>
+        <div class="status" id="dataStatus" aria-live="polite">等待加载。</div>
+      </section>
+      <div id="tables"></div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var TOKEN_KEY = 'vid2deck.admin.token';
+      var token = localStorage.getItem(TOKEN_KEY) || '';
+      var currentPayload = null;
+      var loginShell = document.getElementById('loginShell');
+      var dashboard = document.getElementById('dashboard');
+      var loginForm = document.getElementById('loginForm');
+      var loginBtn = document.getElementById('loginBtn');
+      var loginStatus = document.getElementById('loginStatus');
+      var dataStatus = document.getElementById('dataStatus');
+      var usernameInput = document.getElementById('username');
+      var passwordInput = document.getElementById('password');
+      var filterInput = document.getElementById('filterInput');
+      var refreshBtn = document.getElementById('refreshBtn');
+      var exportBtn = document.getElementById('exportBtn');
+      var logoutBtn = document.getElementById('logoutBtn');
+      var summaryGrid = document.getElementById('summaryGrid');
+      var tablesEl = document.getElementById('tables');
+
+      var tableConfigs = [
+        { key: 'sponsor_orders', title: '赞助订单 / 兑换码', columns: ['created_at', 'site_origin', 'benefit_site', 'status', 'plan_code', 'amount_cny', 'email', 'code', 'redeemed_at', 'paddle_transaction_id', 'request_id'] },
+        { key: 'usage_events', title: '行为日志 / 支付事件', columns: ['created_at', 'site_origin', 'email', 'event_type', 'units', 'metadata'] },
+        { key: 'user_entitlements', title: '用户权益', columns: ['updated_at', 'site_origin', 'source_site', 'grant_source', 'email', 'plan', 'status', 'current_period_end', 'source_plan_code', 'paddle_transaction_id'] },
+        { key: 'site_users', title: '站内用户', columns: ['created_at', 'site_origin', 'registered_site', 'username', 'email', 'email_is_generated', 'last_login_at', 'id'] }
+      ];
+
+      function setLoginStatus(message, tone) {
+        loginStatus.textContent = message;
+        loginStatus.className = 'status' + (tone ? ' ' + tone : '');
+      }
+
+      function setDataStatus(message, tone) {
+        dataStatus.textContent = message;
+        dataStatus.className = 'status' + (tone ? ' ' + tone : '');
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function showDashboard() {
+        loginShell.hidden = true;
+        dashboard.hidden = false;
+        refreshBtn.hidden = false;
+        exportBtn.hidden = false;
+        logoutBtn.hidden = false;
+      }
+
+      function showLogin() {
+        loginShell.hidden = false;
+        dashboard.hidden = true;
+        refreshBtn.hidden = true;
+        exportBtn.hidden = true;
+        logoutBtn.hidden = true;
+      }
+
+      function login(username, password) {
+        loginBtn.disabled = true;
+        setLoginStatus('正在登录...', 'warn');
+        return fetch('/api/usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'admin_login', username: username, password: password })
+        })
+          .then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (payload) {
+              if (!response.ok) throw new Error(payload.detail || '登录失败。');
+              return payload;
+            });
+          })
+          .then(function (payload) {
+            token = payload.token;
+            localStorage.setItem(TOKEN_KEY, token);
+            setLoginStatus('登录成功。', 'ok');
+            showDashboard();
+            return loadData();
+          })
+          .catch(function (error) {
+            setLoginStatus(error.message || '登录失败。', 'error');
+          })
+          .finally(function () {
+            loginBtn.disabled = false;
+          });
+      }
+
+      function loadData() {
+        if (!token) {
+          showLogin();
+          return Promise.resolve();
+        }
+        refreshBtn.disabled = true;
+        setDataStatus('正在读取原始数据...', 'warn');
+        return fetch('/api/usage?action=admin_data', {
+          headers: { Authorization: 'Bearer ' + token },
+          cache: 'no-store'
+        })
+          .then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (payload) {
+              if (!response.ok) throw new Error(payload.detail || '读取失败。');
+              return payload;
+            });
+          })
+          .then(function (payload) {
+            currentPayload = payload;
+            render();
+            setDataStatus('已加载：' + (payload.generated_at || ''), 'ok');
+          })
+          .catch(function (error) {
+            if (String(error.message || '').toLowerCase().indexOf('login') >= 0) {
+              token = '';
+              localStorage.removeItem(TOKEN_KEY);
+              showLogin();
+            }
+            setDataStatus(error.message || '读取失败。', 'error');
+          })
+          .finally(function () {
+            refreshBtn.disabled = false;
+          });
+      }
+
+      function render() {
+        if (!currentPayload) return;
+        renderSummary(currentPayload.summary || {});
+        renderTables();
+      }
+
+      function renderSummary(summary) {
+        var metrics = [
+          ['订单', summary.sponsor_orders || 0],
+          ['打开未完成', summary.checkout_opened || 0],
+          ['支付完成', summary.completed || 0],
+          ['已兑换', summary.redeemed || 0]
+        ];
+        summaryGrid.innerHTML = metrics.map(function (item) {
+          return '<article class="metric"><span>' + escapeHtml(item[0]) + '</span><b>' + escapeHtml(item[1]) + '</b></article>';
+        }).join('');
+      }
+
+      function renderTables() {
+        var filter = String(filterInput.value || '').trim().toLowerCase();
+        var tables = currentPayload.tables || {};
+        tablesEl.innerHTML = tableConfigs.map(function (config) {
+          var result = tables[config.key] || { rows: [], error: 'No data returned' };
+          var rows = Array.isArray(result.rows) ? result.rows : [];
+          var filtered = filter ? rows.filter(function (row) {
+            return JSON.stringify(row).toLowerCase().indexOf(filter) >= 0;
+          }) : rows;
+          return renderTable(config, filtered, rows.length, result.error);
+        }).join('');
+      }
+
+      function renderTable(config, rows, total, error) {
+        var head = config.columns.map(function (column) { return '<th>' + escapeHtml(column) + '</th>'; }).join('');
+        var body = rows.map(function (row) {
+          return '<tr>' + config.columns.map(function (column) { return '<td>' + cellHtml(column, row[column]) + '</td>'; }).join('') + '</tr>';
+        }).join('');
+        if (!body) body = '<tr><td colspan="' + config.columns.length + '">暂无匹配数据。</td></tr>';
+        return '<section class="table-section">' +
+          '<div class="table-heading"><h2>' + escapeHtml(config.title) + '</h2><span>' + rows.length + ' / ' + total + '</span></div>' +
+          (error ? '<div class="error-line">' + escapeHtml(error) + '</div>' : '') +
+          '<div class="table-wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+          '</section>';
+      }
+
+      function cellHtml(column, value) {
+        if (value == null || value === '') return '';
+        if (column === 'status' || column === 'event_type' || column === 'plan_code') {
+          return '<span class="pill ' + escapeHtml(value) + '">' + escapeHtml(value) + '</span>';
+        }
+        if (column === 'metadata') {
+          return '<code class="json-cell">' + escapeHtml(JSON.stringify(value, null, 2)) + '</code>';
+        }
+        if (typeof value === 'object') {
+          return '<code class="json-cell">' + escapeHtml(JSON.stringify(value, null, 2)) + '</code>';
+        }
+        if (column === 'code' || column === 'request_id' || column === 'paddle_transaction_id' || column === 'id') {
+          return '<code>' + escapeHtml(value) + '</code>';
+        }
+        return escapeHtml(value);
+      }
+
+      loginForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        login(usernameInput.value, passwordInput.value);
+      });
+
+      refreshBtn.addEventListener('click', function () { loadData(); });
+      filterInput.addEventListener('input', renderTables);
+      logoutBtn.addEventListener('click', function () {
+        token = '';
+        currentPayload = null;
+        localStorage.removeItem(TOKEN_KEY);
+        showLogin();
+        setLoginStatus('已退出。', 'ok');
+      });
+      exportBtn.addEventListener('click', function () {
+        if (!currentPayload) return;
+        var blob = new Blob([JSON.stringify(currentPayload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = 'vid2ppt-admin-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
+      if (token) {
+        showDashboard();
+        loadData();
+      } else {
+        showLogin();
+      }
+    }());
+  </script>
+</body>
+</html>

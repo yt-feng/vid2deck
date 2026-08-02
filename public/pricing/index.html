@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vid2PPT Deck 定价 | Pricing</title>
+  <meta name="description" content="Vid2PPT Deck pricing plans for video-to-slide PDF, transcript and batch frame extraction." />
+  <style>
+    :root { color: #0f172a; background: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: inherit; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 44px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; text-decoration: none; }
+    .logo { width: 34px; height: 34px; display: grid; place-items: center; color: #fff; background: #0f172a; border-radius: 11px; }
+    .nav-links { display: flex; gap: 18px; color: #64748b; font-weight: 700; }
+    .nav-links a { text-decoration: none; }
+    .hero { text-align: center; margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 12px; color: #2563eb; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4.5rem); line-height: 1; letter-spacing: -.06em; }
+    .subhead { max-width: 760px; margin: 20px auto 0; color: #475569; font-size: 1.12rem; line-height: 1.75; }
+    .toggle { width: fit-content; display: flex; align-items: center; gap: 4px; margin: 28px auto 22px; padding: 6px; background: #eef2f7; border-radius: 18px; }
+    .toggle span { padding: 12px 42px; color: #64748b; border-radius: 14px; font-weight: 900; }
+    .toggle .active { color: #0f172a; background: #fff; box-shadow: 0 8px 22px rgba(15,23,42,.08); }
+    .toggle b { color: #16a34a; }
+    .checkout-panel { display: grid; grid-template-columns: 1fr minmax(320px, 430px); gap: 22px; align-items: center; margin: 0 0 34px; padding: 24px; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .checkout-panel h2 { margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2.2rem); letter-spacing: -.045em; }
+    .checkout-panel p { margin: 0; color: #64748b; line-height: 1.65; }
+    .checkout-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .checkout-form label { grid-column: 1 / -1; color: #0f172a; font-weight: 900; }
+    .checkout-form input { width: 100%; min-height: 48px; padding: 0 14px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-weight: 750; }
+    .checkout-form input:focus { outline: 3px solid rgba(37,99,235,.18); border-color: #2563eb; }
+    .small-btn { min-height: 48px; padding: 0 16px; color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 900; white-space: nowrap; }
+    .small-btn:hover { border-color: #0f172a; }
+    .checkout-status { grid-column: 1 / -1; min-height: 24px; color: #64748b; font-size: .95rem; line-height: 1.5; }
+    .checkout-status.ok { color: #047857; font-weight: 850; }
+    .checkout-status.warn { color: #b45309; font-weight: 850; }
+    .checkout-status.error { color: #b91c1c; font-weight: 850; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+    .card { position: relative; display: flex; flex-direction: column; padding: 34px; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .card.featured { border: 3px solid #0f172a; box-shadow: 0 22px 60px rgba(15,23,42,.14); transform: translateY(-8px); }
+    .badge { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); padding: 10px 18px; color: #fff; background: #111827; border-radius: 999px; font-weight: 900; }
+    .card h2 { margin: 0; font-size: 2rem; letter-spacing: -.04em; }
+    .for { margin: 14px 0 28px; color: #64748b; font-size: 1.08rem; }
+    .price { display: flex; align-items: baseline; gap: 10px; margin: 0 0 28px; padding: 26px; background: #f8fafc; border-radius: 18px; }
+    .price strong { font-size: 3rem; letter-spacing: -.06em; }
+    .price span { color: #64748b; font-weight: 800; }
+    .price del { color: #94a3b8; font-weight: 700; }
+    ul { display: grid; gap: 14px; margin: 0 0 30px; padding: 0; list-style: none; }
+    li { display: flex; gap: 12px; color: #0f172a; line-height: 1.35; font-weight: 650; }
+    li::before { content: '✓'; color: #16a34a; font-weight: 900; }
+    li.muted { color: #94a3b8; }
+    li.muted::before { content: '×'; color: #94a3b8; }
+    .cta { margin-top: auto; display: block; width: 100%; padding: 15px 18px; color: #fff; background: #0f172a; border: 0; border-radius: 12px; cursor: pointer; font: inherit; text-align: center; text-decoration: none; font-weight: 900; }
+    .cta.secondary { color: #64748b; background: #fff; border: 1px solid #e2e8f0; }
+    .cta:disabled { cursor: wait; opacity: .7; }
+    .plan-note { margin: -18px 0 28px; color: #64748b; font-weight: 750; line-height: 1.55; }
+    .day-pass { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; margin-top: 24px; padding: 22px 24px; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .day-pass h2 { margin: 0 0 6px; font-size: 1.45rem; letter-spacing: -.035em; }
+    .day-pass p { margin: 0; color: #64748b; font-weight: 700; }
+    .day-pass-price { color: #0f172a; font-size: 2rem; font-weight: 950; letter-spacing: -.05em; white-space: nowrap; }
+    .day-pass .cta { min-width: 180px; margin-top: 0; }
+    .comparison { margin-top: 42px; overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .comparison table { width: 100%; min-width: 760px; border-collapse: collapse; }
+    .comparison th, .comparison td { padding: 18px 24px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 1rem; }
+    .comparison th { color: #0f172a; font-size: 1.05rem; font-weight: 900; }
+    .comparison tr:last-child td { border-bottom: 0; }
+    .comparison td:not(:first-child), .comparison th:not(:first-child) { width: 21%; }
+    .comparison .yes { color: #0f172a; font-weight: 900; }
+    .comparison .no { color: #0f172a; font-weight: 800; }
+    .services { margin-top: 44px; }
+    .section-title { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+    .section-title h2 { margin: 0; font-size: clamp(1.7rem, 4vw, 3rem); line-height: 1.05; letter-spacing: -.05em; }
+    .section-title p { max-width: 620px; margin: 0; color: #64748b; line-height: 1.7; }
+    .service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .service-card { display: flex; flex-direction: column; min-height: 230px; padding: 28px; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; box-shadow: 0 14px 42px rgba(15,23,42,.06); }
+    .service-card h3 { margin: 0 0 10px; font-size: 1.5rem; letter-spacing: -.04em; }
+    .service-price { margin: 0 0 14px; color: #0f172a; font-size: 2.1rem; font-weight: 950; letter-spacing: -.05em; }
+    .service-card p { margin: 0; color: #64748b; line-height: 1.65; }
+    .service-order { display: grid; gap: 10px; margin-top: 18px; }
+    .service-order label { display: grid; gap: 7px; color: #0f172a; font-weight: 900; }
+    .service-order input, .service-order textarea { width: 100%; padding: 12px 13px; color: #0f172a; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-weight: 700; }
+    .service-order textarea { min-height: 82px; resize: vertical; line-height: 1.45; }
+    .service-order input:focus, .service-order textarea:focus { outline: 3px solid rgba(37,99,235,.18); border-color: #2563eb; }
+    .service-card .cta { margin-top: 12px; }
+    .note { margin: 34px auto 0; text-align: center; color: #64748b; }
+    .note a { color: #0f172a; font-weight: 900; }
+    .footer { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 54px; color: #64748b; font-size: .95rem; }
+    .footer a { text-decoration: none; font-weight: 700; }
+    @media (max-width: 980px) { .cards, .service-grid, .checkout-panel, .day-pass { grid-template-columns: 1fr; } .card.featured { transform: none; } .toggle span { padding-inline: 22px; } .nav, .section-title { align-items: flex-start; flex-direction: column; } .checkout-form { grid-template-columns: 1fr; } .day-pass .cta { width: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav">
+      <a class="brand" href="/"><span class="logo">V</span><span>Vid2PPT Deck</span></a>
+      <div class="nav-links">
+        <a href="/">产品</a>
+        <a href="/pricing/">定价</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Pricing</p>
+      <h1>把视频快速整理成可下载的 PDF 和 Frames</h1>
+      <p class="subhead">本地抽帧、去重、PDF、PPTX、批量 ZIP、屏幕录制、图片转 PPT 和转写。</p>
+    </section>
+
+    <div class="toggle" aria-label="Billing period">
+      <span class="active">月付灵活</span>
+      <span>终身买断 <b>更省心</b></span>
+    </div>
+
+    <section class="checkout-panel" aria-label="会员账号">
+      <div>
+        <h2>会员账号</h2>
+        <p>支付和权益会绑定到这个账号邮箱。已登录时会自动带入；未登录也可以先用邮箱付款。</p>
+      </div>
+      <form class="checkout-form" id="checkoutForm">
+        <label for="checkoutEmail">账号邮箱</label>
+        <input id="checkoutEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+        <button class="small-btn" id="checkEntitlementBtn" type="submit">查看权益</button>
+        <div class="checkout-status" id="checkoutStatus" aria-live="polite">等待填写邮箱。</div>
+      </form>
+    </section>
+
+    <section class="cards" aria-label="Pricing plans">
+      <article class="card">
+        <h2>免费版</h2>
+        <p class="for">适合入门用户</p>
+        <p class="price"><strong>¥0</strong><span>永久免费</span></p>
+        <a class="cta secondary" href="/">当前套餐</a>
+      </article>
+
+      <article class="card featured">
+        <span class="badge">推荐</span>
+        <h2>专业版</h2>
+        <p class="for">推荐专业用户使用</p>
+        <p class="price"><strong>¥39</strong><span>/ 月</span></p>
+        <p class="plan-note">按月订阅，适合持续处理课程、会议和长视频。</p>
+        <button class="cta checkout-btn" type="button" data-plan="pro" data-price-key="PADDLE_PRICE_PRO_MONTHLY">立即订阅</button>
+      </article>
+
+      <article class="card">
+        <span class="badge">超值推荐</span>
+        <h2>终身版</h2>
+        <p class="for">一次购买，终身使用</p>
+        <p class="price"><strong>¥498</strong><del>¥999</del></p>
+        <p class="plan-note">一次付费，后续版本权益持续保留。</p>
+        <button class="cta checkout-btn" type="button" data-plan="lifetime" data-price-key="PADDLE_PRICE_LIFETIME">立即购买</button>
+      </article>
+    </section>
+
+    <section class="comparison" aria-label="套餐功能对比">
+      <table>
+        <thead>
+          <tr>
+            <th>功能</th>
+            <th>免费版</th>
+            <th>专业版</th>
+            <th>终身版</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>单个视频时长限制</td><td>10分钟</td><td>无限制</td><td>无限制</td></tr>
+          <tr><td>视频转换次数</td><td>每月3次</td><td>每月100次</td><td>无限制</td></tr>
+          <tr><td>下载去重后的 PDF</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>图片转 PPTX</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>可编辑幻灯片</td><td>每月100张</td><td>每月10,000张</td><td>无限制</td></tr>
+          <tr><td>屏幕录制支持</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>视频转录时长</td><td>每月600分钟</td><td>无限制</td><td>无限制</td></tr>
+          <tr><td>批量处理（视频批量转换）</td><td class="no">X</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>到期无自动续费</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+          <tr><td>可使用未来所有功能</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="day-pass" aria-label="临时版">
+      <div>
+        <h2>临时版</h2>
+        <p>适合临时处理单次作业、演讲或课程材料。24 小时内共可处理 20 次视频、300 张可编辑页、120 分钟转写；单个视频仍限 10 分钟，不开放批量。</p>
+      </div>
+      <div class="day-pass-price">¥9.9</div>
+      <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS">开通临时版</button>
+    </section>
+
+    <section class="services" aria-label="扩展服务">
+      <div class="section-title">
+        <h2>扩展服务</h2>
+        <p>适合需要代录制、精修课件，或把复杂图片页整理为更规范交付物的场景。最终报价将根据素材复杂度、页数及交付要求确定。</p>
+      </div>
+      <div class="service-grid">
+        <article class="service-card">
+          <h3>人工代录制</h3>
+          <p class="service-price">$5 / 小时</p>
+          <p>提供网课、讲座、演示或屏幕流程的代录服务，按实际录制时长计费。</p>
+          <div class="service-order">
+            <label>小时数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：课程链接、录制要求、截止时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_recording" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_SERVICE_USD_CENT" data-service-label="人工代录制" data-unit-label="hour" data-unit-price-cents="500">支付下单</button>
+          </div>
+        </article>
+        <article class="service-card">
+          <h3>人工代改 PPT</h3>
+          <p class="service-price">$5 / 页起</p>
+          <p>提供基础排版、错字修正、页面清理及截图页重建服务，按所需精细程度分级报价。</p>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：改稿要求、文件链接、交付时间。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_basic" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_SERVICE_USD_CENT" data-service-label="人工代改 PPT" data-unit-label="page" data-unit-price-cents="500">支付下单</button>
+          </div>
+        </article>
+        <article class="service-card">
+          <h3>大师级精修</h3>
+          <p class="service-price">$20 / 页</p>
+          <p>适用于高要求的商业演示、品牌统一规范、复杂版式复刻以及深度视觉打磨等场景。</p>
+          <div class="service-order">
+            <label>页数
+              <input class="service-quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>需求备注
+              <textarea class="service-details" maxlength="1200" placeholder="可选：品牌风格、参考链接、精修要求。"></textarea>
+            </label>
+            <button class="cta checkout-btn" type="button" data-plan="manual_ppt_premium" data-order-kind="manual_service" data-price-key="PADDLE_PRICE_MANUAL_SERVICE_USD_CENT" data-service-label="大师级精修" data-unit-label="page" data-unit-price-cents="2000">支付下单</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <p class="note">扩展服务下单后，我们将按购买邮箱进行跟进。复杂项目也可通过 <a href="mailto:support@vid2deck.com?subject=Vid2PPT%20Deck%20manual%20service">support@vid2deck.com</a> 先确认报价。</p>
+
+    <footer class="footer">
+      <a href="/terms-and-conditions/">Terms of Service</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/refund/">Refund Policy</a>
+      <span>© 2026 Vid2PPT Deck</span>
+    </footer>
+  </div>
+  <script>
+    (function () {
+      var PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+      var AUTH_STORAGE_KEY = 'vid2deck.auth.session';
+      var STORAGE_EMAIL_KEY = 'vid2deck.checkout.email';
+      var configPromise = null;
+      var paddlePromise = null;
+      var paddleInitialized = false;
+
+      var emailInput = document.getElementById('checkoutEmail');
+      var checkoutForm = document.getElementById('checkoutForm');
+      var checkoutStatus = document.getElementById('checkoutStatus');
+      var checkoutButtons = Array.prototype.slice.call(document.querySelectorAll('.checkout-btn'));
+
+      function setStatus(message, tone) {
+        checkoutStatus.textContent = message;
+        checkoutStatus.className = 'checkout-status' + (tone ? ' ' + tone : '');
+      }
+
+      function normalizeEmail(value) {
+        return String(value || '').trim().toLowerCase();
+      }
+
+      function isValidEmail(email) {
+        return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+      }
+
+      function readAuthSession() {
+        try {
+          var raw = localStorage.getItem(AUTH_STORAGE_KEY);
+          if (!raw) return null;
+          var session = JSON.parse(raw);
+          if (!session || !session.token || !session.user || !session.user.email) return null;
+          return session;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function currentUser() {
+        var session = readAuthSession();
+        return session && session.user ? session.user : null;
+      }
+
+      function selectedEmail() {
+        var email = normalizeEmail(emailInput.value);
+        if (email) localStorage.setItem(STORAGE_EMAIL_KEY, email);
+        return email;
+      }
+
+      function requireEmail() {
+        var email = selectedEmail();
+        if (!isValidEmail(email)) {
+          setStatus('请先填写有效邮箱。', 'error');
+          emailInput.focus();
+          return '';
+        }
+        return email;
+      }
+
+      function fetchConfig() {
+        if (configPromise) return configPromise;
+        configPromise = fetch('/api/paddle-config')
+          .then(function (response) {
+            if (!response.ok) throw new Error('支付配置接口异常。');
+            return response.json();
+          })
+          .then(function (payload) {
+            if (payload.missing && payload.missing.length) {
+              throw new Error('支付配置缺少：' + payload.missing.join(', '));
+            }
+            return payload.config || {};
+          });
+        return configPromise;
+      }
+
+      function loadPaddleScript() {
+        if (window.Paddle) return Promise.resolve();
+        return new Promise(function (resolve, reject) {
+          var script = document.createElement('script');
+          script.src = PADDLE_SCRIPT_URL;
+          script.async = true;
+          script.onload = function () { resolve(); };
+          script.onerror = function () { reject(new Error('Paddle.js 加载失败。')); };
+          document.head.appendChild(script);
+        });
+      }
+
+      function ensurePaddle() {
+        if (paddlePromise) return paddlePromise;
+        paddlePromise = Promise.all([fetchConfig(), loadPaddleScript()]).then(function (result) {
+          var config = result[0];
+          if (!window.Paddle) throw new Error('Paddle.js 未就绪。');
+          if (config.PADDLE_ENV === 'sandbox' && window.Paddle.Environment && window.Paddle.Environment.set) {
+            window.Paddle.Environment.set('sandbox');
+          }
+          if (!paddleInitialized) {
+            window.Paddle.Initialize({
+              token: config.PADDLE_CLIENT_TOKEN,
+              eventCallback: function (event) {
+                var name = String((event && (event.name || event.eventName || event.type)) || '');
+                if (name === 'checkout.completed') {
+                  var pendingPlan = sessionStorage.getItem('vid2deck.checkout.plan') || '';
+                  if (isManualPlan(pendingPlan)) {
+                    setStatus('扩展服务订单已支付。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+                  } else {
+                    setTimeout(refreshEntitlement, 1800);
+                  }
+                }
+              }
+            });
+            paddleInitialized = true;
+          }
+          return config;
+        });
+        return paddlePromise;
+      }
+
+      function planLabel(plan) {
+        if (plan === 'pro') return '专业版';
+        if (plan === 'lifetime') return '终身版';
+        if (plan === 'day_pass') return '临时版';
+        if (plan === 'manual_recording') return '人工代录制';
+        if (plan === 'manual_ppt_basic') return '人工代改 PPT';
+        if (plan === 'manual_ppt_premium') return '大师级精修';
+        return '免费版';
+      }
+
+      function isManualPlan(plan) {
+        return String(plan || '').indexOf('manual_') === 0;
+      }
+
+      function periodText(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return '，有效期至 ' + date.toLocaleString('zh-CN', { hour12: false });
+      }
+
+      function limitText(value, unit) {
+        if (value === null) return '无限制';
+        if (typeof value === 'undefined') return '按免费版';
+        return String(value) + unit;
+      }
+
+      function entitlementLimitsText(data) {
+        var limits = data && data.limits ? data.limits : {};
+        var videoLength = limitText(limits.video_max_minutes, '分钟/单个视频');
+        var conversions = limitText(limits.video_conversions_monthly, '次/月');
+        var slides = limitText(limits.editable_slides_monthly, '张/月');
+        var transcribe = limitText(limits.transcribe_minutes_monthly, '分钟/月');
+        var batch = limits.batch_processing ? '支持批量' : '不含批量';
+        return '权益：视频 ' + videoLength + '，转换 ' + conversions + '，可编辑页 ' + slides + '，转写 ' + transcribe + '，' + batch + '。';
+      }
+
+      function refreshEntitlement() {
+        var email = requireEmail();
+        if (!email) return Promise.resolve();
+        setStatus('正在刷新权益...', 'warn');
+        return fetch('/api/entitlement?email=' + encodeURIComponent(email))
+          .then(function (response) {
+            if (!response.ok) throw new Error('权益查询失败。');
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.active) {
+              setStatus('已开通 ' + planLabel(data.effective_plan || data.plan) + periodText(data.current_period_end) + '。' + entitlementLimitsText(data), 'ok');
+            } else {
+              setStatus('当前按免费版权益使用。' + entitlementLimitsText(data) + ' 支付完成后可稍后刷新。', 'warn');
+            }
+          })
+          .catch(function (error) {
+            setStatus(error.message || '权益查询失败。', 'error');
+          });
+      }
+
+      function setButtonsBusy(busy) {
+        checkoutButtons.forEach(function (button) {
+          button.disabled = busy;
+        });
+      }
+
+      function serviceQuantity(button) {
+        var card = button.closest('.service-card');
+        if (!card) return 1;
+        var input = card.querySelector('.service-quantity');
+        var quantity = parseInt(input && input.value, 10);
+        if (!Number.isFinite(quantity) || quantity < 1) {
+          setStatus('请填写有效数量。', 'error');
+          if (input) input.focus();
+          return 0;
+        }
+        return Math.min(quantity, 999);
+      }
+
+      function checkoutQuantity(button, serviceQty) {
+        var orderKind = button.getAttribute('data-order-kind') || 'membership';
+        if (orderKind !== 'manual_service') return serviceQty;
+        var unitPriceCents = parseInt(button.getAttribute('data-unit-price-cents') || '0', 10);
+        if (!Number.isFinite(unitPriceCents) || unitPriceCents < 1) {
+          setStatus('服务单价配置异常。', 'error');
+          return 0;
+        }
+        var billingQuantity = serviceQty * unitPriceCents;
+        if (billingQuantity > 999999) {
+          setStatus('单次订单金额过高，请减少数量或邮件联系支持。', 'error');
+          return 0;
+        }
+        return billingQuantity;
+      }
+
+      function serviceDetails(button) {
+        var card = button.closest('.service-card');
+        var textarea = card && card.querySelector('.service-details');
+        return textarea ? textarea.value.trim().slice(0, 1200) : '';
+      }
+
+      function openCheckout(button) {
+        var email = requireEmail();
+        if (!email) return;
+        var serviceQty = serviceQuantity(button);
+        if (!serviceQty) return;
+        var quantity = checkoutQuantity(button, serviceQty);
+        if (!quantity) return;
+        setButtonsBusy(true);
+        setStatus('正在打开支付窗口...', 'warn');
+        ensurePaddle()
+          .then(function (config) {
+            var priceKey = button.getAttribute('data-price-key');
+            var priceId = config[priceKey];
+            var plan = button.getAttribute('data-plan') || 'unknown';
+            var orderKind = button.getAttribute('data-order-kind') || 'membership';
+            var serviceLabel = button.getAttribute('data-service-label') || planLabel(plan);
+            var unitLabel = button.getAttribute('data-unit-label') || '';
+            var unitPriceCents = parseInt(button.getAttribute('data-unit-price-cents') || '0', 10);
+            var details = serviceDetails(button);
+            var user = currentUser();
+            if (!priceId) throw new Error('未找到对应的 Price ID：' + priceKey);
+            sessionStorage.setItem('vid2deck.checkout.plan', plan);
+            sessionStorage.setItem('vid2deck.checkout.orderKind', orderKind);
+            window.Paddle.Checkout.open({
+              items: [{ priceId: priceId, quantity: quantity }],
+              customer: { email: email },
+              customData: {
+                email: email,
+                plan: plan,
+                source: 'pricing_page',
+                order_kind: orderKind,
+                username: user && user.username ? user.username : '',
+                account_id: user && user.id ? user.id : '',
+                quantity: serviceQty,
+                billing_quantity: quantity,
+                unit_price_cents: unitPriceCents || '',
+                amount_usd: orderKind === 'manual_service' ? (quantity / 100).toFixed(2) : '',
+                service_label: serviceLabel,
+                unit_label: unitLabel,
+                details: details
+              },
+              settings: {
+                displayMode: 'overlay',
+                theme: 'light',
+                successUrl: window.location.origin + '/pricing/?checkout=success&plan=' + encodeURIComponent(plan)
+              }
+            });
+            setStatus('支付窗口已打开。', 'ok');
+          })
+          .catch(function (error) {
+            setStatus(error.message || '支付窗口打开失败。', 'error');
+          })
+          .finally(function () {
+            setButtonsBusy(false);
+          });
+      }
+
+      var authUser = currentUser();
+      var storedEmail = authUser && authUser.email ? authUser.email : localStorage.getItem(STORAGE_EMAIL_KEY);
+      if (storedEmail) {
+        emailInput.value = storedEmail;
+        if (authUser && authUser.username) {
+          setStatus('已登录 ' + authUser.username + '，支付会绑定到当前账号。', 'ok');
+        }
+        refreshEntitlement();
+      }
+
+      checkoutButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          openCheckout(button);
+        });
+      });
+
+      checkoutForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        refreshEntitlement();
+      });
+
+      var searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('checkout') === 'success') {
+        var successPlan = searchParams.get('plan') || sessionStorage.getItem('vid2deck.checkout.plan') || '';
+        if (isManualPlan(successPlan)) {
+          setStatus('扩展服务订单已提交。我们会按购买邮箱联系你确认素材和交付细节。', 'ok');
+        } else {
+          setStatus('支付已完成，正在等待 Paddle 回调确认...', 'warn');
+          setTimeout(refreshEntitlement, 2500);
+          setTimeout(refreshEntitlement, 9000);
+        }
+      }
+    }());
+  </script>
+</body>
+</html>
