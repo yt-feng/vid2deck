@@ -254,6 +254,17 @@ body::before {
 .deck-thumb.green { background: #378466; }
 .export-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
 .export-choice span { padding: 8px 4px; color: #445069; background: #f1f3f7; border-radius: 6px; font-size: .64rem; font-weight: 700; text-align: center; }
+.note-preview-page { padding: 18px; color: #182744; background: #fbfaf4; border: 1px solid #e8e4d8; border-radius: 9px; }
+.note-preview-time { display: block; margin-bottom: 15px; color: #657184; font-size: .67rem; font-variant-numeric: tabular-nums; }
+.note-preview-page > strong { display: block; font-size: 1.12rem; line-height: 1.5; }
+.note-preview-diagram { display: flex; align-items: center; gap: 7px; margin: 20px 0; }
+.note-preview-diagram span { flex: 1; min-width: 0; padding: 12px 6px; color: #35518f; background: #e7edfb; border-radius: 5px; font-size: .68rem; font-weight: 750; line-height: 1.5; text-align: center; }
+.note-preview-diagram span:last-child { color: #317353; background: #e2f1e8; }
+.note-preview-diagram i { color: #8491a5; font-style: normal; }
+.note-preview-page > small { color: #657184; font-size: .68rem; }
+.note-preview-insights { margin-top: 12px; padding: 13px 15px; background: #f0f4fd; border-left: 3px solid #7990d0; border-radius: 0 6px 6px 0; }
+.note-preview-insights > span { color: #5b6c96; font-size: .66rem; font-weight: 750; }
+.note-preview-insights p { margin: 7px 0 0; color: #374966; font-size: .78rem; line-height: 1.8; }
 .workflow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin: 28px 0 0; padding: 0; list-style: none; }
 .workflow-grid li { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 10px 0; }
 .workflow-grid li > span { display: grid; place-items: center; width: 34px; height: 34px; color: var(--blue); background: #e8edfa; border-radius: 9px; font-size: .72rem; font-weight: 800; }

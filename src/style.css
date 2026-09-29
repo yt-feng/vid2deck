@@ -799,3 +799,48 @@ body:has(.workspace:not([hidden])) { overflow: hidden; }
 .workspace.audio-mode:not(.side-collapsed) .workspace-body { grid-template-columns: 360px minmax(0, 1fr); }
 .workspace.audio-mode:not(.side-collapsed) .workspace-side { display: block; }
 .workspace.audio-mode .editor-disclosure { display: none; }
+
+/* Reading is the first useful result; editing remains one click away. */
+.note-view-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.source-guide { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 13px 15px; margin-bottom: 18px; border-radius: 9px; background: #f2f5ff; color: #344054; font-size: 12px; }
+.source-guide a, .source-guide-link, .task-guide-link { color: #3157d5; text-underline-offset: 3px; font-size: 12px; }
+.source-guide small { width: 100%; color: #667085; font-size: 11px; line-height: 1.7; }
+.source-guide-link { display: inline-block; padding-block: 8px; }
+.task-guide-link { display: inline-block; margin-top: 5px; font-size: 10px; }
+.note-view-switch { display: flex; padding: 4px; gap: 4px; background: #e9edf5; border-radius: 10px; }
+.note-view-switch button { background: transparent; color: #667085; box-shadow: none; padding: 10px 16px; min-height: 40px; font-size: 13px; }
+.note-view-switch button[aria-pressed="true"] { color: #213a89; background: #fff; box-shadow: 0 1px 4px #18274215; }
+.note-takeaway-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.note-takeaway-actions button { font-size: 12px; padding: 8px 12px; min-height: 40px; }
+.video-note-reader { max-width: 860px; margin: 0 auto; background: #fff; border: 1px solid #e4e7ec; border-radius: 16px; padding: clamp(20px, 3vw, 42px); }
+.reading-header { border-bottom: 1px solid #e4e7ec; padding-bottom: 22px; }
+.reading-header h2 { font-size: clamp(22px, 2.3vw, 34px); line-height: 1.4; margin: 12px 0; overflow-wrap: anywhere; letter-spacing: -.02em; }
+.reading-header > p:last-child { color: #667085; font-size: 13px; line-height: 1.8; margin: 0; }
+.reading-header .eyebrow { color: #3157d5; font-size: 11px; }
+.reading-overview { margin: 24px 0 30px; background: #f3f6ff; border: 1px solid #dce4fa; border-radius: 12px; padding: 20px 24px; }
+.reading-overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.reading-overview-heading h3 { font-size: 16px; margin: 0; }
+.reading-overview-heading button { font-size: 12px; min-height: 40px; padding: 8px 12px; }
+#readingHelp { color: #667085; font-size: 12px; line-height: 1.8; margin: 12px 0 0; }
+.reading-summary h4 { margin: 22px 0 10px; font-size: 16px; color: #203766; }
+.reading-summary p { font-size: 14px; color: #344054; line-height: 1.9; margin: 7px 0; overflow-wrap: anywhere; }
+.reading-summary code { background: #e6eafa; padding: 2px 5px; border-radius: 4px; }
+.reading-section-title { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 18px; }
+.reading-section-title h3 { margin: 0; font-size: 16px; }
+.reading-section-title span { color: #667085; font-size: 11px; }
+.reading-frames { display: grid; gap: 24px; }
+.reading-frames figure { margin: 0; border: 1px solid #e4e7ec; border-radius: 10px; overflow: hidden; background: #f8fafc; }
+.reading-frames img { display: block; width: 100%; height: auto; }
+.reading-frames figcaption { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 14px; color: #475467; font-size: 12px; }
+.reading-frames button { min-height: 36px; padding: 6px 10px; font-size: 11px; }
+.reading-footnote { color: #667085; font-size: 11px; line-height: 1.8; border-top: 1px solid #e4e7ec; padding-top: 20px; margin-top: 28px; }
+.workspace.reading-mode .capture-timeline { display: none; }
+.workspace.reading-mode .workspace-body { padding-bottom: 0; }
+.result-actions #dockNotesBtn { color: #fff; background: #3157d5; }
+@media (max-width: 980px) {
+  .result-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .note-view-toolbar { gap: 10px; margin-bottom: 16px; }
+  .note-takeaway-actions { width: 100%; }
+  .note-takeaway-actions button { flex: 1; padding-inline: 8px; }
+  .reading-overview { padding: 16px; }
+}

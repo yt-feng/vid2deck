@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>视频从哪里来？从获取视频到生成笔记的使用指南｜Vid2PPT</title>
+  <meta name="description" content="从本地文件、B 站与 YouTube 链接、手机相册或授权录屏开始，逐步整理视频笔记、生成 AI 要点并导出 HTML、Markdown、PPT 和 PDF。附导入、声音与格式问题解答。" />
+  <meta name="theme-color" content="#101828" />
+  <link rel="canonical" href="https://vid2ppt.com/guide/" />
+  <link rel="icon" type="image/svg+xml" href="/brand/vid2ppt-mark.svg" />
+  <link rel="stylesheet" href="/support-pages.css" />
+  <style>
+    :root { color: #101828; background: #f6f8fb; font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #3157d5; text-underline-offset: 3px; }
+    .wrap { width: min(1060px, calc(100% - 32px)); margin: auto; padding: 24px 0 48px; }
+    .nav, .footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; color: #101828; font-size: 1.1rem; font-weight: 850; text-decoration: none; }
+    .brand img { width: 36px; height: 36px; }
+    .doc { margin-top: 28px; padding: clamp(24px, 5vw, 54px); background: #fff; border: 1px solid #dfe3e8; border-radius: 24px; box-shadow: 0 16px 50px rgba(16,24,40,.05); }
+    .eyebrow { margin: 0 0 12px; color: #3157d5; font-size: .8rem; font-weight: 800; }
+    h1 { margin: 0; max-width: 780px; font-size: clamp(2rem, 5vw, 3.5rem); }
+    .intro { max-width: 760px; margin: 22px 0 10px; font-size: 1.05rem; }
+    .updated { margin: 0; color: #748095; font-size: .8rem; }
+    p, li { color: #465366; line-height: 1.85; }
+    h2 { margin: 0 0 15px; font-size: 1.55rem; line-height: 1.4; letter-spacing: -.025em; }
+    h3 { margin: 24px 0 10px; font-size: 1.1rem; line-height: 1.5; }
+    section { margin-top: 42px; padding-top: 30px; border-top: 1px solid #e1e6ee; scroll-margin-top: 24px; }
+    ol { padding-left: 24px; }
+    li { margin: 9px 0; padding-left: 3px; }
+    .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+    .source-card { display: block; padding: 21px; color: inherit; background: #f6f8fc; border: 1px solid #dce4ee; border-radius: 14px; text-decoration: none; }
+    .source-card:hover { background: #edf2ff; border-color: #b6c6f5; }
+    .source-card strong { display: block; font-size: 1rem; }
+    .source-card p { margin: 9px 0 11px; font-size: .9rem; }
+    .source-card span { color: #3157d5; font-size: .88rem; font-weight: 750; }
+    .tip { padding: 17px 20px; background: #edf3fc; border-left: 3px solid #7892cc; border-radius: 0 10px 10px 0; }
+    .tip p { margin: 5px 0; }
+    .source-note { color: #6a778b; font-size: .84rem; }
+    .format-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 20px 0; }
+    .format-grid article { padding: 17px; border: 1px solid #dce4ee; border-radius: 12px; }
+    .format-grid h3 { margin: 0 0 7px; font-size: 1rem; }
+    .format-grid p { margin: 0; font-size: .88rem; }
+    details { margin: 10px 0; padding: 0 18px; background: #f7f9fc; border: 1px solid #dfe5ee; border-radius: 12px; }
+    summary { padding: 17px 0; color: #26344b; cursor: pointer; font-weight: 750; line-height: 1.65; }
+    details p { margin: 0 0 18px; font-size: .93rem; }
+    .footer { justify-content: center; flex-wrap: wrap; margin-top: 26px; color: #6a778b; font-size: .85rem; }
+    .footer a { color: inherit; text-decoration: none; }
+    @media (max-width: 640px) { .wrap { padding-top: 16px; } .doc { padding: 26px 20px; border-radius: 18px; } .source-grid, .format-grid { grid-template-columns: 1fr; } .doc h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } section { margin-top: 32px; padding-top: 24px; } .intro { font-size: .97rem; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">跳到使用指南</a>
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="/" aria-label="Vid2PPT 首页"><img src="/brand/vid2ppt-mark.svg" alt="" /><span>Vid2PPT</span></a>
+      <nav class="site-nav" aria-label="主要导航"><a href="/guide/" aria-current="page">使用指南</a><a href="/pricing/">套餐与价格</a><a href="/contact/">联系支持</a><a class="nav-cta" href="/#start">开始整理视频</a></nav>
+    </header>
+    <main class="doc" id="mainContent" tabindex="-1">
+      <p class="eyebrow">从第一段视频，到第一份笔记</p>
+      <h1>视频从哪里来？<br />拿到以后，怎么用？</h1>
+      <p class="intro">先找到一段有课件、图表或演示步骤的视频，再按下面的方法导入。第一次建议用一段 10 分钟以内的素材，先走通阅读和保存。</p>
+      <p class="updated">更新于 2026 年 9 月 29 日 · 适用于当前网页工作台</p>
+      <div class="help-actions"><a href="#get-video">我还没有视频文件</a><a href="#workflow">我已有视频，直接看流程</a></div>
+      <nav class="doc-toc" aria-label="指南目录"><strong>选择你需要的一步</strong><div class="doc-toc-links"><a href="#get-video">1. 找到原始视频</a><a href="#local">2. 本地文件与手机视频</a><a href="#link">3. B 站、YouTube 链接</a><a href="#record">4. 录制允许保存的内容</a><a href="#workflow">5. 阅读、编辑和导出笔记</a><a href="#troubleshooting">6. 遇到问题怎么继续</a></div></nav>
+
+      <section id="get-video" aria-labelledby="getVideoTitle">
+        <h2 id="getVideoTitle">1. 视频在哪，就从哪里开始</h2>
+        <div class="source-grid">
+          <a class="source-card" href="#local"><strong>电脑里已有视频</strong><p>自己的录屏、会议导出、老师给的 MP4，先确认文件已经下载完整。</p><span>直接导入文件 →</span></a>
+          <a class="source-card" href="#link"><strong>有 B 站或 YouTube 链接</strong><p>复制具体视频的播放页链接，尝试产品的链接导入。</p><span>按链接获取 →</span></a>
+          <a class="source-card" href="#phone"><strong>视频在手机、相册或云盘</strong><p>先导出或下载实际视频文件，再传到电脑中整理。</p><span>把文件准备好 →</span></a>
+          <a class="source-card" href="#record"><strong>可以播放，也获准录制</strong><p>在支持屏幕共享的桌面浏览器中录制，停止后继续生成。</p><span>查看录制方法 →</span></a>
+        </div>
+        <h3>课程方只给了观看入口？</h3>
+        <p>优先查看课程资料区、会议的录制下载入口，或请讲师、主办方提供可保存的原始 MP4。可以直接说明：「我想做个人复习笔记，可以提供这节课的 MP4，或确认是否允许录制整理吗？」</p>
+        <p>平台的「离线缓存」不一定是可以导入的文件。判断方法是：你是否能在电脑文件夹中找到它，并用播放器单独打开。仅在课程 App 内可观看的内容，不能通过改文件名变成 MP4；付费、登录或受保护内容请使用提供方允许的下载或录制方式。</p>
+      </section>
+
+      <section id="local" aria-labelledby="localTitle">
+        <h2 id="localTitle">2. 已有文件：选中它，就能开始</h2>
+        <ol>
+          <li>在电脑中找到视频。若来自邮件或云盘，先点「下载」，等待文件完成；不要把分享网页、快捷方式或仍未下载的占位文件当作视频。</li>
+          <li>用播放器打开，检查有画面、能播放到结尾；需要 AI 要点时，也检查能否听到讲解。</li>
+          <li>回到 <a href="/#start">Vid2PPT 导入区</a>，选择「本地文件」，拖入视频或点击选择文件。MP4、WebM、MOV 等是否可用，取决于浏览器能否解码。</li>
+          <li>点击开始整理的按钮，保持页面打开。提取出的原画面会陆续出现，完成后进入笔记阅读。</li>
+        </ol>
+        <div class="tip"><p><strong>先试小段：</strong>免费版每段不超过 10 分钟，每月 3 次转换。临时版也有单段时长限制；需要更长视频请查看<a href="/pricing/">套餐表</a>中的具体时长和次数，再选择合适的套餐。</p></div>
+        <h3 id="phone">手机拍摄、相册或云端的视频</h3>
+        <ol>
+          <li>在手机相册或相机 App 中选中视频，使用其「导出」「保存到文件」或文件传输功能；Android 也可通过设备提供的文件传输方式，将拍摄的视频复制到电脑。</li>
+          <li>iPhone 的照片可从分享菜单选择「导出未修改的原片」并存储到文件；也可以在电脑的 iCloud 照片网页中选中视频后下载。</li>
+          <li>若 iCloud 原片在浏览器中无法解码，可在「更多下载选项」选择「兼容性最好」，视频会以兼容的 MP4/H.264 格式下载。其他云盘也请下载文件本身，等待完成后再导入。</li>
+        </ol>
+        <p class="source-note">iPhone 与 iCloud 的具体步骤见 <a href="https://support.apple.com/zh-cn/111762" target="_blank" rel="noopener">Apple 官方下载指南</a>。原片格式可能与设备拍摄设置有关；相册缩略图不代表文件已经完整下载。</p>
+      </section>
+
+      <section id="link" aria-labelledby="linkTitle">
+        <h2 id="linkTitle">3. 公开视频链接：先复制播放页地址</h2>
+        <ol>
+          <li>打开你拥有或已获授权处理的视频，在 B 站或 YouTube 的分享入口复制链接，或复制浏览器地址栏中的完整播放页地址。不要粘贴一整段带标题的分享文案。</li>
+          <li>在 <a href="/#start">首页导入区</a>切换到「视频链接」，粘贴地址。B 站出现预览与权限确认时，核对视频并勾选确认；工作台的链接入口也有权限确认。</li>
+          <li>点击「立即生成」（工作台中为「获取并开始生成」），等待获取后继续整理。选择「仅导入」时，还需要手动开始当前任务。</li>
+          <li>若来源要求登录、限制获取或返回失败，请向提供方获取允许保存的文件，再按<a href="#local">本地文件步骤</a>导入。能在自己的浏览器中播放，不代表服务端一定能获取。</li>
+        </ol>
+        <div class="tip"><p><strong>YouTube 的「下载」要分清：</strong>自己上传的视频可使用 YouTube 提供的下载功能；App 中用于离线观看的视频是加密缓存，通常不在相册中，也不能当作普通 MP4 导入。</p><p class="source-note"><a href="https://support.google.com/youtube/answer/56100?hl=zh-Hans" target="_blank" rel="noopener">YouTube：下载自己上传的视频</a> · <a href="https://support.google.com/youtube/answer/7381437?hl=zh-Hans" target="_blank" rel="noopener">YouTube：离线视频说明</a></p></div>
+        <p class="source-note">链接导入会由服务端临时获取视频；导入后在浏览器中整理。支持的来源和可获取状态会受平台限制，不能保证所有公开链接都成功。</p>
+      </section>
+
+      <section id="record" aria-labelledby="recordTitle">
+        <h2 id="recordTitle">4. 允许录制的内容：先确认画面和声音</h2>
+        <ol>
+          <li>在桌面浏览器中打开允许录制的课程或演示，准备好清晰的播放画面。</li>
+          <li>回到 <a href="/#start">Vid2PPT 导入区</a>，切换「录制屏幕」，点击「直接录屏」。在浏览器弹窗中选择实际播放视频的标签页、窗口或屏幕。</li>
+          <li>需要语音转写时，若弹窗提供「分享标签页音频」或类似选项，选中它；录屏允许并不等于音频一定会被录入。</li>
+          <li>播放内容，先用短片段确认结果。结束时回到 Vid2PPT，点击停止录制按钮；从首页开始录制会在停止后继续提取页面。</li>
+        </ol>
+        <p>录制通常要跟随实际播放时长，生成后再读取其中的页面。免费试用请将录制片段控制在 10 分钟以内；若只要画面笔记，无声音也可以提取页面。</p>
+        <p>录屏与音频支持取决于浏览器、操作系统及选中的共享来源；手机浏览器或某些窗口可能没有音频选项。当前录屏不会额外调用麦克风。若结果无声，请改用带音轨的授权视频文件，或使用设备提供、且已确认能录到声音的录制方式。<a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia#browser_compatibility" target="_blank" rel="noopener">浏览器支持说明（MDN）</a>。</p>
+        <p class="source-note">遇到受保护视频、黑屏或平台明确禁止录制时，向提供方索取可用于整理的文件。</p>
+      </section>
+
+      <section id="workflow" aria-labelledby="workflowTitle">
+        <h2 id="workflowTitle">5. 有结果以后：先读，再按需要整理</h2>
+        <ol>
+          <li><strong>读原画面笔记。</strong>提取完成后，在「笔记阅读」中翻阅页面和时间位置。这一步无需登录；内置示例是预先编写的演示，不计入转换额度。</li>
+          <li><strong>检查需要保留的内容。</strong>切换「页面编辑」，取消勾选无用画面，按需排序、裁剪。漏页可在时间轴定位后补抓。笔记和导出使用当前勾选的页面。</li>
+          <li><strong>按需提炼 AI 要点。</strong>点击「登录提炼 AI 要点」，登录后继续。没有逐字稿时会先转写；首次转写需要加载语音模型，请保持页面打开。必要的逐字稿、来源标题和语言信息会用于联网生成，原始视频不会因此自动上传。详见<a href="/privacy/">隐私说明</a>。</li>
+          <li><strong>选择适合的保存方式。</strong>想下次完整阅读，优先保存 HTML；想放进已有笔记工具，复制或下载 Markdown。</li>
+        </ol>
+        <div class="format-grid" aria-label="保存格式对照">
+          <article><h3>保存完整笔记 · HTML</h3><p>保留原画面、文字和时间位置。用浏览器离线打开，也可通过浏览器打印功能保存为 PDF。</p></article>
+          <article><h3>复制 / 下载 Markdown</h3><p>保存文字要点和时间索引，不包含原画面图片。需要完整图文内容时，同时保存 HTML。</p></article>
+          <article><h3>导出 PDF / PPTX</h3><p>带走勾选的原始页面。PPTX 默认以图片为底图；要修改文字，需另行运行 OCR，复杂图表不会变成原始图形对象。</p></article>
+          <article><h3>导出页面图片</h3><p>将勾选页面打包下载，用于你自己的文档、复习资料或笔记。</p></article>
+        </div>
+        <p>AI 要点基于逐字稿，配图是供回看的视频页面，并非每段文字都与图片精确匹配。出现专有名词、数字或重要结论时，请结合原页和原视频核对。</p>
+        <p class="source-note">当前任务会在可用时保存到本机浏览器，留意工作台的保存状态；它不是云端项目列表。需要换设备或长期保存时，请下载成品。</p>
+      </section>
+
+      <section id="troubleshooting" aria-labelledby="troubleshootingTitle">
+        <h2 id="troubleshootingTitle">6. 卡住时，按现象继续</h2>
+        <details><summary>链接失败，但原网页能播放</summary><p>先确认粘贴的是具体视频的完整播放页链接。登录验证、付费、来源限制或暂时无法获取，都可能使导入失败。改用讲师或主办方提供的可下载文件；若已获准录制，可参考<a href="#record">录屏步骤</a>。重复点击不会解除平台限制。</p></details>
+        <details><summary>显示已下载，文件选择器里却找不到视频</summary><p>检查它是否只是 App 内的离线缓存、云盘占位文件或网页快捷方式。需要能独立播放的实际文件。相册和云盘先导出或下载到文件夹；只有 App 观看入口时，向提供方索取原始文件。</p></details>
+        <details><summary>MP4 / MOV 导入后黑屏、不能解码或没有完成</summary><p>扩展名不代表内部编码一定兼容。先检查文件是否完整、能否正常播放；必要时用你已有的视频编辑或导出工具另存为 H.264 视频、AAC 音频的 MP4，再试一小段。只把文件名改成 .mp4 不会改变编码。iCloud 可使用<a href="#phone">兼容性最好</a>下载选项。</p></details>
+        <details><summary>页面很少、重复很多，或漏了几页</summary><p>仅有讲师出镜、画面长期不变时，工具不会凭空生成课件。有页面但漏抓时，在时间轴补抓；重复页可取消勾选或删除。快速换页可缩短检查间隔，动画较多可提高相似页合并强度，再检查结果。</p></details>
+        <details><summary>录屏没有声音，AI 识别不出讲解</summary><p>确认原视频有讲解，录制时也选择了可分享的音频来源。系统或浏览器可能只提供画面；允许录屏不保证能捕获系统声音。无声录屏仍能生成原画面笔记，文字整理请使用带音轨的文件，或在「编辑与笔记」中粘贴你已有的逐字稿。</p></details>
+        <details><summary>转写很久、模型加载失败，或文字不准确</summary><p>首次使用要下载语音模型，后续耗时也与视频长度和设备有关。保持页面打开；模型加载未完成时，可先保存原画面笔记，稍后再试。背景音乐、多人同时说话、口音和专业术语都会影响识别；先在「编辑与笔记」中修正逐字稿，再生成 AI 要点。仅离线缓存模型不代表摘要服务也可离线使用。</p></details>
+        <details><summary>为什么需要登录？视频超过 10 分钟怎么办？</summary><p>免费原画面整理无需登录，每段不超过 10 分钟、每月 3 次；AI 要点需要登录并有相应额度。登录本身不会取消长度限制，临时版也不等于不限时长。请在<a href="/pricing/">套餐页</a>核对时长、转换次数与转写额度，或先选择一段符合当前额度的视频。</p></details>
+        <details><summary>关掉页面后没有继续处理，换设备也找不到任务</summary><p>处理需要当前页面保持打开。草稿只在保存成功的本机浏览器中恢复，不能自动跨设备继续；回到首页查看是否有「继续上次任务」。离开前保存 HTML、Markdown 或 PDF / PPTX，避免只依赖浏览器草稿。</p></details>
+        <div class="return-panel"><p>还没解决？联系时附上来源类型、文件格式、出错步骤和提示文字。</p><a href="/contact/">联系支持</a></div>
+      </section>
+      <div class="help-actions"><a href="/#start">准备好了，开始整理视频</a><a href="/#workspace">回到工作台</a></div>
+    </main>
+    <footer class="footer"><a href="/">首页</a><a href="/pricing/">套餐与价格</a><a href="/privacy/">隐私说明</a><a href="/contact/">联系支持</a><span>© 2026 Vid2PPT</span></footer>
+  </div>
+</body>
+</html>

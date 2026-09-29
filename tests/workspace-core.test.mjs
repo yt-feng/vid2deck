@@ -22,6 +22,10 @@ const constantSource = mainAst.statements.filter((node) => ts.isVariableStatemen
 const coreJavaScript = ts.transpileModule(`${constantSource}\n${functionSource}`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext }
 }).outputText;
+const videoNotesContext = createContext({ exports: {} });
+runInContext(ts.transpileModule(readFileSync(resolve(root, 'src/videoNotes.ts'), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
+}).outputText, videoNotesContext);
 
 // Run the actual application function declarations. Only browser I/O is replaced;
 // there is no copied implementation of conversion, packaging, or job orchestration.
@@ -34,6 +38,9 @@ function workspace(overrides = {}) {
     selectedFiles: [], selectedImageFiles: [], slides: [], videoMeta: null,
     transcriptEl: { value: 'Original transcript' },
     summaryEl: { value: '' }, illustratedNotesMarkdown: '',
+    authSession: null, pendingNotesFile: null, resultView: 'pages',
+    buildVideoNoteHtml: videoNotesContext.exports.buildVideoNoteHtml,
+    buildVideoNoteMarkdown: videoNotesContext.exports.buildVideoNoteMarkdown,
     homeView: {}, workspaceView: {}, workspaceMode: 'video',
     isDemoProject: false, undoSnapshot: null, activeSlideId: null, activeTextBoxId: null,
     isExtracting: false, isBatchProcessing: false, isUrlDownloading: false,
@@ -400,6 +407,293 @@ test('transcription keeps the previous transcript if decoder/model processing fa
   assert.equal(app.isBusy(), false);
 });
 
+test('guest note request preserves the active file and edits while opening login without an AI call', async () => {
+  const file = new File(['video'], 'my lesson.mp4', { type: 'video/mp4' });
+  const frames = [slide(3), { ...slide(2), selected: false }, slide(1)];
+  let focused = 0;
+  let persisted = 0;
+  const app = workspace({
+    selectedFile: file, slides: frames,
+    summaryEl: { value: 'Existing summary' },
+    homeView: { hidden: true }, workspaceView: { hidden: false },
+    accountStatus: {}, authUsername: { focus: () => { focused += 1; } },
+    requestAnimationFrame: (callback) => callback(),
+    document: { querySelector: () => ({ scrollIntoView() {} }) },
+    loadAuthCaptcha: async () => {},
+    persistWorkspaceToState: () => { persisted += 1; },
+    generateIllustratedNotes: async () => assert.fail('guest request must wait for login'),
+    summarizeWithApi: async () => assert.fail('guest request must not call AI'),
+    transcribeLocally: async () => assert.fail('guest request must not begin transcription')
+  });
+  await app.requestVideoNotes();
+  assert.equal(app.pendingNotesFile, file);
+  assert.equal(app.selectedFile, file);
+  assert.equal(app.slides, frames);
+  assert.deepEqual(Array.from(app.slides, (item) => item.id), [3, 2, 1]);
+  assert.equal(app.slides[1].selected, false);
+  assert.equal(app.summaryEl.value, 'Existing summary');
+  assert.equal(app.transcriptEl.value, 'Original transcript');
+  assert.equal(persisted, 1);
+  assert.equal(focused, 1);
+  assert.equal(app.homeView.hidden, false);
+  assert.equal(app.workspaceView.hidden, true);
+  assert.match(app.accountStatus.textContent, /登录后继续/);
+});
+
+test('existing notes open for reading without login or regeneration', async () => {
+  let opened = 0;
+  let rendered = 0;
+  const app = workspace({
+    slides: [slide(1)], illustratedNotesMarkdown: '# Existing notes',
+    updateSelectionUI: () => {},
+    renderIllustratedNotes: () => { rendered += 1; },
+    notesDialog: { showModal: () => { opened += 1; } },
+    focusLoginPanel: () => assert.fail('existing notes are readable without login'),
+    generateIllustratedNotes: async () => assert.fail('viewing notes must not consume a generation')
+  });
+  await app.requestVideoNotes();
+  assert.equal(app.resultView, 'notes');
+  assert.equal(opened, 1);
+  assert.equal(rendered, 1);
+  assert.equal(app.pendingNotesFile, null);
+});
+
+test('note request does nothing during processing or without a selected source and frame', async () => {
+  for (const overrides of [
+    { slides: [slide(1)], isExtracting: true },
+    { slides: [slide(1)], isAuthBusy: true },
+    { slides: [{ ...slide(1), selected: false }] },
+    { slides: [] },
+    { slides: [slide(1)], selectedFile: null }
+  ]) {
+    const app = workspace({
+      ...overrides,
+      focusLoginPanel: () => assert.fail('unavailable note request must not open login'),
+      generateIllustratedNotes: async () => assert.fail('unavailable note request must not generate'),
+      openIllustratedNotes: () => assert.fail('unavailable note request must not open old notes')
+    });
+    await app.requestVideoNotes();
+    assert.equal(app.pendingNotesFile, null);
+    assert.equal(app.resultView, 'pages');
+  }
+});
+
+test('signed-in note request passes the current transcript and filename to generation and opens the reader', async () => {
+  const calls = [];
+  const app = workspace({
+    slides: [slide(1)],
+    authSession: { token: 'fixture', user: { username: 'fixture' } },
+    userPreferences: { outputLanguage: 'zh-CN' }, OUTPUT_LANGUAGE_LABELS: { 'zh-CN': '简体中文' },
+    updateSelectionUI: () => {}, renderIllustratedNotes: () => {},
+    ensureUsageCapacity: async () => true,
+    summarizeWithApi: async (...args) => { calls.push(args); return '# Real generated notes'; }
+  });
+  await app.requestVideoNotes();
+  assert.deepEqual(calls, [['Original transcript', 'illustrated_notes', 'lecture.mp4']]);
+  assert.equal(app.illustratedNotesMarkdown, '# Real generated notes');
+  assert.equal(app.resultView, 'notes');
+  assert.equal(app.isBusy(), false);
+});
+
+test('length rejection from the summary API preserves existing notes and summary during regeneration', async () => {
+  const detail = '逐字稿超过 60,000 字符，请按章节拆分后分别生成。';
+  for (const method of ['generateSummary', 'generateIllustratedNotes']) {
+    let status = '';
+    const app = workspace({
+      slides: [slide(1)], illustratedNotesMarkdown: '# Saved notes', summaryEl: { value: 'Saved summary' },
+      authSession: { token: 'fixture', user: { username: 'fixture' } },
+      userPreferences: { outputLanguage: 'zh-CN' }, OUTPUT_LANGUAGE_LABELS: { 'zh-CN': '简体中文' },
+      SUMMARY_API_URL: '/api/summarize-simple',
+      ensureUsageCapacity: async () => true,
+      fetch: async () => ({ ok: false, status: 422, json: async () => ({ detail }) }),
+      setStatus: (message) => { status = message; },
+      renderIllustratedNotes: () => assert.fail('failed generation must not replace the saved view')
+    });
+    await app[method](true);
+    assert.equal(app.illustratedNotesMarkdown, '# Saved notes');
+    assert.equal(app.summaryEl.value, 'Saved summary');
+    assert.equal(app.transcriptEl.value, 'Original transcript');
+    assert.equal(status, detail);
+    assert.equal(app.isBusy(), false);
+  }
+});
+
+for (const [format, extension, mime] of [
+  ['html', 'html', 'text/html;charset=utf-8'],
+  ['markdown', 'md', 'text/markdown;charset=utf-8']
+]) {
+  test(`${format} note export passes source metadata, selections and existing notes to the real formatter`, async () => {
+    let downloaded;
+    const app = workspace({
+      selectedFile: new File([], 'training session.MP4'),
+      videoMeta: { duration: 3720, width: 1600, height: 900 },
+      slides: [slide(3, 80), { ...slide(2, 50), selected: false }, slide(1, 10)],
+      illustratedNotesMarkdown: '# 已有要点\n- Source-backed detail',
+      summaryEl: { value: 'Fallback summary should not replace notes' },
+      isDemoProject: true,
+      downloadBlob: (blob, filename) => { downloaded = { blob, filename }; }
+    });
+    app.exportVideoNote(format);
+    assert.equal(downloaded.filename, `training_session-notes.${extension}`);
+    assert.equal(downloaded.blob.type, mime);
+    const body = await downloaded.blob.text();
+    assert.match(body, /training session(?:\\)?\.MP4/);
+    assert.match(body, /01:02:00/);
+    assert.match(body, /已有要点/);
+    assert.match(body, /内置示例/);
+    assert.match(body, /01:20/);
+    assert.match(body, /00:10/);
+    assert.doesNotMatch(body, /2: 中文|Fallback summary should not replace notes/);
+    assert.ok(body.indexOf('3: 中文') < body.indexOf('1: 中文'));
+    assert.equal((body.match(/<img /g) ?? []).length, format === 'html' ? 2 : 0);
+    assert.equal(app.slides[1].selected, false);
+  });
+}
+
+test('note export never formats or downloads when busy or when every frame is deselected', () => {
+  for (const overrides of [
+    { slides: [slide(1)], isTranscribing: true },
+    { slides: [slide(1)], isExporting: true },
+    { slides: [{ ...slide(1), selected: false }] },
+    { slides: [] }
+  ]) {
+    const app = workspace({
+      ...overrides,
+      buildVideoNoteHtml: () => assert.fail('unavailable export must not format HTML'),
+      buildVideoNoteMarkdown: () => assert.fail('unavailable export must not format Markdown'),
+      downloadBlob: () => assert.fail('unavailable export must not download')
+    });
+    app.exportVideoNote('html');
+    app.exportVideoNote('markdown');
+  }
+});
+
+test('reopening the workspace synchronizes the reader after empty-state rendering and preserves the selected view', () => {
+  function element() {
+    const classes = new Set();
+    return {
+      hidden: false, children: [], attributes: {},
+      classList: {
+        toggle(name, force) { if (force) classes.add(name); else classes.delete(name); },
+        contains(name) { return classes.has(name); }
+      },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      removeAttribute(name) { delete this.attributes[name]; },
+      replaceChildren(...children) { this.children = children; },
+      append(...children) { this.children.push(...children); },
+      appendChild(child) { this.children.push(child); return child; },
+      addEventListener() {}
+    };
+  }
+  const elements = new Map();
+  const get = (selector) => {
+    if (!elements.has(selector)) elements.set(selector, element());
+    return elements.get(selector);
+  };
+  const app = workspace({
+    resultView: 'notes', slides: [slide(3, 80), { ...slide(2, 50), selected: false }, slide(1, 10)],
+    videoMeta: { duration: 120 },
+    homeView: element(), workspaceView: element(), slidesEl: get('#slides'),
+    captureTimeline: element(), workspaceEmptyState: element(), workspaceSubtitle: element(), emptyWorkspaceStartBtn: element(),
+    $: get, window: { scrollTo() {} },
+    document: { querySelectorAll: () => [], createElement: () => element() },
+    formatNoteTime: videoNotesContext.exports.formatNoteTime
+  });
+  app.showWorkspace();
+  assert.equal(app.homeView.hidden, true);
+  assert.equal(app.workspaceView.hidden, false);
+  assert.equal(get('#videoNoteReader').hidden, false);
+  assert.equal(get('#slides').hidden, true, 'the generic empty-state renderer must not expose editor pages over the reader');
+  assert.equal(get('#reviewToolbar').hidden, true);
+  assert.equal(app.workspaceView.classList.contains('reading-mode'), true);
+  assert.equal(get('#readingFrames').children.length, 2);
+  assert.match(get('#readingFrames').children[0].children[0].alt, /01:20/);
+  assert.match(get('#readingFrames').children[1].children[0].alt, /00:10/);
+  assert.equal(get('#readNotesViewBtn').attributes['aria-pressed'], 'true');
+
+  app.resultView = 'pages';
+  app.showWorkspace();
+  assert.equal(get('#videoNoteReader').hidden, true);
+  assert.equal(get('#slides').hidden, false);
+  assert.equal(get('#reviewToolbar').hidden, false);
+  assert.equal(app.workspaceView.classList.contains('reading-mode'), false);
+  assert.equal(get('#editPagesViewBtn').attributes['aria-pressed'], 'true');
+});
+
+function noteLoginWorkspace(overrides = {}) {
+  const app = workspace({
+    slides: [slide(1)], authMode: 'login', authCaptchaToken: 'captcha-token',
+    authUsername: { value: 'reader' }, authPassword: { value: 'fixture-password' },
+    authCaptchaAnswer: { value: '1234' }, authEmail: { value: '' },
+    authSubmitBtn: {}, authModeToggleBtn: {}, refreshAuthCaptchaBtn: {}, accountStatus: {},
+    updateAuthUi: () => {}, updateSelectionUI: () => {}, loadAuthCaptcha: async () => {},
+    showWorkspace: () => {},
+    ...overrides
+  });
+  app.saveAuthSession = (session) => { app.authSession = session; };
+  return app;
+}
+
+test('successful login resumes the pending video once, after releasing the authentication lock', async () => {
+  const authentication = deferred();
+  let generations = 0;
+  let opened = 0;
+  const app = noteLoginWorkspace({
+    fetch: () => authentication.promise,
+    showWorkspace: () => { opened += 1; },
+    generateIllustratedNotes: async () => {
+      assert.equal(app.isBusy(), false, 'resume must happen after authentication unlocks');
+      generations += 1;
+    }
+  });
+  app.pendingNotesFile = app.selectedFile;
+  const file = app.selectedFile;
+  const task = app.submitAuthForm();
+  assert.equal(app.isAuthBusy, true);
+  assert.equal(generations, 0);
+  authentication.resolve({ ok: true, json: async () => ({ token: 'signed-in', user: { username: 'reader' } }) });
+  await task;
+  assert.equal(app.selectedFile, file);
+  assert.equal(app.pendingNotesFile, null);
+  assert.equal(app.isAuthBusy, false);
+  assert.equal(opened, 1);
+  assert.equal(generations, 1);
+  assert.equal(app.resultView, 'notes');
+});
+
+test('login never generates notes for a different video selected while authentication was pending', async () => {
+  const authentication = deferred();
+  const app = noteLoginWorkspace({
+    fetch: () => authentication.promise,
+    showWorkspace: () => assert.fail('stale intent must not switch to the old workspace'),
+    generateIllustratedNotes: async () => assert.fail('stale intent must not generate for the new video')
+  });
+  app.pendingNotesFile = app.selectedFile;
+  const task = app.submitAuthForm();
+  const replacement = new File([], 'replacement.mp4');
+  app.selectedFile = replacement;
+  authentication.resolve({ ok: true, json: async () => ({ token: 'signed-in', user: { username: 'reader' } }) });
+  await task;
+  assert.equal(app.selectedFile, replacement);
+  assert.equal(app.pendingNotesFile, null);
+  assert.equal(app.isAuthBusy, false);
+});
+
+test('failed login retains the note intent and source for a later retry without starting generation', async () => {
+  const app = noteLoginWorkspace({
+    fetch: async () => ({ ok: false, json: async () => ({ detail: 'Invalid credentials' }) }),
+    generateIllustratedNotes: async () => assert.fail('failed authentication must not generate')
+  });
+  const file = app.selectedFile;
+  app.pendingNotesFile = file;
+  await app.submitAuthForm();
+  assert.equal(app.authSession, null);
+  assert.equal(app.pendingNotesFile, file);
+  assert.equal(app.selectedFile, file);
+  assert.equal(app.isAuthBusy, false);
+  assert.match(app.accountStatus.textContent, /Invalid credentials/);
+});
+
 for (const [method, inputs] of [
   ['runOcrForSelectedSlides', { slides: [slide(1)], getActiveSlide: () => null }],
   ['openImagesInWorkspace', { selectedImageFiles: [{ name: 'page.png' }] }],
@@ -535,7 +829,7 @@ test('all directory pages resolve to their own source content and canonical URLs
     middleware({ url, method }, response, (error) => { if (error) throw error; passed = true; });
     return { ...response, passed };
   }
-  for (const page of ['admin', 'sponsor', 'pricing', 'privacy', 'refund', 'terms-and-conditions', 'contact', 'one-time-pass']) {
+  for (const page of ['admin', 'sponsor', 'pricing', 'privacy', 'refund', 'terms-and-conditions', 'contact', 'one-time-pass', 'guide']) {
     const response = request(`/${page}/`);
     assert.equal(response.statusCode, 200);
     assert.equal(response.body, readFileSync(resolve(root, `public/${page}/index.html`), 'utf8'));
