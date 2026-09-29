@@ -66,15 +66,15 @@ def validate_origin(headers: Mapping[str, str]) -> None:
 
 def read_contact_json(headers: Mapping[str, str], stream: BinaryIO) -> dict[str, Any]:
     if headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
-        raise ContactError("提交格式不正确，请通过网站联系表单发送留言。", 415)
+        raise ContactError("提交格式有误，请通过网站联系表单发送留言。", 415)
     if headers.get("transfer-encoding"):
         raise ContactError("无法识别本次提交格式，请刷新页面后重试。", 400)
     try:
         length = int(headers.get("content-length", "0"))
     except (ValueError, TypeError):
-        raise ContactError("本次提交的数据不完整，请重试。") from None
+        raise ContactError("本次提交的数据有缺失，请重试。") from None
     if length <= 0:
-        raise ContactError("请填写联系表单后再提交。")
+        raise ContactError("请填写联系表单后提交。")
     if length > MAX_BODY_BYTES:
         raise ContactError("提交内容过长，请精简后重试。", 413)
     body = stream.read(length)
@@ -85,7 +85,7 @@ def read_contact_json(headers: Mapping[str, str], stream: BinaryIO) -> dict[str,
     except (ValueError, UnicodeDecodeError):
         raise ContactError("无法读取本次留言，请重试。") from None
     if not isinstance(data, dict):
-        raise ContactError("请填写联系表单后再提交。")
+        raise ContactError("请填写联系表单后提交。")
     return data
 
 
@@ -154,7 +154,7 @@ def validate_contact(data: dict[str, Any]) -> dict[str, str]:
 def verify_turnstile(data: dict[str, Any]) -> None:
     token = data.get("turnstile_token")
     if not isinstance(token, str) or not 1 <= len(token) <= 2048 or HEADER_CONTROL_RE.search(token):
-        raise ContactError("请先完成验证，再提交留言。", 400)
+        raise ContactError("提交留言需要完成验证。", 400)
     secret = os.getenv("CONTACT_TURNSTILE_SECRET_KEY", "").strip()
     if not secret:
         raise ContactError("联系表单暂时无法使用，请直接发送邮件至 info@vid2ppt.com。", 503)
@@ -177,7 +177,7 @@ def verify_turnstile(data: dict[str, Any]) -> None:
     if result.get("success") is not True:
         raise ContactError("验证已过期或未通过，请重新验证后提交。", 400)
     if result.get("hostname") not in {"vid2ppt.com", "www.vid2ppt.com"} or result.get("action") != "contact":
-        raise ContactError("验证与当前页面不匹配，请重新验证后提交。", 403)
+        raise ContactError("当前页面的验证信息有误，请重新完成验证。", 403)
 
 
 def send_contact_message(contact: dict[str, str]) -> dict[str, Any]:

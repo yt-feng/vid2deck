@@ -38,7 +38,7 @@ workerSelf.onmessage = async (event) => {
     }
 
     if (message.type === 'transcribe') {
-      if (!transcriber) throw new Error('ASR model is not loaded');
+      if (!transcriber) throw new Error('语音识别模型尚未就绪，请重试转写。');
       const result = await transcriber(message.audio, {
         task: 'transcribe',
         chunk_length_s: 30,

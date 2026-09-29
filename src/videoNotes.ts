@@ -16,7 +16,7 @@ export type VideoNoteInput = {
 };
 
 const PRODUCT_URL = 'https://vid2ppt.com/';
-const DEMO_NOTICE = '内置示例 · 用于体验笔记效果，不代表你的真实视频内容。';
+const DEMO_NOTICE = '内置示例 · 使用专门编写的演示内容，供体验阅读与导出。';
 const VISUAL_ONLY_NOTICE = '这份笔记收录了你选中的关键画面，尚未包含语音摘要。生成逐字稿后，可以继续补充内容要点。';
 
 export function formatNoteTime(seconds: number): string {

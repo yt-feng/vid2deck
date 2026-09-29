@@ -81,7 +81,7 @@ def get_media_metadata(raw_url: str) -> dict[str, Any]:
 
     if "yt1s.com" in host:
         raise MediaMetadataError(
-            "不支持把 yt1s 自动化成 Vid2PPT 的下载代理。",
+            "yt1s 链接未接入导入功能，请使用原视频播放页链接、已授权视频直链或本地文件。",
             details={
                 "provider": "yt1s",
                 "allowedAlternatives": [
@@ -143,7 +143,7 @@ def direct_media_metadata(raw_url: str) -> dict[str, Any]:
     final_url, headers = probe_media_url(raw_url)
     content_type = headers.get("content-type", "application/octet-stream").split(";")[0].strip()
     if not any(content_type.lower().startswith(prefix) for prefix in MEDIA_CONTENT_TYPES):
-        raise MediaMetadataError("这个 URL 不像可直接读取的音视频文件。", details={"contentType": content_type})
+        raise MediaMetadataError("这个链接返回的内容缺少音视频格式标识，请使用视频文件直链。", details={"contentType": content_type})
 
     return {
         "sourceType": "url",
@@ -199,7 +199,7 @@ def parse_public_fetchable_url(raw_url: str) -> urllib.parse.ParseResult:
     parsed = parse_http_url(raw_url)
     host = (parsed.hostname or "").lower()
     if host in BLOCKED_HOSTS or host.endswith(".local"):
-        raise MediaMetadataError("这个 URL 主机不允许访问。", details={"host": host})
+        raise MediaMetadataError("这个链接的主机受到访问限制，请使用公开的视频文件链接。", details={"host": host})
     if host_is_private(host):
         raise MediaMetadataError("这个 URL 指向内网或保留地址。", details={"host": host})
     return parsed

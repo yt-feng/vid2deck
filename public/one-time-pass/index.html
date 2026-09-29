@@ -95,7 +95,7 @@
       <section class="hero" aria-labelledby="pageTitle">
         <p class="eyebrow">单独购买入口</p>
         <h1 id="pageTitle">One-time Pass</h1>
-        <p class="subhead">只需要临时版？在这里直接输入购买数量，不必选择其他套餐。</p>
+        <p class="subhead">临时使用可直接填写购买数量。</p>
       </section>
 
       <section class="checkout-card" aria-labelledby="productTitle">
@@ -107,7 +107,7 @@
             <li>单个视频最长 10 分钟</li>
             <li>24 小时内最多 20 次视频转换</li>
             <li>包含文字识别、转写及 PDF / PPTX 导出</li>
-            <li>一次购买，不会自动续费</li>
+            <li>一次购买，无自动续费</li>
           </ul>
           <p class="fineprint">如果一次购买多份，支付窗口会按你输入的数量计费。购买邮箱用于绑定权益，请填写实际使用账号的邮箱。</p>
         </div>
@@ -133,7 +133,7 @@
         </form>
       </section>
 
-      <p class="legal">继续支付即表示你已阅读并同意 <a href="/terms-and-conditions/">服务条款</a> 与 <a href="/refund/">退款政策</a>。数字服务开通或使用后通常不支持退款。</p>
+      <p class="legal">继续支付即表示你已阅读并同意 <a href="/terms-and-conditions/">服务条款</a> 与 <a href="/refund/">退款政策</a>。数字服务开通或使用后通常无法退款。</p>
       <a class="back-link" href="/pricing/">← 返回套餐与价格</a>
     </main>
 
@@ -224,7 +224,7 @@
       function requireEmail() {
         var email = normalizeEmail(emailInput.value);
         if (!isValidEmail(email)) {
-          setStatus('请先填写有效邮箱。', 'error');
+          setStatus('请填写有效邮箱。', 'error');
           emailInput.setAttribute('aria-invalid', 'true');
           emailInput.focus();
           return '';
@@ -266,12 +266,12 @@
         if (paddlePromise) return paddlePromise;
         paddlePromise = Promise.all([fetchConfig(), loadPaddleScript()]).then(function (result) {
           var config = result[0];
-          if (!window.Paddle) throw new Error('支付组件暂时不可用，请刷新页面后重试。');
+          if (!window.Paddle) throw new Error('支付组件加载失败，请刷新页面重试。');
           if (config.PADDLE_ENV === 'sandbox' && window.Paddle.Environment && window.Paddle.Environment.set) {
             window.Paddle.Environment.set('sandbox');
           }
           if (!paddleInitialized) {
-            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时不可用，请稍后重试或联系支持。');
+            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时无法开启，请稍后重试或联系支持。');
             window.Paddle.Initialize({
               token: config.PADDLE_CLIENT_TOKEN,
               eventCallback: function (event) {

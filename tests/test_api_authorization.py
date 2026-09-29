@@ -262,7 +262,7 @@ class AdminConfigurationTests(unittest.TestCase):
 
         log_error.assert_called_once()
         request.send_json.assert_called_once_with(
-            {"detail": "账号服务暂时不可用，请稍后重试。"},
+            {"detail": "账号请求处理失败，请稍后重试。"},
             500,
         )
 
@@ -281,7 +281,7 @@ class AdminConfigurationTests(unittest.TestCase):
             request.login(auth.ADMIN_USERNAME, "1108")
 
         ensure_admin.assert_not_called()
-        request.send_json.assert_called_once_with({"detail": "用户名或密码不正确。"}, 401)
+        request.send_json.assert_called_once_with({"detail": "用户名或密码有误，请核对后重试。"}, 401)
 
     def test_usage_admin_login_stays_generic_when_configuration_is_missing(self) -> None:
         request = request_handler(usage)

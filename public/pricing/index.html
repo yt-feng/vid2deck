@@ -112,7 +112,7 @@
     <main id="mainContent" tabindex="-1">
     <section class="hero">
       <p class="eyebrow">简单透明的价格</p>
-      <h1>先免费处理一段视频，<br />需要更多时再升级</h1>
+      <h1>免费整理第一段视频，<br />按使用量选择套餐</h1>
       <p class="subhead">每个套餐都保留本地处理、页面去重、导出前检查和多格式下载。差别只在视频长度、每月用量与批量能力。</p>
     </section>
 
@@ -120,7 +120,7 @@
     <section class="cards" aria-label="套餐选择">
       <article class="card">
         <h2>免费版</h2>
-        <p class="for">先验证效果，偶尔处理短视频</p>
+        <p class="for">体验整理效果，适合偶尔处理短视频</p>
         <p class="price"><strong>¥0</strong><span>无需付费</span></p>
         <ul>
           <li>单个视频最长 10 分钟</li>
@@ -137,10 +137,10 @@
         <p class="for">持续整理课程、会议和长视频</p>
         <p class="price"><strong>¥39</strong><span>/ 月</span></p>
         <ul>
-          <li>不设套餐时长上限*</li>
+          <li>套餐时长无上限*</li>
           <li>每月 100 次视频转换</li>
           <li>每月 10,000 个文字识别页</li>
-          <li>批量处理与不限量转写</li>
+          <li>批量处理与转写用量无上限</li>
         </ul>
         <p class="plan-note">* 实际可处理长度取决于设备内存、浏览器和视频编码。</p>
         <button class="cta checkout-btn" type="button" data-plan="pro" data-price-key="PADDLE_PRICE_PRO_MONTHLY" aria-pressed="false">选择专业版</button>
@@ -149,12 +149,12 @@
       <article class="card">
         <span class="badge">一次购买</span>
         <h2>终身版</h2>
-        <p class="for">高频长期使用，不想持续订阅</p>
+        <p class="for">高频长期使用，一次购买</p>
         <p class="price"><strong>¥498</strong><del>¥999</del></p>
         <ul>
-          <li>不设套餐时长上限*</li>
-          <li>视频转换与文本页不限量</li>
-          <li>批量处理与不限量转写</li>
+          <li>套餐时长无上限*</li>
+          <li>视频转换与文本页用量无上限</li>
+          <li>批量处理与转写用量无上限</li>
           <li>一次购买，保留当前终身版权益</li>
         </ul>
         <p class="plan-note">* 实际可处理长度取决于设备内存、浏览器和视频编码。</p>
@@ -164,22 +164,22 @@
 
     <section class="checkout-panel" id="checkoutPanel" aria-labelledby="checkoutTitle">
       <div>
-        <p class="eyebrow">确认选择，再继续支付</p>
+        <p class="eyebrow">核对套餐与购买邮箱</p>
         <h2 id="checkoutTitle">选择适合你的套餐</h2>
-        <div class="checkout-selection" aria-live="polite"><strong id="selectedPlanLabel">尚未选择付费套餐</strong><span id="selectedPlanTerms">先用自己的视频验证效果，再决定是否升级。</span></div>
+        <div class="checkout-selection" aria-live="polite"><strong id="selectedPlanLabel">尚未选择付费套餐</strong><span id="selectedPlanTerms">用自己的视频体验整理效果，按使用需要选择套餐。</span></div>
         <p>最终币种、税费和支付总额会在支付窗口中显示。付款前仍可核对。</p>
       </div>
       <form class="checkout-form" id="checkoutForm" novalidate>
         <label for="checkoutEmail">购买邮箱</label>
         <input id="checkoutEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-describedby="emailHelp" required />
-        <button class="cta" id="continueCheckoutBtn" type="submit" disabled>请先选择套餐</button>
+        <button class="cta" id="continueCheckoutBtn" type="submit" disabled>请选择套餐</button>
         <p class="field-help" id="emailHelp">套餐按购买邮箱绑定。请与要使用套餐的账号邮箱保持一致。</p>
-        <p class="checkout-terms">继续前请阅读 <a href="/terms-and-conditions/">服务条款</a> 和 <a href="/refund/">退款政策</a>。数字服务开通或使用后通常不支持退款。</p>
+        <p class="checkout-terms">继续前请阅读 <a href="/terms-and-conditions/">服务条款</a> 和 <a href="/refund/">退款政策</a>。数字服务开通或使用后通常无法退款。</p>
         <div class="checkout-status" id="checkoutStatus" role="status" aria-live="polite">选择上方套餐或下方临时版，即可继续。</div>
         <div class="account-check"><button class="small-btn" id="checkEntitlementBtn" type="button">刷新当前账号权益</button><a href="/#account">登录 / 注册账号</a></div>
         <div class="checkout-status" id="entitlementStatus" role="status" aria-live="polite">登录后可以查看账号权益，无需填写购买邮箱。</div>
       </form>
-      <div class="account-context"><strong id="accountIdentity">当前未登录</strong><br /><span id="accountEmailHint">已有账号请先登录；新账号注册时，填写与购买时相同的邮箱。</span> <a href="/#account">管理账号</a></div>
+      <div class="account-context"><strong id="accountIdentity">当前未登录</strong><br /><span id="accountEmailHint">已有账号可登录查看权益；新账号注册时，填写购买邮箱。</span> <a href="/#account">管理账号</a></div>
     </section>
 
     <section class="comparison" id="planComparison" tabindex="0" aria-label="套餐功能对比，可横向滚动">
@@ -188,14 +188,14 @@
         <thead><tr><th scope="col">功能</th><th scope="col">免费版</th><th scope="col">临时版</th><th scope="col">专业版</th><th scope="col">终身版</th></tr></thead>
         <tbody>
           <tr><th scope="row">有效期 / 付费方式</th><td>免费使用</td><td>24 小时 / 一次购买</td><td>按月订阅</td><td>服务运营期间 / 一次购买</td></tr>
-          <tr><th scope="row">单个视频时长</th><td>10 分钟</td><td>10 分钟</td><td>不设套餐上限*</td><td>不设套餐上限*</td></tr>
-          <tr><th scope="row">视频转换次数</th><td>每月 3 次</td><td>20 次</td><td>每月 100 次</td><td>不限量</td></tr>
+          <tr><th scope="row">单个视频时长</th><td>10 分钟</td><td>10 分钟</td><td>套餐无上限*</td><td>套餐无上限*</td></tr>
+          <tr><th scope="row">视频转换次数</th><td>每月 3 次</td><td>20 次</td><td>每月 100 次</td><td>用量无上限</td></tr>
           <tr><th scope="row">PDF、PPTX 与页面图片</th><td>支持</td><td>支持</td><td>支持</td><td>支持</td></tr>
           <tr><th scope="row">图片转 PPTX / 屏幕录制</th><td>支持</td><td>支持</td><td>支持</td><td>支持</td></tr>
-          <tr><th scope="row">OCR 可编辑文本层</th><td>每月 100 页</td><td>300 页</td><td>每月 10,000 页</td><td>不限量</td></tr>
-          <tr><th scope="row">本地逐字稿时长</th><td>每月 600 分钟</td><td>120 分钟</td><td>不限量</td><td>不限量</td></tr>
-          <tr><th scope="row">AI 摘要与图文笔记</th><td>每月 10 次</td><td>不限量</td><td>不限量</td><td>不限量</td></tr>
-          <tr><th scope="row">批量处理</th><td>不含</td><td>不含</td><td>支持</td><td>支持</td></tr>
+          <tr><th scope="row">OCR 可编辑文本层</th><td>每月 100 页</td><td>300 页</td><td>每月 10,000 页</td><td>用量无上限</td></tr>
+          <tr><th scope="row">本地逐字稿时长</th><td>每月 600 分钟</td><td>120 分钟</td><td>用量无上限</td><td>用量无上限</td></tr>
+          <tr><th scope="row">AI 摘要与图文笔记</th><td>每月 10 次</td><td>用量无上限</td><td>用量无上限</td><td>用量无上限</td></tr>
+          <tr><th scope="row">批量处理</th><td>仅单文件</td><td>仅单文件</td><td>支持</td><td>支持</td></tr>
         </tbody>
       </table>
       <p class="table-help">手机可左右滑动查看完整对比。临时版以 24 小时有效期和当前用量计数为准；AI 摘要与图文笔记需要登录。</p>
@@ -204,7 +204,7 @@
     <section class="day-pass" id="dayPass" aria-label="临时版">
       <div>
         <h2>临时版</h2>
-        <p>适合临时处理一次作业、演讲或课程材料。24 小时内可处理 20 次视频、300 个文字识别页、120 分钟转写；单个视频仍限 10 分钟，不开放批量。</p>
+        <p>适合临时处理一次作业、演讲或课程材料。24 小时内可处理 20 次视频、300 个文字识别页、120 分钟转写；单个视频最长 10 分钟，采用单文件处理。</p>
       </div>
       <div class="day-pass-price">¥9.9</div>
       <button class="cta checkout-btn" type="button" data-plan="day_pass" data-price-key="PADDLE_PRICE_DAY_PASS" aria-pressed="false">选择临时版</button>
@@ -212,11 +212,11 @@
 
     <section class="pricing-faq" id="pricingFaq" aria-labelledby="pricingFaqTitle">
       <h2 id="pricingFaqTitle">购买前，你可能还想确认</h2>
-      <details><summary>可以先看实际效果，再决定付费吗？</summary><p>可以。免费版无需注册即可处理最长 10 分钟的视频，并导出 PPTX、PDF 和页面图片。建议先用一段真实素材完成「提取—检查—导出」，确认你的设备与视频格式能正常处理。<a href="/#workspace">现在免费开始</a>。</p></details>
-      <details><summary>导出的 PPTX 里，哪些内容可以编辑？</summary><p>基础导出将提取到的页面图片放入 PPTX，保留画面原貌。开启 OCR 后可加入可编辑文本层；原画面中的图表、形状和版式不会自动变成独立对象。识别结果需要检查和校正。</p></details>
-      <details><summary>付款后，怎样在账号中使用套餐？</summary><p>套餐按购买邮箱绑定。登录与该邮箱对应的用户名账号后，刷新账号权益；如果还没有账号，注册时填写相同的邮箱。购买邮箱与当前账号邮箱不同、账号使用自动生成邮箱，或付款后仍未开通时，请提供订单号和购买邮箱联系 <a href="/contact/?subject=Vid2PPT%20%E6%9D%83%E7%9B%8A%E5%BC%80%E9%80%9A">支持</a> 核对。</p></details>
+      <details><summary>免费版可以体验哪些功能？</summary><p>可以。免费版无需注册即可处理最长 10 分钟的视频，并导出 PPTX、PDF 和页面图片。建议用一段真实素材完成「提取—检查—导出」，确认你的设备与视频格式能正常处理。<a href="/#workspace">现在免费开始</a>。</p></details>
+      <details><summary>导出的 PPTX 里，哪些内容可以编辑？</summary><p>基础导出将提取到的页面图片放入 PPTX，保留画面原貌。开启 OCR 后可加入可编辑文本层；原画面中的图表、形状和版式仍保留在底图中。识别结果需要检查和校正。</p></details>
+      <details><summary>付款后，怎样在账号中使用套餐？</summary><p>套餐按购买邮箱绑定。登录与该邮箱对应的用户名账号后，刷新账号权益；如果还没有账号，注册时填写相同的邮箱。购买邮箱与当前账号邮箱存在差异、账号使用自动生成邮箱，或付款后仍未开通时，请提供订单号和购买邮箱联系 <a href="/contact/?subject=Vid2PPT%20%E6%9D%83%E7%9B%8A%E5%BC%80%E9%80%9A">支持</a> 核对。</p></details>
       <details><summary>专业版会续费吗？终身版如何定义？</summary><p>专业版为按月订阅；可以通过支付确认或账单邮件中的订阅管理入口取消续订。终身版为一次购买，在 Vid2PPT 网站及对应服务持续运营期间使用购买时的权益。具体规则见 <a href="/refund/#section-5">订阅取消</a> 与 <a href="/refund/#section-6">终身版说明</a>。</p></details>
-      <details><summary>为什么套餐不设时长上限，长视频仍可能处理失败？</summary><p>视频提取、OCR 和本地逐字稿使用你的设备资源。实际可处理的长度与速度受内存、浏览器和视频编码影响；套餐升级增加可用额度，不会改变设备的处理能力。大文件可以先截取一小段测试。</p></details>
+      <details><summary>哪些因素会影响长视频处理？</summary><p>视频提取、OCR 和本地逐字稿使用你的设备资源。实际可处理的长度与速度受内存、浏览器和视频编码影响；套餐升级增加可用额度，实际处理能力取决于当前设备。大文件建议截取一小段测试。</p></details>
     </section>
 
     <p class="note">* 长视频在浏览器中处理，实际长度与速度取决于设备性能和视频编码。购买或套餐问题可联系 <a href="mailto:info@vid2ppt.com?subject=Vid2PPT%20%E5%A5%97%E9%A4%90%E9%97%AE%E9%A2%98">info@vid2ppt.com</a>。<br /><a class="quiet-pass-link" href="/one-time-pass/">需要单独购买 One-time Pass？进入独立购买页</a></p>
@@ -246,7 +246,7 @@
       var planDetails = {
         pro: { price: '¥39 / 月', terms: '按月订阅，按账单周期续费，可取消后续续订。' },
         lifetime: { price: '¥498 · 一次购买', terms: '在 Vid2PPT 网站及对应服务持续运营期间保留当前终身版权益。' },
-        day_pass: { price: '¥9.9 · 24 小时', terms: '一次购买，开通后有效 24 小时；单个视频最长 10 分钟，不含批量处理。' }
+        day_pass: { price: '¥9.9 · 24 小时', terms: '一次购买，开通后有效 24 小时；单个视频最长 10 分钟，仅支持单文件处理。' }
       };
       function storedGet(storage, key) { try { return storage.getItem(key) || ''; } catch (error) { return ''; } }
       function storedSet(storage, key, value) { try { storage.setItem(key, value); } catch (error) {} }
@@ -281,16 +281,16 @@
         var email = normalizeEmail(emailInput.value);
         if (!user) {
           document.getElementById('accountIdentity').textContent = '当前未登录';
-          document.getElementById('accountEmailHint').textContent = '已有账号请先登录；新账号注册时，填写与购买时相同的邮箱。';
+          document.getElementById('accountEmailHint').textContent = '已有账号可登录查看权益；新账号注册时，填写购买邮箱。';
           emailHelp.textContent = '套餐按购买邮箱绑定。请与要使用套餐的账号邮箱保持一致。';
           return;
         }
         document.getElementById('accountIdentity').textContent = '当前账号：' + user.username;
         document.getElementById('accountEmailHint').textContent = '账号邮箱：' + user.email;
         if (user.email_is_generated) {
-          emailHelp.textContent = '当前账号使用自动生成邮箱，无法接收账单邮件。请先联系支持确认购买邮箱与账号归属。';
+          emailHelp.textContent = '当前账号使用自动生成邮箱，无法接收账单邮件。请联系支持确认购买邮箱与账号归属。';
         } else if (email && email !== normalizeEmail(user.email)) {
-          emailHelp.textContent = '此邮箱与当前账号不同，购买后不会自动开通到当前账号。请使用对应账号，或改为 ' + user.email + '。';
+          emailHelp.textContent = '该邮箱对应其他账号，购买后权益将开通至该邮箱对应账号。请使用对应账号，或改为 ' + user.email + '。';
         } else {
           emailHelp.textContent = '购买邮箱与当前账号一致，支付确认后可刷新查看权益。';
         }
@@ -349,7 +349,7 @@
       function requireEmail() {
         var email = selectedEmail();
         if (!isValidEmail(email)) {
-          setStatus('请先填写有效邮箱。', 'error');
+          setStatus('请填写有效邮箱。', 'error');
           emailInput.setAttribute('aria-invalid', 'true');
           emailInput.focus();
           return '';
@@ -387,12 +387,12 @@
         if (paddlePromise) return paddlePromise;
         paddlePromise = Promise.all([fetchConfig(), loadPaddleScript()]).then(function (result) {
           var config = result[0];
-          if (!window.Paddle) throw new Error('支付组件暂时不可用，请刷新页面后重试。');
+          if (!window.Paddle) throw new Error('支付组件加载失败，请刷新页面重试。');
           if (config.PADDLE_ENV === 'sandbox' && window.Paddle.Environment && window.Paddle.Environment.set) {
             window.Paddle.Environment.set('sandbox');
           }
           if (!paddleInitialized) {
-            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时不可用，请稍后重试或联系支持。');
+            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时无法开启，请稍后重试或联系支持。');
             window.Paddle.Initialize({
               token: config.PADDLE_CLIENT_TOKEN,
               eventCallback: function (event) {
@@ -455,7 +455,7 @@
         var conversions = limitText(limits.video_conversions_monthly, '次/月');
         var slides = limitText(limits.editable_slides_monthly, '张/月');
         var transcribe = limitText(limits.transcribe_minutes_monthly, '分钟/月');
-        var batch = limits.batch_processing ? '支持批量' : '不含批量';
+        var batch = limits.batch_processing ? '支持批量' : '仅单文件';
         return '权益：视频 ' + videoLength + '，转换 ' + conversions + '，文字识别页 ' + slides + '，转写 ' + transcribe + '，' + batch + '。';
       }
 
@@ -492,13 +492,13 @@
       function syncMembershipAfterCheckout() {
         var session = readAuthSession();
         if (!session) {
-          setStatus('支付流程已返回。请登录购买邮箱对应的用户名账号；新账号注册时填写购买邮箱，再刷新权益。', 'ok');
+          setStatus('支付流程已返回。请登录购买邮箱对应的用户名账号；新账号注册时填写购买邮箱，完成后刷新权益。', 'ok');
           return;
         }
         var purchaseEmail = normalizeEmail(emailInput.value);
         var accountEmail = normalizeEmail(session.user.email);
         if (purchaseEmail && purchaseEmail !== accountEmail) {
-          setStatus('支付流程已返回。购买邮箱与当前账号不同，请登录对应账号后刷新权益；无法匹配时联系支持。', 'ok');
+          setStatus('支付流程已返回。购买邮箱与当前账号邮箱存在差异，请登录对应账号后刷新权益；无法匹配时联系支持。', 'ok');
           return;
         }
         setStatus('支付流程已返回，正在查询当前登录账号权益。请以查询结果和支付确认邮件为准。', 'warn');
@@ -512,7 +512,7 @@
           button.disabled = busy;
         });
         continueButton.disabled = busy || !selectedButton;
-        continueButton.textContent = busy ? '支付处理中…' : (selectedButton ? '继续支付' : '请先选择套餐');
+        continueButton.textContent = busy ? '支付处理中…' : (selectedButton ? '继续支付' : '请选择套餐');
         checkoutForm.setAttribute('aria-busy', String(busy));
       }
 
@@ -633,7 +633,7 @@
       checkoutForm.addEventListener('submit', function (event) {
         event.preventDefault();
         if (selectedButton) openCheckout(selectedButton);
-        else setStatus('请先选择一个付费套餐。', 'warn');
+        else setStatus('请选择一个付费套餐。', 'warn');
       });
 
       var searchParams = new URLSearchParams(window.location.search);

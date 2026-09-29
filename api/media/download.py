@@ -232,7 +232,7 @@ def download_video_once(
             ydl.extract_info(url, download=True)
         media = find_downloaded_media(tempdir)
         if media.stat().st_size > max_download_bytes:
-            raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。")
+            raise DownloadError(f"视频文件超过 {max_download_mb} MB，请选择较短视频或裁剪后的文件。")
         returned = True
         return media
     finally:
@@ -244,7 +244,7 @@ def raise_download_error(message: str, max_download_mb: int, exc: Exception) -> 
     if "Requested format is not available" in message:
         raise DownloadError("这个链接暂时没有可直接处理的视频格式。") from exc
     if "File is larger than max-filesize" in message:
-        raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
+        raise DownloadError(f"视频文件超过 {max_download_mb} MB，请选择较短视频或裁剪后的文件。") from exc
     if youtube_requires_sign_in(message):
         raise DownloadError("YouTube 要求登录或真人验证，已尝试服务端 YouTube Cookie 后仍无法获取。") from exc
     raise DownloadError(message or "这个链接暂时无法获取。") from exc
@@ -253,7 +253,7 @@ def raise_download_error(message: str, max_download_mb: int, exc: Exception) -> 
 def friendly_youtube_error(messages: list[str], max_download_mb: int, has_cookies: bool) -> str:
     combined = " ".join(messages)
     if "File is larger than max-filesize" in combined or ("超过" in combined and "MB" in combined):
-        return f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。"
+        return f"视频文件超过 {max_download_mb} MB，请选择较短视频或裁剪后的文件。"
     if "Requested format is not available" in combined:
         return "YouTube 当前没有返回可处理的视频格式，请稍后重试。"
     if youtube_requires_sign_in(combined):
@@ -267,13 +267,13 @@ def download_url(url: str, *, rights_confirmed: bool = False) -> Path:
     max_download_mb, max_download_bytes = download_size_limit()
     if is_bilibili_url(url):
         if not rights_confirmed:
-            raise DownloadError("请先确认你有权保存、转换或分析这个 B 站视频。")
+            raise DownloadError("请确认你有权保存、转换或分析这个 B 站视频。")
         try:
             return download_bilibili_video(url, max_download_bytes=max_download_bytes)
         except BilibiliError as exc:
             message = str(exc)
             if "超过当前下载大小限制" in message:
-                raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。") from exc
+                raise DownloadError(f"视频文件超过 {max_download_mb} MB，请选择较短视频或裁剪后的文件。") from exc
             raise
     return download_video(url)
 

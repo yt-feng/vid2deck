@@ -133,7 +133,7 @@ test('account entitlement lookup ignores the purchase-email field and uses only 
   assert.match(get('entitlementStatus').textContent, /已开通 专业版/);
   get('checkoutEmail').value = 'different@example.test';
   get('checkoutEmail').fire('input');
-  assert.match(get('emailHelp').textContent, /不会自动开通到当前账号/);
+  assert.match(get('emailHelp').textContent, /权益将开通至该邮箱对应账号/);
 });
 
 test('a temporary pricing configuration failure can be retried without refreshing the page', async () => {

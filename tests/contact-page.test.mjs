@@ -161,7 +161,7 @@ test('unverified submissions are blocked and expired verification disables sendi
   await page.submit();
   assert.equal(page.requests.length, 0);
   assert.equal(page.get('contactSubmit').disabled, true);
-  assert.match(page.get('verificationStatus').textContent, /请先完成/);
+  assert.match(page.get('verificationStatus').textContent, /完成上方验证后即可发送消息/);
   assert.equal(page.widgetOptions.action, 'contact');
   page.verify();
   assert.equal(page.get('contactSubmit').disabled, false);

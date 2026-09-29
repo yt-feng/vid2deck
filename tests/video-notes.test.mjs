@@ -109,7 +109,7 @@ test('source identity and demo marker survive both export formats', () => {
     const demo = build(input({ title: '原始课程.mov', isDemo: true }));
     assert.match(demo, /原始课程(?:\\)?\.mov/);
     assert.match(demo, /内置示例/);
-    assert.match(demo, /不代表你的真实视频内容/);
+    assert.match(demo, /使用专门编写的演示内容/);
     assert.doesNotMatch(build(input()), /内置示例/);
   }
 });

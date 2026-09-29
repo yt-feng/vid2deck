@@ -55,7 +55,7 @@ class handler(BaseHTTPRequestHandler):
             username = normalize_username(str(payload.get("username") or ""))
             user = find_site_user_by_username(username)
             if not user:
-                self.send_json({"detail": "账号不存在或已被移除。"}, 401)
+                self.send_json({"detail": "账号记录缺失或已被移除。"}, 401)
                 return
             self.send_session(user)
         except Exception:
@@ -72,11 +72,11 @@ class handler(BaseHTTPRequestHandler):
             data = self.read_json()
             action = str(data.get("action") or "login").strip().lower()
             if action not in {"login", "register"}:
-                self.send_json({"detail": "不支持的账号操作。"}, 400)
+                self.send_json({"detail": "请选择登录或注册操作。"}, 400)
                 return
 
             if not verify_captcha_response(str(data.get("captcha_token") or ""), str(data.get("captcha_answer") or "")):
-                self.send_json({"detail": "验证码不正确或已过期。"}, 400)
+                self.send_json({"detail": "验证码有误或已过期，请重新填写。"}, 400)
                 return
 
             username = normalize_username(str(data.get("username") or ""))
@@ -97,12 +97,12 @@ class handler(BaseHTTPRequestHandler):
             if exc.status == 409:
                 detail = "用户名或邮箱已被注册。"
             else:
-                detail = "账号服务暂时不可用，请稍后重试。"
+                detail = "账号请求处理失败，请稍后重试。"
             LOGGER.error("Account storage request failed (status=%s): %s", exc.status, exc.body)
             self.send_json({"detail": detail}, 500 if exc.status != 409 else 409)
         except Exception:
             LOGGER.exception("Unexpected account request failure")
-            self.send_json({"detail": "账号服务暂时不可用，请稍后重试。"}, 500)
+            self.send_json({"detail": "账号请求处理失败，请稍后重试。"}, 500)
 
     def register(self, username: str, password: str, raw_email: str) -> None:
         existing = find_site_user_by_username(username)
@@ -113,7 +113,7 @@ class handler(BaseHTTPRequestHandler):
         email = normalize_email(raw_email)
         email_is_generated = False
         if raw_email.strip() and not email:
-            self.send_json({"detail": "邮箱格式不正确，可以留空。"}, 400)
+            self.send_json({"detail": "请填写有效的邮箱地址，也可以留空。"}, 400)
             return
         if not email:
             email = generated_email_for_username(username)
@@ -144,7 +144,7 @@ class handler(BaseHTTPRequestHandler):
 
         user = find_site_user_by_username(username)
         if not user or not verify_password(password, str(user.get("password_salt") or ""), str(user.get("password_hash") or "")):
-            self.send_json({"detail": "用户名或密码不正确。"}, 401)
+            self.send_json({"detail": "用户名或密码有误，请核对后重试。"}, 401)
             return
         updated = update_site_user(str(user.get("id")), {"last_login_at": utc_now_iso()}) if user.get("id") else user
         self.send_session({**user, **updated})

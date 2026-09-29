@@ -407,9 +407,9 @@ function cleanError(error: unknown): string {
 function friendlyError(error: unknown): string {
   const message = cleanError(error);
   if (/exceeded \d+ MB|larger than max(?:imum)?(?: file)?size|File is larger/i.test(message)) {
-    return `视频文件超过 ${MAX_DOWNLOAD_MB} MB，请换短视频或先裁剪。`;
+    return `视频文件超过 ${MAX_DOWNLOAD_MB} MB，请选择较短视频或裁剪后的文件。`;
   }
-  if (/unavailable|private|login|required/i.test(message)) return '这个 YouTube 视频需要登录或当前不可用。';
+  if (/unavailable|private|login|required/i.test(message)) return '这个 YouTube 视频需要登录，或当前暂时无法获取。';
   if (/403|forbidden/i.test(message)) return 'YouTube 暂时拒绝了云端视频请求，请稍后重试。';
   return 'YouTube 备用引擎暂时没有返回可处理的视频流，请稍后重试。';
 }

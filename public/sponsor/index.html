@@ -155,7 +155,7 @@
           <div class="receipt-top">
             <div>
               <h2>兑换代码示意</h2>
-              <small>示例不用于兑换，实际代码在支付确认后显示</small>
+              <small>此处为展示样例，支付确认后显示有效兑换码</small>
             </div>
             <small>V2D</small>
           </div>
@@ -218,20 +218,20 @@
       <aside class="side">
         <section class="panel" id="sponsorCheckout" aria-labelledby="sponsorCheckoutTitle">
           <h2 id="sponsorCheckoutTitle">核对你的选择</h2>
-          <div class="checkout-selection" aria-live="polite"><strong id="selectedCodeLabel">尚未选择代号</strong><span id="selectedCodeAmount">请先从列表选择一个档位。</span></div>
+          <div class="checkout-selection" aria-live="polite"><strong id="selectedCodeLabel">尚未选择代号</strong><span id="selectedCodeAmount">请从列表选择一个档位。</span></div>
           <form id="sponsorCheckoutForm" novalidate>
             <label for="sponsorEmail">接收邮箱（可选）</label>
             <input id="sponsorEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-describedby="sponsorEmailHelp" />
             <p class="fineprint" id="sponsorEmailHelp">可在支付窗口补充邮箱。支付后请保存订单号，以便回来查询代码。</p>
-            <button class="lookup-btn continue-btn" id="continueSponsorBtn" type="submit" disabled>请先选择代号</button>
+            <button class="lookup-btn continue-btn" id="continueSponsorBtn" type="submit" disabled>请选择代号</button>
           </form>
-          <p class="status" id="checkoutStatus" role="status" aria-live="polite">选择后先核对代号和金额，再继续支付。</p>
+          <p class="status" id="checkoutStatus" role="status" aria-live="polite">确认所选代号和金额后，点击继续支付。</p>
           <p class="fineprint checkout-terms">以支付窗口显示的总额与币种为准。继续前请阅读 <a href="/terms-and-conditions/">服务条款</a> 和 <a href="/refund/">退款政策</a>。</p>
         </section>
 
         <section class="panel" id="codePanel">
           <h2>领取 / 找回兑换代码</h2>
-          <p class="fineprint">支付确认后会在此显示代码。没有立即显示时，可以使用已保存的订单请求号再次查询。</p>
+          <p class="fineprint">支付确认后会在此显示代码。没有立即显示时，可以使用已保存的订单请求号查询。</p>
           <div class="code-box" id="codeBox" hidden>
             <div class="redeem-code" id="redeemCode" tabindex="0" aria-label="你的兑换代码"></div>
             <button class="copy-btn" id="copyCodeBtn" type="button">复制代码</button>
@@ -241,7 +241,7 @@
             <label for="requestLookup">订单请求号</label>
             <div class="lookup-row"><input id="requestLookup" type="text" autocomplete="off" placeholder="粘贴订单请求号" /><button class="lookup-btn" id="lookupBtn" type="submit">查询</button></div>
           </form>
-          <p class="status" id="codeStatus" role="status" aria-live="polite">已有订单可直接查询，无需再次购买。</p>
+          <p class="status" id="codeStatus" role="status" aria-live="polite">已有订单可直接查询，无需重复购买。</p>
           <div class="code-actions"><a href="/contact/?subject=Vid2PPT%20%E5%85%91%E6%8D%A2%E4%BB%A3%E7%A0%81%E6%9F%A5%E8%AF%A2">联系订单支持</a><a href="/#workspace">返回工作台</a></div>
         </section>
       </aside>
@@ -313,7 +313,7 @@
         busy = value;
         buttons.forEach(function (button) { button.disabled = value; });
         continueButton.disabled = value || !selectedButton;
-        continueButton.textContent = value ? '支付处理中…' : (selectedButton ? '继续支付' : '请先选择代号');
+        continueButton.textContent = value ? '支付处理中…' : (selectedButton ? '继续支付' : '请选择代号');
         checkoutForm.setAttribute('aria-busy', String(value));
       }
 
@@ -427,12 +427,12 @@
         if (paddlePromise) return paddlePromise;
         paddlePromise = Promise.all([fetchConfig(), loadPaddleScript()]).then(function (result) {
           var config = result[0];
-          if (!window.Paddle) throw new Error('支付组件暂时不可用，请稍后重试。');
+          if (!window.Paddle) throw new Error('支付组件加载失败，请稍后重试。');
           if (config.PADDLE_ENV === 'sandbox' && window.Paddle.Environment && window.Paddle.Environment.set) {
             window.Paddle.Environment.set('sandbox');
           }
           if (!paddleInitialized) {
-            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时不可用，请稍后重试或联系支持。');
+            if (!config.PADDLE_CLIENT_TOKEN) throw new Error('支付功能暂时无法开启，请稍后重试或联系支持。');
             window.Paddle.Initialize({
               token: config.PADDLE_CLIENT_TOKEN,
               eventCallback: function (event) {
@@ -440,7 +440,7 @@
                 if (name === 'checkout.closed') {
                   paymentOpen = false;
                   setBusy(false);
-                  if (!paymentCompleted) setCheckoutStatus('支付窗口已关闭。如果已经付款，请查询代码，无需再次购买。', '');
+                  if (!paymentCompleted) setCheckoutStatus('支付窗口已关闭。如果已经付款，请查询代码，无需重复购买。', '');
                 }
                 if (name === 'checkout.completed' && activeRequestId) {
                   paymentCompleted = true;
@@ -508,7 +508,7 @@
         if (busy) return;
         var email = normalizeEmail(emailInput.value);
         if (!isValidEmail(email)) {
-          setCheckoutStatus('邮箱格式不正确，可以留空或填写有效邮箱。', 'error');
+          setCheckoutStatus('邮箱格式有误，可以留空或填写有效邮箱。', 'error');
           emailInput.setAttribute('aria-invalid', 'true');
           emailInput.focus();
           return;
@@ -536,7 +536,7 @@
           .then(ensurePaddle)
           .then(function (config) {
             var priceId = config.PADDLE_PRICE_AUTHOR_TIP_CNY_CENT;
-            if (!priceId) throw new Error('该项目暂时不可购买，请稍后重试。');
+            if (!priceId) throw new Error('该项目暂时无法购买，请稍后重试。');
             var checkoutOptions = {
               items: [{ priceId: priceId, quantity: quantity }],
 	              customData: {
@@ -619,7 +619,7 @@
                 scheduleNext(remaining - 1);
               } else {
                 pollTimer = null;
-                setCodeStatus('暂未查到代码。支付结果可能仍在同步，可稍后用订单号再次查询。', 'warn');
+                setCodeStatus('暂未查到代码。支付结果可能仍在同步，可稍后用订单号查询。', 'warn');
               }
             })
             .catch(function (error) {

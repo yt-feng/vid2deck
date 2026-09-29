@@ -65,7 +65,7 @@ def resolve_bilibili_short_url(raw_url: str) -> str:
         parsed = urllib.parse.urlparse(current)
         host = (parsed.hostname or "").lower()
         if host not in BILIBILI_SHORT_HOSTS and not is_bilibili_url(current):
-            raise BilibiliError("B 站短链跳转到了不支持的地址。")
+            raise BilibiliError("B 站短链跳转到了其他站点，请使用 bilibili.com 视频播放页链接。")
 
         request = urllib.request.Request(
             urllib.parse.urlunparse(parsed._replace(scheme="https")),
@@ -178,7 +178,7 @@ def download_bilibili_video(raw_url: str, *, max_download_bytes: int) -> Path:
             ydl.extract_info(canonical_url, download=True)
         media = find_downloaded_media(tempdir)
         if media.stat().st_size > max_download_bytes:
-            raise BilibiliError("B 站视频文件超过当前下载大小限制，请换短视频或先裁剪。")
+            raise BilibiliError("B 站视频文件超过当前下载大小限制，请选择较短视频或裁剪后的文件。")
         returned = True
         return media
     except BilibiliError:
@@ -271,13 +271,13 @@ def bilibili_error_message(message: str) -> str:
     if "requested format is not available" in lowered:
         return "这个 B 站视频暂时没有可直接处理的视频格式。"
     if "file is larger than max-filesize" in lowered:
-        return "B 站视频文件超过当前下载大小限制，请换短视频或先裁剪。"
+        return "B 站视频文件超过当前下载大小限制，请选择较短视频或裁剪后的文件。"
     if "http error 412" in lowered or "precondition failed" in lowered:
         if bilibili_cookie_header():
             return "B 站仍拒绝了 Vercel 云端请求；服务端 Cookie 已配置，但这个请求被 B 站返回 412。"
-        return "B 站拒绝了云端匿名请求。请在 Vercel 项目配置 BILIBILI_COOKIE 或 BILIBILI_SESSDATA 后再试。"
+        return "B 站限制了本次视频获取。可下载已获授权的视频文件后导入。"
     if any(token in lowered for token in ("login", "cookie", "sessdata", "credential")) or "登录" in cleaned:
-        return "这个 B 站视频需要登录权限。请在服务端配置 BILIBILI_COOKIE 或 BILIBILI_SESSDATA 后再试。"
+        return "这个 B 站视频需要登录权限。可下载已获授权的视频文件后导入。"
     if any(token in cleaned for token in ("大会员", "权限", "付费", "地区", "版权")):
         return "B 站返回了访问限制，请确认服务端账号可以正常播放这个视频。"
     return cleaned or "这个 B 站链接暂时无法获取。"

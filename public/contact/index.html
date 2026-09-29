@@ -142,7 +142,7 @@
           if (window.turnstile && turnstileWidget !== null) window.turnstile.reset(turnstileWidget);
           else if (window.turnstile) window.onContactTurnstileLoad();
           else loadVerification();
-        } catch (error) { verificationFailed('验证暂时不可用，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
+        } catch (error) { verificationFailed('验证加载失败，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
       }
       window.onContactTurnstileLoad = function () {
         clearTimeout(verificationTimer);
@@ -159,9 +159,9 @@
             'expired-callback': function () { resetVerification(); },
             'error-callback': function () { verificationFailed('验证未完成。请重新验证，或直接发邮件至 info@vid2ppt.com。'); },
             'timeout-callback': function () { verificationFailed('验证已超时，请点击「重新验证」后继续。'); },
-            'unsupported-callback': function () { verificationFailed('当前浏览器暂不支持此验证。可换一个浏览器，或直接发邮件至 info@vid2ppt.com。'); }
+            'unsupported-callback': function () { verificationFailed('此验证与当前浏览器的兼容性有限。可换一个浏览器，或直接发邮件至 info@vid2ppt.com。'); }
           });
-        } catch (error) { verificationFailed('验证暂时不可用，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
+        } catch (error) { verificationFailed('验证加载失败，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
       };
       function loadVerification() {
         verificationRetry.hidden = true;
@@ -191,7 +191,7 @@
         subject.setCustomValidity(body.subject ? '' : '请填写留言主题。');
         message.setCustomValidity(body.message.length >= 10 && body.message.length <= 5000 ? '' : '请填写 10–5,000 个字符的详细内容。');
         if (!form.reportValidity()) return;
-        if (!turnstileToken) { verificationFailed('请先完成上方验证，再发送消息。'); return; }
+        if (!turnstileToken) { verificationFailed('完成上方验证后即可发送消息。'); return; }
         var requestKey = JSON.stringify(body);
         if (!pendingRequest || pendingRequest.key !== requestKey) pendingRequest = { key: requestKey, id: crypto.randomUUID() };
         body.request_id = pendingRequest.id;
