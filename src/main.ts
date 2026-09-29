@@ -470,6 +470,7 @@ app.innerHTML = `
 
       <a class="rail-item" href="/contact/" target="_blank" rel="noopener" title="在新窗口联系支持">联系我们</a>
       <a class="rail-item" href="/guide/" target="_blank" rel="noopener">使用指南</a>
+      <a class="rail-item" href="/blog/" target="_blank" rel="noopener">文章</a>
       <button id="railSettingsBtn" class="rail-item" type="button">设置</button>
       <button id="railLoginBtn" class="rail-item" type="button">账号</button>
     </aside>

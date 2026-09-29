@@ -1,0 +1,34 @@
+# Vid2PPT
+
+Vid2PPT 是一个浏览器视频整理工具。用户可以导入本地视频、部分公开视频链接或获准录制的屏幕内容，提取关键画面，保留时间位置，生成可阅读、可导出的笔记。
+
+## 核心页面
+
+- 首页：https://vid2ppt.com/
+- 使用指南：https://vid2ppt.com/guide/
+- 文章库：https://vid2ppt.com/blog/
+- 套餐与价格：https://vid2ppt.com/pricing/
+- 隐私说明：https://vid2ppt.com/privacy/
+- 编辑说明：https://vid2ppt.com/editorial-policy/
+- 联系支持：https://vid2ppt.com/contact/
+
+## 文章分类
+
+- 视频转笔记指南：https://vid2ppt.com/blog/video-to-notes-guide/
+- 视频笔记、PPT 与 PDF：https://vid2ppt.com/blog/video-notes-vs-ppt-pdf/
+- 线上课程笔记：https://vid2ppt.com/blog/course-video-notes/
+- 培训录屏与团队资料：https://vid2ppt.com/blog/training-video-to-handout/
+- 视频来源与获取路径：https://vid2ppt.com/blog/where-to-get-videos/
+- B 站、YouTube 与本地视频：https://vid2ppt.com/blog/youtube-bilibili-local-video/
+
+## 产品能力
+
+- 浏览器本地视频抽帧、相似画面合并与页面编辑
+- 时间位置、原始页面、HTML、Markdown、PPTX、PDF 与图片导出
+- 按需转写与 AI 文字要点
+- B 站、YouTube 和部分公开视频链接导入
+- 课程、培训、会议、行业分享和团队资料整理场景
+
+## 说明
+
+文章由 Vid2PPT 编辑部维护，AI 可以参与初稿整理，发布前经过人工复核。产品能力、额度和隐私说明以官网当前页面为准。
