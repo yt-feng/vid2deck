@@ -1,16 +1,70 @@
 {
   "rewrites": [
     {
+      "source": "/api/download-video",
+      "destination": "/api/media/download"
+    },
+    {
+      "source": "/api/contact",
+      "destination": "/api/service?__route=usage&action=contact"
+    },
+    {
       "source": "/api/redeem-code",
-      "destination": "/api/usage?action=redeem_code"
+      "destination": "/api/service?__route=usage&action=redeem_code"
+    },
+    {
+      "source": "/api/auth",
+      "destination": "/api/service?__route=auth"
+    },
+    {
+      "source": "/api/captcha",
+      "destination": "/api/service?__route=captcha"
+    },
+    {
+      "source": "/api/entitlement",
+      "destination": "/api/service?__route=entitlement"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/api/service?__route=login"
+    },
+    {
+      "source": "/api/paddle-config",
+      "destination": "/api/service?__route=paddle-config"
+    },
+    {
+      "source": "/api/paddle-webhook",
+      "destination": "/api/service?__route=paddle-webhook"
+    },
+    {
+      "source": "/api/summarize",
+      "destination": "/api/service?__route=summarize"
+    },
+    {
+      "source": "/api/summarize-simple",
+      "destination": "/api/service?__route=summarize-simple"
+    },
+    {
+      "source": "/api/usage",
+      "destination": "/api/service?__route=usage"
     }
   ],
   "functions": {
-    "api/download-video.py": {
-      "maxDuration": 300
+    "api/service.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{node_modules/**,public/**,src/**,dist/**,docs/**,tests/**,server/**,services/**,supabase/**,.github/**,api_key/**,.env*,.vercel/**,**/__pycache__/**}"
+    },
+    "api/media/download.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{node_modules/**,public/**,src/**,dist/**,docs/**,tests/**,server/**,services/**,supabase/**,.github/**,api_key/**,.env*,.vercel/**,**/__pycache__/**}"
+    },
+    "api/media/metadata.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{node_modules/**,public/**,src/**,dist/**,docs/**,tests/**,server/**,services/**,supabase/**,.github/**,api_key/**,.env*,.vercel/**,**/__pycache__/**}"
     },
     "api/youtube-fallback.ts": {
       "maxDuration": 300
     }
-  }
+  },
+  "buildCommand": "uv run --no-project --with httpx==0.28.1 python -m unittest tests.test_media_temp_cleanup tests.test_service_router tests.test_api_authorization tests.test_contact_api -q && npm run build"
 }

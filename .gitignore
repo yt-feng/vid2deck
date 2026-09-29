@@ -4,3 +4,5 @@ dist/
 .vercel
 .env*
 api_key/
+__pycache__/
+*.py[cod]

@@ -154,37 +154,40 @@ def get_bilibili_metadata(raw_url: str) -> dict[str, Any]:
 def download_bilibili_video(raw_url: str, *, max_download_bytes: int) -> Path:
     canonical_url = canonicalize_bilibili_url(raw_url)
     tempdir = Path(tempfile.mkdtemp(prefix="vid2ppt-bilibili-download-"))
-    outtmpl = str(tempdir / "%(title).160B-%(id)s.%(ext)s")
-    opts = {
-        "outtmpl": outtmpl,
-        "format": os.getenv("VID2PPT_BILIBILI_YTDLP_FORMAT", DEFAULT_BILIBILI_FORMAT),
-        "merge_output_format": "mp4",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "windowsfilenames": True,
-        "max_filesize": max_download_bytes,
-        "retries": 3,
-        "fragment_retries": 3,
-        "socket_timeout": 30,
-        "cachedir": False,
-        "http_headers": bilibili_request_headers(canonical_url),
-    }
-    if cookiefile := write_bilibili_cookie_file(tempdir):
-        opts["cookiefile"] = str(cookiefile)
+    returned = False
     try:
+        outtmpl = str(tempdir / "%(title).160B-%(id)s.%(ext)s")
+        opts = {
+            "outtmpl": outtmpl,
+            "format": os.getenv("VID2PPT_BILIBILI_YTDLP_FORMAT", DEFAULT_BILIBILI_FORMAT),
+            "merge_output_format": "mp4",
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "windowsfilenames": True,
+            "max_filesize": max_download_bytes,
+            "retries": 3,
+            "fragment_retries": 3,
+            "socket_timeout": 30,
+            "cachedir": False,
+            "http_headers": bilibili_request_headers(canonical_url),
+        }
+        if cookiefile := write_bilibili_cookie_file(tempdir):
+            opts["cookiefile"] = str(cookiefile)
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.extract_info(canonical_url, download=True)
         media = find_downloaded_media(tempdir)
         if media.stat().st_size > max_download_bytes:
             raise BilibiliError("B 站视频文件超过当前下载大小限制，请换短视频或先裁剪。")
+        returned = True
         return media
     except BilibiliError:
-        shutil.rmtree(tempdir, ignore_errors=True)
         raise
     except Exception as exc:
-        shutil.rmtree(tempdir, ignore_errors=True)
         raise BilibiliError(bilibili_error_message(str(exc))) from exc
+    finally:
+        if not returned:
+            shutil.rmtree(tempdir, ignore_errors=True)
 
 
 def bilibili_request_headers(referer_url: str = "https://www.bilibili.com/") -> dict[str, str]:

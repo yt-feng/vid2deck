@@ -111,6 +111,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_cors_headers()
         self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(path.stat().st_size))
         self.send_header("Content-Disposition", content_disposition(filename))
         self.send_header("X-Filename", ascii_filename(filename))
@@ -202,42 +203,41 @@ def download_video_once(
     use_youtube_proxy: bool,
 ) -> Path:
     tempdir = Path(tempfile.mkdtemp(prefix="vid2ppt-cloud-download-"))
-    outtmpl = str(tempdir / "%(title).160B-%(id)s.%(ext)s")
-    ydl_opts = {
-        "outtmpl": outtmpl,
-        "format": os.getenv("VID2PPT_CLOUD_YTDLP_FORMAT", DEFAULT_YTDLP_FORMAT),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "windowsfilenames": True,
-        "max_filesize": max_download_bytes,
-        "retries": 2,
-        "fragment_retries": 2,
-        "socket_timeout": 20,
-        "cachedir": False,
-    }
-    extractor_args = youtube_extractor_args(url, use_youtube_cookies=use_youtube_cookies)
-    if extractor_args:
-        ydl_opts["extractor_args"] = extractor_args
-    if use_youtube_proxy and is_youtube_url(url):
-        if proxy := youtube_proxy_url():
-            ydl_opts["proxy"] = proxy
-    if use_youtube_cookies and is_youtube_url(url):
-        if cookiefile := write_youtube_cookie_file(tempdir):
-            ydl_opts["cookiefile"] = str(cookiefile)
+    returned = False
     try:
+        outtmpl = str(tempdir / "%(title).160B-%(id)s.%(ext)s")
+        ydl_opts = {
+            "outtmpl": outtmpl,
+            "format": os.getenv("VID2PPT_CLOUD_YTDLP_FORMAT", DEFAULT_YTDLP_FORMAT),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "windowsfilenames": True,
+            "max_filesize": max_download_bytes,
+            "retries": 2,
+            "fragment_retries": 2,
+            "socket_timeout": 20,
+            "cachedir": False,
+        }
+        extractor_args = youtube_extractor_args(url, use_youtube_cookies=use_youtube_cookies)
+        if extractor_args:
+            ydl_opts["extractor_args"] = extractor_args
+        if use_youtube_proxy and is_youtube_url(url):
+            if proxy := youtube_proxy_url():
+                ydl_opts["proxy"] = proxy
+        if use_youtube_cookies and is_youtube_url(url):
+            if cookiefile := write_youtube_cookie_file(tempdir):
+                ydl_opts["cookiefile"] = str(cookiefile)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(url, download=True)
         media = find_downloaded_media(tempdir)
         if media.stat().st_size > max_download_bytes:
             raise DownloadError(f"视频文件超过 {max_download_mb} MB，请换短视频或先裁剪。")
+        returned = True
         return media
-    except DownloadError:
-        shutil.rmtree(tempdir, ignore_errors=True)
-        raise
-    except Exception as exc:
-        shutil.rmtree(tempdir, ignore_errors=True)
-        raise
+    finally:
+        if not returned:
+            shutil.rmtree(tempdir, ignore_errors=True)
 
 
 def raise_download_error(message: str, max_download_mb: int, exc: Exception) -> None:

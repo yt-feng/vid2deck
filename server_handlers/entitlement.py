@@ -26,12 +26,15 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         try:
             params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            email = normalize_email((params.get("email") or [""])[0])
-            if not email:
-                self.send_json({"detail": "Valid email is required"}, 400)
+            identity, error_status = authenticated_identity(
+                self.headers.get("authorization", ""),
+                (params.get("email") or [""])[0],
+            )
+            if error_status:
+                self.send_json(auth_error_payload(error_status), error_status)
                 return
 
-            identity = bearer_identity(self.headers.get("authorization", ""))
+            email = str(identity["email"])
             if is_owner_identity(email, str(identity.get("username") or "")):
                 self.send_json(owner_payload(email))
                 return
@@ -100,14 +103,39 @@ def owner_payload(email: str) -> dict[str, Any]:
     }
 
 
+def authenticated_identity(authorization: str, requested_value: Any = "") -> tuple[dict[str, Any], int | None]:
+    identity = bearer_identity(authorization)
+    email = normalize_email(str(identity.get("email") or ""))
+    if not email:
+        return {}, 401
+
+    requested_text = str(requested_value or "").strip()
+    if requested_text:
+        requested_email = normalize_email(requested_text)
+        if not requested_email:
+            return {}, 400
+        if requested_email != email:
+            return {}, 403
+
+    return {**identity, "email": email}, None
+
+
 def bearer_identity(header: str) -> dict[str, Any]:
-    prefix = "Bearer "
-    if not header.startswith(prefix):
+    parts = header.strip().split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
         return {}
     try:
-        return verify_user_token(header.removeprefix(prefix).strip())
+        return verify_user_token(parts[1].strip())
     except Exception:
         return {}
+
+
+def auth_error_payload(status: int) -> dict[str, str]:
+    if status == 400:
+        return {"detail": "Valid email is required"}
+    if status == 403:
+        return {"detail": "Email does not match authenticated user"}
+    return {"detail": "User login required"}
 
 
 def public_entitlement(row: dict[str, Any]) -> dict[str, Any]:

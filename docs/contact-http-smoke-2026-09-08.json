@@ -1,0 +1,58 @@
+[
+  {
+    "path": "/contact/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/pricing/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/privacy/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/terms-and-conditions/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/refund/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/sponsor/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": false,
+    "old_email_absent": true,
+    "private_email_absent": true
+  },
+  {
+    "path": "/",
+    "http_ok": true,
+    "contact_link": true,
+    "public_email": true,
+    "old_email_absent": true,
+    "private_email_absent": true
+  }
+]

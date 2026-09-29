@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import hmac
+import logging
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
@@ -20,7 +21,7 @@ try:
         verify_user_token,
     )
     from _supabase import SupabaseError, create_site_user, find_site_user_by_username, update_site_user, utc_now_iso
-    from usage import create_admin_token
+    from server_handlers.usage import create_admin_token
 except ModuleNotFoundError:
     from api._auth import (
         create_user_token,
@@ -35,11 +36,12 @@ except ModuleNotFoundError:
         verify_user_token,
     )
     from api._supabase import SupabaseError, create_site_user, find_site_user_by_username, update_site_user, utc_now_iso
-    from api.usage import create_admin_token
+    from server_handlers.usage import create_admin_token
 
 
 ADMIN_USERNAME = normalize_username(os.getenv("VID2PPT_ADMIN_USERNAME", "twotigers_vid"))
-ADMIN_PASSWORD = os.getenv("VID2PPT_ADMIN_PASSWORD", "1108")
+ADMIN_PASSWORD = os.getenv("VID2PPT_ADMIN_PASSWORD", "")
+LOGGER = logging.getLogger(__name__)
 
 
 class handler(BaseHTTPRequestHandler):
@@ -56,8 +58,9 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json({"detail": "账号不存在或已被移除。"}, 401)
                 return
             self.send_session(user)
-        except Exception as exc:
-            self.send_json({"detail": str(exc)}, 401)
+        except Exception:
+            LOGGER.exception("Unable to restore the authenticated user session")
+            self.send_json({"detail": "登录状态无效，请重新登录。"}, 401)
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -69,7 +72,7 @@ class handler(BaseHTTPRequestHandler):
             data = self.read_json()
             action = str(data.get("action") or "login").strip().lower()
             if action not in {"login", "register"}:
-                self.send_json({"detail": "Unsupported auth action"}, 400)
+                self.send_json({"detail": "不支持的账号操作。"}, 400)
                 return
 
             if not verify_captcha_response(str(data.get("captcha_token") or ""), str(data.get("captcha_answer") or "")):
@@ -93,11 +96,13 @@ class handler(BaseHTTPRequestHandler):
             detail = "数据库写入失败。"
             if exc.status == 409:
                 detail = "用户名或邮箱已被注册。"
-            elif "site_users" in exc.body:
-                detail = "Supabase 缺少 site_users 表，请先执行项目里的 supabase/schema.sql。"
+            else:
+                detail = "账号服务暂时不可用，请稍后重试。"
+            LOGGER.error("Account storage request failed (status=%s): %s", exc.status, exc.body)
             self.send_json({"detail": detail}, 500 if exc.status != 409 else 409)
-        except Exception as exc:
-            self.send_json({"detail": str(exc)}, 500)
+        except Exception:
+            LOGGER.exception("Unexpected account request failure")
+            self.send_json({"detail": "账号服务暂时不可用，请稍后重试。"}, 500)
 
     def register(self, username: str, password: str, raw_email: str) -> None:
         existing = find_site_user_by_username(username)
@@ -146,8 +151,6 @@ class handler(BaseHTTPRequestHandler):
 
     def send_session(self, user: dict[str, Any], status: int = 200, admin_token: str = "") -> None:
         payload = {"token": create_user_token(user), "user": public_user(user)}
-        if not admin_token and normalize_username(str(user.get("username") or "")) == ADMIN_USERNAME:
-            admin_token = create_admin_token(ADMIN_USERNAME)
         if admin_token:
             payload["admin_token"] = admin_token
         self.send_json(payload, status)
@@ -180,7 +183,15 @@ def bearer_token(header: str) -> str:
 
 
 def is_admin_login(username: str, password: str) -> bool:
-    return hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD)
+    return (
+        admin_credentials_configured()
+        and hmac.compare_digest(username, ADMIN_USERNAME)
+        and hmac.compare_digest(password, ADMIN_PASSWORD)
+    )
+
+
+def admin_credentials_configured() -> bool:
+    return bool(ADMIN_USERNAME and ADMIN_PASSWORD.strip())
 
 
 def ensure_admin_site_user(username: str, password: str) -> dict[str, Any]:

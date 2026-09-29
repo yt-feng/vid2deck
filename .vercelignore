@@ -1,2 +1,11 @@
 api_key/
 services/vps-downloader/
+
+# Source-only material and local build output are not deployment inputs.
+docs/
+server/
+supabase/
+.github/
+dist/
+work/
+outputs/

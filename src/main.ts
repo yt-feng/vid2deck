@@ -1,6 +1,9 @@
-import { jsPDF } from 'jspdf';
+import type { jsPDF as JsPdfDocument } from 'jspdf';
 import JSZip from 'jszip';
+import { cropTextBoxes } from './cropGeometry';
+import { paintPdfTextBoxes } from './pdfTextLayer';
 import './style.css';
+import { readDraft, writeDraft } from './workspaceDraft';
 
 type Slide = {
   id: number;
@@ -194,10 +197,6 @@ const TRANSCRIBE_CHUNK_SECONDS = 30;
 const TRANSCRIBE_CONTEXT_SECONDS = 2;
 const TIMELINE_PAINT_INTERVAL_MS = 220;
 const IMAGE_DECK_MAX_EDGE = 2400;
-const PERCEIVED_UPLOAD_MIN_MS = 900;
-const PERCEIVED_UPLOAD_MAX_MS = 2600;
-const PERCEIVED_PROCESSING_MS = 460;
-const PERCEIVED_UPLOAD_SPEEDUP = 1.35;
 const PPTX_SLIDE_WIDTH_EMU = 12192000;
 const PPTX_SLIDE_HEIGHT_EMU = 6858000;
 const TESSERACT_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
@@ -221,7 +220,6 @@ const USAGE_STORAGE_KEY = 'vid2deck.usage.monthly';
 const CLOUD_DOWNLOADER_URL = '/api/download-video';
 const YOUTUBE_FALLBACK_URL = '/api/youtube-fallback';
 const MEDIA_METADATA_URL = '/api/media/metadata';
-const YT1S_EXTERNAL_URL = 'https://yt1s.com.co/en218/';
 const TIP_AMOUNTS = [10, 20, 50, 80, 100, 200] as const;
 const TIP_MIN_AMOUNT = 1;
 const TIP_MIN_CHECKOUT_AMOUNT = 10;
@@ -257,184 +255,215 @@ if (!app) throw new Error('Missing #app');
 
 app.innerHTML = `
   <main id="homeView">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Vid2PPT Deck</p>
-        <h1>视频和图片一键生成去重版PPT、PDF、逐字稿与图文笔记</h1>
-        <p class="subhead">支持批量上传视频、图片或直接录制屏幕。单个视频可进入工作台精修；图片可生成 PPTX；批量上传后，一键生成所有页面并下载 Frames ZIP。</p>
+    <section class="hero-shell" id="product">
+      <div class="hero-copy">
+        <p class="eyebrow">视频转 PPT · 无需注册即可试用</p>
+        <h1>把视频里的课件，<br />整理成可用资料。</h1>
+        <p class="subhead">放入课程、会议或教程视频，自动提取并去重。检查页面后，带走保留原画面的 PPTX、PDF 或图片。</p>
+        <div class="hero-demo-action">
+          <button id="openDemoProjectBtn" type="button">先看交互示例</button>
+          <span>无需上传，不计入免费额度</span>
+        </div>
+        <ul class="hero-benefits" aria-label="产品优势">
+          <li><strong>本地处理</strong><span>本地视频与录屏默认不离开设备</span></li>
+          <li><strong>保留原版式</strong><span>提取原始画面，不用 AI 重写内容</span></li>
+          <li><strong>导出前可检查</strong><span>漏页能补抓，重复页可删除</span></li>
+        </ul>
+        <div class="hero-output-row" aria-label="支持导出格式">
+          <span>PPTX</span><span>PDF</span><span>页面图片</span><span>逐字稿</span><span>图文笔记</span>
+        </div>
+      </div>
+
+      <section id="start" tabindex="-1" class="video-panel converter-card" aria-label="开始转换视频">
+        <div class="converter-heading">
+          <div>
+            <span class="step-chip">01</span>
+            <h2>选择你的视频来源</h2>
+          </div>
+          <small id="sourceQuota">免费版 · 10 分钟以内 · 每月 3 次</small>
+        </div>
+
+        <div class="source-tabs" role="tablist" aria-label="视频来源">
+          <button id="sourceLocalTab" type="button" role="tab" aria-selected="true" aria-controls="sourceLocal" data-source="local">本地文件</button>
+          <button id="sourceUrlTab" type="button" role="tab" aria-selected="false" aria-controls="sourceUrl" data-source="url" tabindex="-1">视频链接</button>
+          <button id="sourceRecordTab" type="button" role="tab" aria-selected="false" aria-controls="sourceRecord" data-source="record" tabindex="-1">录制屏幕</button>
+        </div>
+        <div id="sourceLocal" role="tabpanel" aria-labelledby="sourceLocalTab">
+        <div class="local-source-row">
+          <label class="dropzone" id="dropzone" for="videoInput" role="button" tabindex="0">
+            <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
+            <span class="upload-mark" aria-hidden="true">＋</span>
+            <span id="fileLabel">拖入视频，或点击选择文件</span>
+            <small>MP4、WebM、MOV 等 · 在你的设备上处理</small>
+          </label>
+
+        </div>
+
+        </div>
+        <div id="sourceUrl" role="tabpanel" aria-labelledby="sourceUrlTab" hidden>
+        <form id="videoUrlForm" class="url-import">
+          <label class="sr-only" for="videoUrlInput">在线视频链接</label>
+          <div class="url-input-shell">
+            <span class="input-leading" aria-hidden="true">↗</span>
+            <input id="videoUrlInput" type="url" inputmode="url" placeholder="粘贴 B 站、YouTube 或公开视频链接" autocomplete="off" />
+          </div>
+          <div class="url-import-actions">
+            <button id="processUrlBtn" type="button">立即生成</button>
+            <button id="downloadUrlBtn" type="button" class="ghost-btn">仅导入</button>
+          </div>
+          <div id="urlDownloadProgress" class="url-download-progress" hidden>
+            <div class="url-download-progress-meta">
+              <span id="urlDownloadProgressText">准备获取视频</span>
+              <strong id="urlDownloadProgressPercent">0%</strong>
+            </div>
+            <div class="url-download-progress-track"><div id="urlDownloadProgressFill" class="url-download-progress-fill"></div></div>
+          </div>
+          <div id="mediaPreview" class="media-preview" hidden>
+            <img id="mediaPreviewImage" alt="" hidden />
+            <div class="media-preview-body">
+              <div class="media-preview-heading">
+                <p id="mediaPreviewProvider" class="eyebrow">视频来源</p>
+                <h3 id="mediaPreviewTitle">已识别视频</h3>
+              </div>
+              <p id="mediaPreviewMeta" class="media-preview-meta"></p>
+              <p id="mediaPreviewPolicy" class="media-preview-policy"></p>
+              <label id="mediaRightsLabel" class="rights-confirm">
+                <input id="mediaRightsConfirm" type="checkbox" />
+                <span>我确认有权保存、转换或分析这个视频。</span>
+              </label>
+            </div>
+          </div>
+          <small id="urlDownloadStatus" class="url-download-status">在线链接会由服务端临时获取；完成导入后立即清理临时文件。</small>
+        </form>
+
+        </div>
+        <div id="sourceRecord" class="record-source-panel" role="tabpanel" aria-labelledby="sourceRecordTab" hidden>
+          <strong>把正在播放的课程录下来</strong>
+          <p>选择一个标签页、窗口或屏幕。停止录制后，自动提取页面。</p>
+          <div class="source-actions">
+            <button id="recordScreenBtn" type="button" class="record-btn"><span aria-hidden="true">●</span> 直接录屏</button>
+            <button id="stopRecordBtn" type="button" class="danger-btn" hidden>停止录制并开始生成</button>
+            <small>适合在线课程、会议和无法下载的视频</small>
+          </div>        </div>
+        <div id="resumeDraftBanner" class="resume-banner" hidden>
+          <span id="resumeDraftText">上次的任务已保存在此浏览器</span>
+          <button id="resumeDraftBtn" type="button">继续上次任务</button>
+          <button id="dismissDraftBtn" type="button" class="ghost-btn" aria-label="收起上次任务提示">×</button>
+        </div>
+        <div id="fileList" class="file-list" hidden></div>
+
+        <details class="advanced-settings">
+          <summary>调整页面识别灵敏度</summary>
+          <div class="grid">
+            <label>检查间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
+            <label>相似页合并强度<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
+            <label>最短换页间隔（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
+          </div>
+          <p class="hint">默认设置适合大多数录屏和课程视频。页面切换很快时可缩短检查间隔；动画较多时可提高合并强度。</p>
+        </details>
+
+        <div class="actions converter-actions">
+          <button id="extractBtn" disabled>选择文件后开始提取</button>
+          <button id="batchZipBtn" class="ghost-btn" disabled hidden>批量处理并打包</button>
+          <button id="downloadFramesZipBtn" class="ghost-btn" disabled hidden>下载已完成的页面图片</button>
+        </div>
+
+        <p id="batchPlanHint" class="hint" hidden>多个文件可以逐个处理，<a href="/pricing/" target="_blank" rel="noopener">升级套餐</a>可批量生成。</p>
+        <div class="status" id="homeStatus" aria-live="polite">选择文件后即可开始，无需注册。</div>
+      </section>
+    </section>
+
+    <div id="landingDetails"></div>
+
+    <section class="utility-section" id="more-tools">
+      <div class="section-heading compact">
+        <div>
+          <p class="section-kicker">更多输入方式</p>
+          <h2>已有图片或 NotebookLM PDF？也能直接整理</h2>
+        </div>
+        <p>这些工具独立运行，不会打断你的视频任务。</p>
+      </div>
+      <div class="utility-grid">
+        <section class="panel image-ppt-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">图片转 PPT</p><h3>多张图片合成 PPTX</h3></div>
+          </div>
+          <label class="dropzone image-dropzone" id="imageDropzone" for="imageInput" role="button" tabindex="0">
+            <input id="imageInput" type="file" multiple accept="image/png,image/jpeg,image/webp" />
+            <span id="imageFileLabel">选择或拖入一组图片</span>
+            <small>一张图片对应一页；需要改文字时可进入编辑工作台。</small>
+          </label>
+          <div id="imageFileList" class="file-list image-file-list" hidden></div>
+          <div class="actions">
+            <button id="imagePptBtn" disabled>生成图片版 PPTX</button>
+            <button id="imageWorkspaceBtn" class="ghost-btn" disabled>识别文字后编辑</button>
+          </div>
+          <div class="status" id="imageStatus" aria-live="polite">选择图片后即可生成。</div>
+        </section>
+
+        <section class="panel notebook-pdf-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">PDF 清理</p><h3>清理 NotebookLM 页脚标识</h3></div>
+          </div>
+          <label class="dropzone notebook-pdf-dropzone" id="notebookPdfDropzone" for="notebookPdfInput" role="button" tabindex="0">
+            <input id="notebookPdfInput" type="file" accept="application/pdf,.pdf" />
+            <span id="notebookPdfFileLabel">选择或拖入 NotebookLM PDF</span>
+            <small>在设备上识别并遮盖右下角标识，再下载新 PDF。</small>
+          </label>
+          <div id="notebookPdfInfo" class="pdf-file-info" hidden></div>
+          <div class="actions"><button id="notebookMaskPdfBtn" disabled>清理并下载 PDF</button></div>
+          <div class="status" id="notebookPdfStatus" aria-live="polite">选择 PDF 后即可清理。</div>
+        </section>
       </div>
     </section>
 
-    <section class="account-panel" aria-label="用户账号">
+    <section class="account-panel" id="account" aria-label="用户账号">
       <div class="account-copy">
-        <p class="eyebrow">Account</p>
-        <h2>用户名登录</h2>
-        <p id="accountStatus" class="account-status">登录后可直接生成摘要与图文笔记，付款也会绑定到同一账号。</p>
+        <p class="eyebrow">账号与权益</p>
+        <h2>偶尔用不必登录，跨设备同步权益时再登录</h2>
+        <p id="accountStatus" class="account-status">免费额度记录在当前浏览器；登录后可同步套餐与付费权益；输出语言保存在当前浏览器。</p>
       </div>
       <form id="authForm" class="auth-form">
-        <label>用户名<input id="authUsername" type="text" autocomplete="username" placeholder="yourname" /></label>
+        <label>用户名<input id="authUsername" type="text" autocomplete="username" placeholder="3–32 位用户名" required minlength="3" maxlength="32" /></label>
         <label id="authEmailLabel">邮箱（可选）<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
-        <label>密码<input id="authPassword" type="password" autocomplete="current-password" placeholder="至少 4 位" /></label>
-        <label class="captcha-field">图片验证码
+        <label>密码<input id="authPassword" type="password" autocomplete="current-password" placeholder="请输入密码" required minlength="6" /></label>
+        <label class="captcha-field">验证
           <div class="captcha-row">
-            <img id="authCaptchaImage" alt="图片验证码" />
-            <button id="refreshAuthCaptchaBtn" class="ghost-btn" type="button">换一张</button>
+            <img id="authCaptchaImage" alt="算式验证码" />
+            <button id="refreshAuthCaptchaBtn" class="ghost-btn" type="button" aria-label="换一张验证码">换一张</button>
           </div>
-          <input id="authCaptchaAnswer" type="text" inputmode="numeric" autocomplete="off" placeholder="输入结果" />
+          <input id="authCaptchaAnswer" type="text" inputmode="numeric" autocomplete="off" placeholder="输入算式结果" required />
         </label>
         <div class="auth-actions">
           <button id="authSubmitBtn" type="submit">登录</button>
-          <button id="authModeToggleBtn" class="ghost-btn" type="button">注册新账号</button>
+          <button id="authModeToggleBtn" class="ghost-btn" type="button">没有账号？免费注册</button>
         </div>
       </form>
       <div id="authSignedIn" class="auth-signed-in" hidden>
-        <div>
-          <span>当前账号</span>
-          <strong id="authSignedInName">-</strong>
-          <small id="authSignedInEmail">-</small>
-        </div>
+        <div><span>当前账号</span><strong id="authSignedInName">-</strong><small id="authSignedInEmail">-</small></div>
         <div class="auth-signed-in-actions">
-          <button id="openAccountSettingsBtn" class="ghost-btn" type="button">偏好设置</button>
+          <button id="openAccountSettingsBtn" class="ghost-btn" type="button">输出偏好</button>
           <button id="authLogoutBtn" class="ghost-btn" type="button">退出登录</button>
         </div>
       </div>
     </section>
 
-    <section class="panel image-ppt-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">Image to PPT</p>
-          <h2>图片生成可编辑 PPTX</h2>
-        </div>
-      </div>
-
-      <label class="dropzone image-dropzone" id="imageDropzone" for="imageInput">
-        <input id="imageInput" type="file" multiple accept="image/png,image/jpeg,image/webp" />
-        <span id="imageFileLabel">选择或拖入一组图片</span>
-        <small>每张图片生成一页 PPT；进入编辑模式后可添加真实文本框，再导出可编辑 PPTX。</small>
-      </label>
-
-      <div id="imageFileList" class="file-list image-file-list" hidden></div>
-
-      <div class="actions">
-        <button id="imagePptBtn" disabled>快速生成图片版 PPTX</button>
-        <button id="imageWorkspaceBtn" disabled>编辑图片为可编辑 PPTX</button>
-      </div>
-
-      <div class="status" id="imageStatus">等待上传图片。</div>
-    </section>
-
-    <section class="panel notebook-pdf-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">NotebookLM PDF</p>
-          <h2>抹除右下角 NotebookLM Logo</h2>
-        </div>
-      </div>
-
-      <label class="dropzone notebook-pdf-dropzone" id="notebookPdfDropzone" for="notebookPdfInput">
-        <input id="notebookPdfInput" type="file" accept="application/pdf,.pdf" />
-        <span id="notebookPdfFileLabel">选择或拖入 NotebookLM 生成的 PDF</span>
-        <small>本地识别右下角 NotebookLM 标识，打码遮住后下载新的 PDF。</small>
-      </label>
-
-      <div id="notebookPdfInfo" class="pdf-file-info" hidden></div>
-
-      <div class="actions">
-        <button id="notebookMaskPdfBtn" disabled>抹除 Logo 并下载 PDF</button>
-      </div>
-
-      <div class="status" id="notebookPdfStatus">等待上传 PDF。</div>
-    </section>
-
-    <section class="panel video-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">Video to Slides</p>
-          <h2>粘贴链接或上传视频，生成 PPT/PDF</h2>
-        </div>
-        <span>完成后自动进入处理工作台</span>
-      </div>
-
-      <form id="videoUrlForm" class="url-import">
-        <label>B站/在线视频链接
-          <input id="videoUrlInput" type="url" inputmode="url" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" />
-        </label>
-        <div class="url-import-actions">
-          <button id="downloadUrlBtn" type="submit">下载到队列</button>
-          <button id="processUrlBtn" type="button" class="ghost-btn">获取并直接生成</button>
-        </div>
-        <div id="urlDownloadProgress" class="url-download-progress" hidden>
-          <div class="url-download-progress-meta">
-            <span id="urlDownloadProgressText">准备下载</span>
-            <strong id="urlDownloadProgressPercent">0%</strong>
-          </div>
-          <div class="url-download-progress-track"><div id="urlDownloadProgressFill" class="url-download-progress-fill"></div></div>
-        </div>
-        <div id="mediaPreview" class="media-preview" hidden>
-          <img id="mediaPreviewImage" alt="" hidden />
-          <div class="media-preview-body">
-            <div class="media-preview-heading">
-              <p id="mediaPreviewProvider" class="eyebrow">Media</p>
-              <h3 id="mediaPreviewTitle">已识别媒体</h3>
-            </div>
-            <p id="mediaPreviewMeta" class="media-preview-meta"></p>
-            <p id="mediaPreviewPolicy" class="media-preview-policy"></p>
-            <label id="mediaRightsLabel" class="rights-confirm">
-              <input id="mediaRightsConfirm" type="checkbox" />
-              <span>我确认有权保存、转换或分析这个媒体内容。</span>
-            </label>
-          </div>
-        </div>
-        <small id="urlDownloadStatus" class="url-download-status">粘贴哔哩哔哩或其他视频链接，可先加入队列，也可直接生成 PPT/PDF。</small>
-      </form>
-
-      <label class="dropzone" id="dropzone" for="videoInput">
-        <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
-        <span id="fileLabel">选择或拖入一个或多个视频文件</span>
-        <small>可以一次选择多个文件，也可以多次追加。上传后会自动进入处理工作台。</small>
-      </label>
-
-      <div class="source-actions">
-        <button id="recordScreenBtn" type="button">录制屏幕</button>
-        <button id="stopRecordBtn" type="button" class="danger-btn" hidden>停止录制并加入队列</button>
-      </div>
-
-      <div id="fileList" class="file-list" hidden></div>
-
-      <div class="grid">
-        <label>页面采样间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
-        <label>去重阈值（越大越容易合并）<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
-        <label>同页合并窗口（秒）<input id="minGap" type="number" min="0" step="0.5" value="3" /></label>
-      </div>
-
-      <div class="hint">单文件：点击“处理当前视频”进入工作台，支持勾选、裁剪、删除、补抓页面，最后下载 PDF。多文件：点击“批量生成并下载 ZIP”，自动逐个处理全部视频并打包输出页面图片。</div>
-
-      <div class="actions">
-        <button id="extractBtn" disabled>处理当前视频</button>
-        <button id="batchZipBtn" disabled>批量生成并下载 ZIP</button>
-        <button id="downloadFramesZipBtn" disabled>下载已处理 Frames ZIP</button>
-      </div>
-
-      <div class="status" id="homeStatus">等待上传视频。</div>
-    </section>
-
-    <section class="support-author-panel" aria-label="赞助本站">
+    <section class="support-author-panel" aria-label="联系支持">
       <div>
-        <p class="eyebrow">Support</p>
-        <h2>觉得 Vid2PPT Deck 有用，可以赞助本站继续维护</h2>
+        <p class="eyebrow">需要帮助？</p>
+        <h2>特殊编码、超长视频或转换结果不理想，我们可以一起排查。</h2>
       </div>
-      <button id="openTipDialogBtn" type="button">打开赞助页</button>
+      <button id="openTipDialogBtn" type="button">联系支持</button>
     </section>
   </main>
 
   <main id="workspaceView" class="workspace" hidden>
     <aside class="workspace-rail" aria-label="应用导航">
-      <button id="railHomeBtn" class="rail-logo" type="button" title="回到产品入口">V</button>
+      <button id="railHomeBtn" class="rail-logo" type="button" title="回到 Vid2PPT 首页" aria-label="回到 Vid2PPT 首页"><img src="/brand/vid2ppt-mark.svg" alt="" /></button>
       <button id="railWorkspaceBtn" class="rail-item is-active" type="button">工作台</button>
-      <button id="railOrdersBtn" class="rail-item" type="button">订单</button>
-      <a class="rail-item" href="/pricing/">升级会员</a>
-      <a class="rail-item" href="mailto:support@vid2deck.com">联系我们</a>
+      <button id="railOrdersBtn" class="rail-item" type="button">套餐权益</button>
+
+      <a class="rail-item" href="/contact/" target="_blank" rel="noopener" title="在新窗口联系支持">联系我们</a>
       <button id="railSettingsBtn" class="rail-item" type="button">设置</button>
       <button id="railLoginBtn" class="rail-item" type="button">账号</button>
     </aside>
@@ -442,7 +471,7 @@ app.innerHTML = `
     <section class="workspace-main">
       <header class="workspace-bar">
         <button id="doneBtn" class="ghost-btn">回主页</button>
-        <button id="toggleSideBtn" class="ghost-btn" title="收起/展开左侧面板">⇤ 收起左栏</button>
+        <button id="toggleSideBtn" class="ghost-btn" aria-expanded="false" title="预览、文字编辑与笔记">编辑与笔记</button>
         <div class="workspace-title">
           <strong>工作台</strong>
           <small id="workspaceSubtitle">处理视频后，在这里勾选、预览和导出。</small>
@@ -453,27 +482,30 @@ app.innerHTML = `
           <small id="selectCount">0/0</small>
         </label>
         <div class="workspace-spacer"></div>
-        <button id="downloadPdfBtn" disabled>导出 PDF</button>
-        <button id="downloadPptxBtn" disabled>导出 PPTX</button>
+        <button id="downloadPdfBtn" hidden disabled>导出 PDF</button>
+        <button id="downloadPptxBtn" hidden disabled>导出 PPTX</button>
+        <button id="toggleImportBtn" class="ghost-btn" type="button" aria-expanded="true" aria-controls="workspaceImport">添加视频</button>
       </header>
-
+      <ol class="workspace-steps" aria-label="转换步骤">
+        <li data-step="source">1 选择来源</li><li data-step="extract">2 提取页面</li><li data-step="review">3 检查与导出</li>
+      </ol>
       <section class="result-dock" id="resultDock" aria-live="polite">
         <div class="result-summary">
           <span id="resultBadge" class="result-badge">等待处理</span>
           <div>
             <strong id="resultTitle">等待生成页面</strong>
-            <small id="resultSubtitle">上传并处理视频后，下载入口会固定显示在这里。</small>
+            <small id="resultSubtitle">生成页面后，导出入口会固定显示在这里。</small>
           </div>
         </div>
         <div class="result-actions">
-          <button id="dockDownloadPdfBtn" class="primary-download" disabled>立即下载 PDF</button>
+          <button id="dockDownloadPdfBtn" class="primary-download" disabled>导出 PDF</button>
           <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
-          <button id="dockDownloadFramesBtn" disabled>导出 Frames ZIP</button>
-          <button id="dockNotesBtn" disabled>生成图文笔记</button>
+          <button id="dockDownloadFramesBtn" disabled>导出页面图片</button>
+          <button id="dockNotesBtn" hidden disabled>生成图文笔记</button>
         </div>
       </section>
 
-      <section class="workspace-command-bar" aria-label="导入视频">
+      <section id="workspaceImport" class="workspace-command-bar" aria-label="导入视频">
         <form id="workspaceVideoUrlForm" class="workspace-url-import">
           <label>在线视频链接
             <input id="workspaceVideoUrlInput" type="url" inputmode="url" placeholder="粘贴 B站、YouTube 或公开视频链接" autocomplete="off" />
@@ -483,14 +515,14 @@ app.innerHTML = `
             <span>我确认有权处理这个视频</span>
           </label>
           <div class="workspace-url-actions">
-            <button id="workspaceProcessUrlBtn" type="button">下载并开始生成</button>
-            <button id="workspaceDownloadUrlBtn" class="ghost-btn" type="submit">仅下载到队列</button>
+            <button id="workspaceProcessUrlBtn" type="button">获取并开始生成</button>
+            <button id="workspaceDownloadUrlBtn" class="ghost-btn" type="button">仅导入</button>
           </div>
           <small id="workspaceUrlStatus">粘贴链接后会直接进入获取视频和页面生成流程。</small>
         </form>
-        <label class="workspace-file-dropzone" id="workspaceDropzone" for="workspaceVideoInput">
+        <label class="workspace-file-dropzone" id="workspaceDropzone" for="workspaceVideoInput" role="button" tabindex="0">
           <input id="workspaceVideoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
-          <strong>上传视频</strong>
+          <strong>选择本地视频</strong>
           <small>也可以拖到这里</small>
         </label>
         <div class="workspace-import-actions">
@@ -500,40 +532,43 @@ app.innerHTML = `
         </div>
       </section>
 
+      <section class="task-feedback" aria-label="任务状态">        <div class="progress-panel" id="progressPanel" hidden>
+          <div class="progress-meta"><span id="progressText">准备开始</span><strong id="progressPercent">0%</strong></div>
+          <div class="progress-track" id="progressTrack" role="progressbar" aria-label="处理进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+
+        <button id="cancelExtractionBtn" class="ghost-btn" type="button" hidden>停止提取</button>
+        <div class="status" id="status" role="status" aria-live="polite">等待处理。</div>
+
+<small id="draftStatus">当前任务只保存在本机；可用时自动保存最近一次任务</small></section>
       <section class="workspace-body">
         <aside class="workspace-side">
           <div class="preview-card">
-            <img id="previewImage" alt="当前 frame 预览" />
+            <img id="previewImage" alt="当前页面原始画面" />
+            <small class="preview-caption">原始画面参考 · 文字修改见页面缩略图</small>
             <div id="previewEmpty" class="preview-empty">生成后会在这里预览当前页面</div>
           </div>
 
-        <div class="progress-panel" id="progressPanel" hidden>
-          <div class="progress-meta"><span id="progressText">准备开始</span><strong id="progressPercent">0%</strong></div>
-          <div class="progress-track" aria-label="处理进度"><div class="progress-fill" id="progressFill"></div></div>
-        </div>
-
-        <div class="status" id="status">等待处理。</div>
-
-        <section class="export-panel" aria-label="导出选中页面">
+        <section class="export-panel" hidden aria-label="导出选中页面">
           <div>
-            <strong>备用导出</strong>
-            <small id="exportHint">生成完成后，也可以从这里下载选中页面。</small>
+            <strong>导出选中页面</strong>
+            <small id="exportHint">生成完成后，从这里下载你勾选的页面。</small>
           </div>
           <div class="export-actions">
             <button id="sideDownloadPdfBtn" disabled>下载 PDF</button>
             <button id="sideDownloadPptxBtn" disabled>下载 PPTX</button>
-            <button id="sideDownloadFramesBtn" disabled>下载 Frames ZIP</button>
+            <button id="sideDownloadFramesBtn" disabled>下载页面图片</button>
           </div>
         </section>
 
-        <section class="text-layer-panel" aria-label="可编辑文本框">
+        <details class="editor-disclosure"><summary>编辑页面文字 <small>OCR 与文本框</small></summary><section class="text-layer-panel" aria-label="可编辑文本框">
           <div class="text-layer-heading">
             <div>
               <strong>可编辑文本框</strong>
-              <small id="textLayerHint">进入编辑模式后会自动 OCR；也可以对勾选页重新 OCR。</small>
+              <small id="textLayerHint">识别勾选页面的文字后，可在这里修改文本框。</small>
             </div>
             <div class="text-layer-buttons">
-              <button id="runOcrBtn" type="button" disabled>自动 OCR 勾选页</button>
+              <button id="runOcrBtn" type="button" disabled>识别勾选页文字</button>
               <button id="addTextBoxBtn" type="button" disabled>手动补文本框</button>
             </div>
           </div>
@@ -559,6 +594,10 @@ app.innerHTML = `
           </div>
         </section>
 
+        </details>
+        <details class="notes-disclosure"><summary>逐字稿与笔记 <small>按需生成</small></summary>
+        <p id="notesAccessHint" class="hint">逐字稿在本机识别；摘要与图文笔记需登录，会发送必要文本。</p>
+        <button id="notesLoginBtn" type="button" class="ghost-btn">登录后生成摘要与笔记</button>
         <div class="workspace-actions">
           <button id="transcribeBtn" disabled>生成逐字稿</button>
           <button id="downloadTranscriptBtn" disabled>下载逐字稿</button>
@@ -573,13 +612,24 @@ app.innerHTML = `
         <label class="workspace-text-label">摘要
           <textarea id="summary" placeholder="摘要会出现在这里，并使用设置中的偏好语言。"></textarea>
         </label>
+        </details>
       </aside>
 
         <section class="workspace-grid-wrap">
           <div id="workspaceEmptyState" class="workspace-empty-state">
-            <p class="eyebrow">Workspace</p>
+            <p class="eyebrow">开始任务</p>
             <h2 id="workspaceEmptyTitle">工作台还没有任务</h2>
             <p id="workspaceEmptyBody">粘贴 B 站或 YouTube 链接、上传视频，或录制屏幕后，处理进度和可导出的页面会出现在这里。</p>
+          </div>
+          <div id="reviewToolbar" class="review-toolbar" hidden>
+            <span>取消勾选可排除页面 · 拖动可排序</span>
+            <button id="undoEditBtn" class="ghost-btn" type="button" disabled>撤销上一步</button>
+            <button id="selectAllReviewBtn" class="ghost-btn" type="button">全选</button>
+            <button id="reextractBtn" class="ghost-btn" type="button">重新提取</button>
+          </div>
+          <div id="reextractPanel" class="reextract-panel" hidden>
+            <strong>重新提取页面</strong><p>会重新识别原视频，替换本次的页面修改，并计入一次转换。提取失败或停止时会恢复现有页面。</p>
+            <button id="confirmReextractBtn" type="button">重新提取</button><button id="cancelReextractBtn" class="ghost-btn" type="button">保留当前页面</button>
           </div>
           <div id="slides" class="slides workspace-slides"></div>
         </section>
@@ -592,7 +642,7 @@ app.innerHTML = `
         <strong>拖动时间轴补抓页面 / 按 C</strong>
         <span id="timelineDuration">00:00:00</span>
       </div>
-      <div id="timelineRail" class="timeline-rail" role="slider" aria-label="拖动选择时间并补抓 frame">
+      <div id="timelineRail" class="timeline-rail" role="slider" tabindex="0" aria-label="选择时间并补抓页面" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="00:00:00">
         <div id="timelineMarkers" class="timeline-markers"></div>
         <div class="timeline-blue"></div>
         <div id="timelineHandle" class="timeline-handle"></div>
@@ -602,18 +652,18 @@ app.innerHTML = `
 
   <dialog id="cropDialog" class="crop-dialog">
     <form method="dialog" class="crop-panel">
-      <h2>裁剪 frame</h2>
-      <p>用百分比粗略裁剪。默认是整张图，Apply 后会替换当前 frame。</p>
-      <img id="cropImage" alt="待裁剪 frame" />
+      <h2>裁剪当前页面</h2>
+      <p>输入四周的裁剪范围，应用后会替换当前页面。</p>
+      <img id="cropImage" alt="待裁剪页面" />
       <div class="crop-grid">
-        <label>Left %<input id="cropLeft" type="number" min="0" max="99" value="0" /></label>
-        <label>Top %<input id="cropTop" type="number" min="0" max="99" value="0" /></label>
-        <label>Width %<input id="cropWidth" type="number" min="1" max="100" value="100" /></label>
-        <label>Height %<input id="cropHeight" type="number" min="1" max="100" value="100" /></label>
+        <label>左侧 %<input id="cropLeft" type="number" min="0" max="99" value="0" /></label>
+        <label>顶部 %<input id="cropTop" type="number" min="0" max="99" value="0" /></label>
+        <label>保留宽度 %<input id="cropWidth" type="number" min="1" max="100" value="100" /></label>
+        <label>保留高度 %<input id="cropHeight" type="number" min="1" max="100" value="100" /></label>
       </div>
       <div class="crop-actions">
-        <button id="cropCancelBtn" value="cancel" class="ghost-btn">Cancel</button>
-        <button id="cropApplyBtn" value="default">Apply Crop</button>
+        <button id="cropCancelBtn" value="cancel" class="ghost-btn">取消</button>
+        <button id="cropApplyBtn" value="default">应用裁剪</button>
       </div>
     </form>
   </dialog>
@@ -622,7 +672,7 @@ app.innerHTML = `
     <form method="dialog" class="tip-panel">
       <div class="tip-heading">
         <div>
-          <p class="eyebrow">Support</p>
+          <p class="eyebrow">支持项目</p>
           <h2>赞助本站</h2>
         </div>
         <button id="showCustomTipBtn" type="button" class="tip-custom-link">自定义金额</button>
@@ -650,14 +700,13 @@ app.innerHTML = `
     <form method="dialog" class="url-fallback-panel">
       <div class="url-fallback-heading">
         <div>
-          <p class="eyebrow">Video Link</p>
+          <p class="eyebrow">视频链接</p>
           <h2>这个链接需要网页登录验证</h2>
         </div>
       </div>
       <p id="urlFallbackMessage">这个链接需要网页登录验证。可以打开原视频后，用录屏方式继续处理。</p>
       <div class="url-fallback-actions">
         <button id="urlFallbackOpenBtn" type="button" class="ghost-btn">打开原视频</button>
-        <button id="urlFallbackExternalBtn" type="button" class="ghost-btn">复制链接并打开下载页</button>
         <button id="urlFallbackRecordBtn" type="button">开始录制并加入队列</button>
         <button id="urlFallbackCancelBtn" value="cancel" class="ghost-btn">取消</button>
       </div>
@@ -668,7 +717,7 @@ app.innerHTML = `
     <form id="settingsForm" method="dialog" class="settings-panel">
       <div class="settings-heading">
         <div>
-          <p class="eyebrow">Settings</p>
+          <p class="eyebrow">设置</p>
           <h2>输出偏好</h2>
         </div>
         <button id="settingsCloseBtn" type="button" class="ghost-btn" aria-label="关闭设置">关闭</button>
@@ -800,6 +849,7 @@ const statusEl = $<HTMLDivElement>('#status');
 const progressPanel = $<HTMLDivElement>('#progressPanel');
 const progressText = $<HTMLSpanElement>('#progressText');
 const progressPercent = $<HTMLElement>('#progressPercent');
+const progressTrack = $<HTMLDivElement>('#progressTrack');
 const progressFill = $<HTMLDivElement>('#progressFill');
 const workspaceSubtitle = $<HTMLElement>('#workspaceSubtitle');
 const workspaceEmptyState = $<HTMLDivElement>('#workspaceEmptyState');
@@ -836,6 +886,7 @@ const cropHeight = $<HTMLInputElement>('#cropHeight');
 const cropApplyBtn = $<HTMLButtonElement>('#cropApplyBtn');
 const openSiteTipDialogBtn = document.querySelector<HTMLButtonElement>('#openSiteTipDialogBtn');
 const openWorkspaceBtn = document.querySelector<HTMLButtonElement>('#openWorkspaceBtn');
+const openDemoProjectBtn = $<HTMLButtonElement>('#openDemoProjectBtn');
 const openLoginBtn = document.querySelector<HTMLButtonElement>('#openLoginBtn');
 const railHomeBtn = $<HTMLButtonElement>('#railHomeBtn');
 const railWorkspaceBtn = $<HTMLButtonElement>('#railWorkspaceBtn');
@@ -888,23 +939,36 @@ const fileStates = new Map<string, FileJobState>();
 let slides: Slide[] = [];
 let videoMeta: VideoMeta | null = null;
 let workspaceMode: WorkspaceMode = 'video';
+let isDemoProject = false;
+let demoRestoreFileIndex = -1;
 let timelineTime = 0;
 let cropTargetSlideId: number | null = null;
 let activeSlideId: number | null = null;
 let activeTextBoxId: string | null = null;
+let draggedSlideId: number | null = null;
 let isDraggingTimeline = false;
 let extractionTimelineMax = 0;
 let lastTimelinePaint = 0;
 let isExtracting = false;
+let isExporting = false;
+let extractionAbort: AbortController | null = null;
+let undoSnapshot: { slides: Slide[]; activeSlideId: number | null; file: File | null } | null = null;
+type WorkspaceDraft = { version: 1; file: File; state: FileJobState; mode: WorkspaceMode; savedAt: string };
+let savedDraft: WorkspaceDraft | null = null;
+let draftTimer = 0;
+let draftRevision = 0;
+let savedDraftRevision = 0;
+let draftWrites: Promise<void> = Promise.resolve();
+let demoSnapshot: { file: File | null; mode: WorkspaceMode; state: FileJobState; index: number } | null = null;
 let isBatchProcessing = false;
 let isUrlDownloading = false;
-let isPerceivedUploading = false;
 let isTranscribing = false;
 let isSummarizing = false;
 let isGeneratingNotes = false;
 let isOcrRunning = false;
 let isPdfMasking = false;
 let isRecording = false;
+let isPreparingRecording = false;
 let mediaRecorder: MediaRecorder | null = null;
 let recordingStream: MediaStream | null = null;
 let recordedChunks: Blob[] = [];
@@ -932,6 +996,9 @@ let entitlement: EntitlementPayload = freeEntitlement(authSession?.user.email ??
 let usageSummary: UsageSummary = loadLocalUsageSummary();
 let entitlementFetchedAt = 0;
 
+authForm.addEventListener('focusin', () => {
+  if (!authSession && !authCaptchaToken && !refreshAuthCaptchaBtn.disabled) void loadAuthCaptcha();
+});
 authForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void submitAuthForm();
@@ -952,7 +1019,6 @@ authLogoutBtn.addEventListener('click', () => {
   syncAdminNav();
   setAuthStatus('已退出登录。', '');
   updateAuthUi();
-  void loadAuthCaptcha();
 });
 openAccountSettingsBtn.addEventListener('click', () => openSettingsDialog());
 settingsForm.addEventListener('submit', (event) => {
@@ -980,8 +1046,9 @@ void refreshEntitlement();
 videoInput.addEventListener('change', () => addFiles(Array.from(videoInput.files ?? [])));
 videoUrlForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void downloadVideoFromUrl('queue');
+  void downloadVideoFromUrl('extract');
 });
+downloadUrlBtn.addEventListener('click', () => { void downloadVideoFromUrl('queue'); });
 processUrlBtn.addEventListener('click', () => {
   void downloadVideoFromUrl('extract');
 });
@@ -999,14 +1066,21 @@ mediaRightsConfirm.addEventListener('change', () => {
 });
 imageInput.addEventListener('change', () => addImageFiles(Array.from(imageInput.files ?? [])));
 notebookPdfInput.addEventListener('change', () => selectNotebookPdfFile(Array.from(notebookPdfInput.files ?? [])[0] ?? null));
-recordScreenBtn.addEventListener('click', () => startScreenRecording());
+recordScreenBtn.addEventListener('click', () => startScreenRecording('extract'));
 stopRecordBtn.addEventListener('click', () => stopScreenRecording());
-extractBtn.addEventListener('click', () => processCurrentFile());
+extractBtn.addEventListener('click', () => { if (slides.length && !isDemoProject) showWorkspace(); else void processCurrentFile(); });
 batchZipBtn.addEventListener('click', () => batchExtractAndDownloadZip());
 downloadFramesZipBtn.addEventListener('click', () => downloadProcessedFramesZip());
 imagePptBtn.addEventListener('click', () => downloadImagesAsPptx());
 imageWorkspaceBtn.addEventListener('click', () => openImagesInWorkspace());
 notebookMaskPdfBtn.addEventListener('click', () => maskSelectedNotebookPdf());
+[dropzone, imageDropzone, notebookPdfDropzone, workspaceDropzone].forEach((zone) => {
+  zone.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    zone.click();
+  });
+});
 transcriptEl.addEventListener('input', () => { persistWorkspaceToState(); updateActionState(); });
 summaryEl.addEventListener('input', () => persistWorkspaceToState());
 dockNotesBtn.addEventListener('click', () => {
@@ -1019,17 +1093,23 @@ generateNotesBtn.addEventListener('click', () => {
 });
 
 doneBtn.addEventListener('click', () => {
-  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  const closedDemo = isDemoProject;
+  if (!closedDemo && !isBusy()) persistWorkspaceToState({ markProcessed: slides.length > 0 });
   workspaceView.hidden = true;
   homeView.hidden = false;
-  hideProgress();
+  if (!isBusy()) hideProgress();
+  if (closedDemo) restoreWorkspaceAfterDemo();
   renderFileList();
-  setHomeStatus(workspaceMode === 'image' ? '图片 PPT 工作台已关闭，可继续上传图片或视频。' : selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+  setHomeStatus(closedDemo
+    ? '交互示例已关闭。现在可以用自己的视频开始转换。'
+    : workspaceMode === 'image'
+      ? '图片 PPT 工作台已关闭，可继续上传图片或视频。'
+      : selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
 });
 
 toggleSideBtn.addEventListener('click', () => {
   workspaceView.classList.toggle('side-collapsed');
-  toggleSideBtn.textContent = workspaceView.classList.contains('side-collapsed') ? '⇥ 展开左栏' : '⇤ 收起左栏';
+  toggleSideBtn.setAttribute('aria-expanded', String(!workspaceView.classList.contains('side-collapsed')));
 });
 
 selectAllBox.addEventListener('change', () => setAllSlidesSelected(selectAllBox.checked));
@@ -1127,7 +1207,7 @@ workspaceDropzone.addEventListener('drop', (event) => {
 });
 
 timelineRail.addEventListener('pointerdown', (event) => {
-  if (!videoMeta || isExtracting || isBatchProcessing) return;
+  if (!videoMeta || isBusy()) return;
   isDraggingTimeline = true;
   timelineRail.setPointerCapture(event.pointerId);
   updateTimelineFromPointer(event);
@@ -1144,10 +1224,27 @@ timelineRail.addEventListener('pointerup', async (event) => {
   await captureManualFrameAt(timelineTime);
 });
 timelineRail.addEventListener('pointercancel', () => { isDraggingTimeline = false; });
+timelineRail.addEventListener('keydown', async (event) => {
+  if (!videoMeta || isBusy()) return;
+  const duration = videoMeta.duration;
+  const step = event.shiftKey ? 30 : 5;
+  if (event.key === 'ArrowLeft') timelineTime = Math.max(0, timelineTime - step);
+  else if (event.key === 'ArrowRight') timelineTime = Math.min(duration, timelineTime + step);
+  else if (event.key === 'Home') timelineTime = 0;
+  else if (event.key === 'End') timelineTime = duration;
+  else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    await captureManualFrameAt(timelineTime);
+    return;
+  } else return;
+  event.preventDefault();
+  extractionTimelineMax = Math.max(extractionTimelineMax, timelineTime);
+  updateTimelinePosition();
+});
 
 document.addEventListener('keydown', async (event) => {
   const target = event.target as HTMLElement | null;
-  const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+  const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]') || document.querySelector('dialog[open]') || event.metaKey || event.ctrlKey || event.altKey;
   if (isTyping || workspaceView.hidden || event.key.toLowerCase() !== 'c') return;
   event.preventDefault();
   await captureManualFrameAt(timelineTime);
@@ -1160,6 +1257,7 @@ cropApplyBtn.addEventListener('click', async (event) => {
 
 openSiteTipDialogBtn?.addEventListener('click', () => openTipDialog());
 openWorkspaceBtn?.addEventListener('click', () => openWorkspaceFromNav());
+openDemoProjectBtn.addEventListener('click', () => openDemoProject());
 openLoginBtn?.addEventListener('click', () => focusLoginPanel());
 railHomeBtn.addEventListener('click', () => returnHomeForVideoStart());
 railWorkspaceBtn.addEventListener('click', () => openWorkspaceFromNav());
@@ -1168,12 +1266,14 @@ railSettingsBtn.addEventListener('click', () => openSettingsDialog());
 railLoginBtn.addEventListener('click', () => focusLoginPanel());
 emptyWorkspaceStartBtn.addEventListener('click', () => {
   if (selectedFile && workspaceMode === 'video' && slides.length === 0) void processCurrentFile();
-  else workspaceVideoUrlInput.focus();
+  else if (workspaceMode === 'image') returnHomeForVideoStart();
+  else workspaceVideoInput.click();
 });
 workspaceVideoUrlForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void startWorkspaceUrlDownload('queue');
+  void startWorkspaceUrlDownload('extract');
 });
+workspaceDownloadUrlBtn.addEventListener('click', () => { void startWorkspaceUrlDownload('queue'); });
 workspaceProcessUrlBtn.addEventListener('click', () => {
   void startWorkspaceUrlDownload('extract');
 });
@@ -1184,7 +1284,7 @@ workspaceRecordScreenBtn.addEventListener('click', () => {
 });
 workspaceStopRecordBtn.addEventListener('click', () => stopScreenRecording());
 openTipDialogBtn.addEventListener('click', () => {
-  window.location.href = '/sponsor/';
+  window.open('/contact/?subject=Vid2PPT%20%E4%BD%BF%E7%94%A8%E9%97%AE%E9%A2%98', '_blank', 'noopener');
 });
 showCustomTipBtn.addEventListener('click', () => showCustomTipInput());
 customTipPayBtn.addEventListener('click', () => {
@@ -1256,8 +1356,8 @@ function syncPreferencesUi(): void {
   outputLanguageSelect.value = userPreferences.outputLanguage;
   const languageLabel = OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage];
   settingsAccountHint.textContent = authSession
-    ? `已为账号 ${authSession.user.username} 保存，之后的摘要和图文笔记默认使用${languageLabel}。`
-    : `当前使用${languageLabel}。登录后会为每个账号分别保存偏好。`;
+    ? `已在此浏览器为 ${authSession.user.username} 保存，摘要和图文笔记使用${languageLabel}。`
+    : `当前使用${languageLabel}，偏好保存在此浏览器。`;
   notesLanguageLabel.textContent = languageLabel;
 }
 
@@ -1323,7 +1423,7 @@ function setAuthMode(mode: AuthMode): void {
   authEmailLabel.hidden = mode !== 'register';
   renderEntitlementSummary();
   authCaptchaAnswer.value = '';
-  void loadAuthCaptcha();
+  if (document.activeElement?.closest('#account')) void loadAuthCaptcha();
 }
 
 function updateAuthUi(): void {
@@ -1333,7 +1433,7 @@ function updateAuthUi(): void {
   if (openLoginBtn) openLoginBtn.textContent = authSession ? `账号：${authSession.user.username}` : '登录';
   if (authSession) {
     authSignedInName.textContent = authSession.user.username;
-    authSignedInEmail.textContent = authSession.user.email_is_generated ? `${authSession.user.email}（自动生成）` : authSession.user.email;
+    authSignedInEmail.textContent = authSession.user.email_is_generated ? '此账号未填写联系邮箱。购买前请在定价页核对权益绑定信息。' : authSession.user.email;
     renderEntitlementSummary();
   } else {
     setAuthMode(authMode);
@@ -1347,13 +1447,14 @@ async function loadAuthCaptcha(): Promise<void> {
   try {
     refreshAuthCaptchaBtn.disabled = true;
     const response = await fetch('/api/captcha', { cache: 'no-store' });
+    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('登录服务暂时不可用，请稍后重试。无需登录仍可使用本地转换。');
     const data = await response.json() as { image?: string; token?: string; detail?: string };
     if (!response.ok || !data.image || !data.token) throw new Error(data.detail || '验证码加载失败。');
     authCaptchaImage.src = data.image;
     authCaptchaToken = data.token;
   } catch (error) {
     authCaptchaToken = '';
-    setAuthStatus(error instanceof Error ? error.message : '验证码加载失败。', 'error');
+    setAuthStatus('验证码未能加载。请点击“换一张”重试；本地转换仍可使用。', 'error');
   } finally {
     refreshAuthCaptchaBtn.disabled = false;
   }
@@ -1600,7 +1701,7 @@ function renderEntitlementSummary(): void {
   const prefix = authSession
     ? `已登录，当前权限：${entitlement.owner ? '所有者' : planLabel(plan)}${periodText(entitlement.current_period_end)}`
     : `${authMode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可同步付费权益。'} 当前按免费版额度使用`;
-  const message = `${prefix}。转换${quotaText('video_conversion')}，可编辑页${quotaText('editable_slide')}，摘要与笔记${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
+  const message = `${prefix}。转换${quotaText('video_conversion')}，文字识别页${quotaText('editable_slide')}，摘要与笔记${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
   const tone: 'ok' | 'warn' | '' = authSession ? (plan === 'free' ? 'warn' : 'ok') : '';
   setAuthStatus(message, tone);
 }
@@ -1710,7 +1811,7 @@ async function readFileVideoMetadata(file: File): Promise<VideoMeta> {
 }
 
 function isBusy(): boolean {
-  return isExtracting || isBatchProcessing || isUrlDownloading || isPerceivedUploading || isTranscribing || isSummarizing || isGeneratingNotes || isOcrRunning || isPdfMasking || isRecording || isTipCheckoutOpening || isAuthBusy;
+  return isPreparingRecording || isExporting || isExtracting || isBatchProcessing || isUrlDownloading || isTranscribing || isSummarizing || isGeneratingNotes || isOcrRunning || isPdfMasking || isRecording || isTipCheckoutOpening || isAuthBusy;
 }
 
 function openTipDialog(): void {
@@ -1767,14 +1868,14 @@ function loadPaddleScript(): Promise<void> {
     const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${PADDLE_SCRIPT_URL}"]`);
     if (existingScript) {
       existingScript.addEventListener('load', () => resolve(), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Paddle.js 加载失败。')), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('支付组件加载失败，请稍后重试。')), { once: true });
       return;
     }
     const script = document.createElement('script');
     script.src = PADDLE_SCRIPT_URL;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Paddle.js 加载失败。'));
+    script.onerror = () => reject(new Error('支付组件加载失败，请稍后重试。'));
     document.head.appendChild(script);
   });
 }
@@ -1783,13 +1884,13 @@ async function ensurePaddle(): Promise<PaddleConfig> {
   if (paddleLoadPromise) return paddleLoadPromise;
   paddleLoadPromise = Promise.all([fetchPaddleConfig(), loadPaddleScript()]).then(([config]) => {
     const paddle = windowPaddle();
-    if (!paddle) throw new Error('Paddle.js 未就绪。');
+    if (!paddle) throw new Error('支付组件暂时不可用，请稍后重试。');
     if (config.PADDLE_ENV === 'sandbox' && paddle.Environment?.set) {
       paddle.Environment.set('sandbox');
     }
     if (!paddleInitialized) {
       const token = config.PADDLE_CLIENT_TOKEN;
-      if (!token) throw new Error('支付配置缺少：PADDLE_CLIENT_TOKEN');
+      if (!token) throw new Error('支付功能暂时不可用，请稍后重试或联系支持。');
       paddle.Initialize({
         token,
         eventCallback: (event) => {
@@ -1825,9 +1926,9 @@ async function openTipCheckout(amount: number): Promise<void> {
   try {
     const config = await ensurePaddle();
     const priceId = config.PADDLE_PRICE_AUTHOR_TIP_CNY_CENT;
-    if (!priceId) throw new Error('支付配置缺少：PADDLE_PRICE_AUTHOR_TIP_CNY_CENT');
+    if (!priceId) throw new Error('该支持项目暂时不可购买，请稍后重试。');
     const paddle = windowPaddle();
-    if (!paddle) throw new Error('Paddle.js 未就绪。');
+    if (!paddle) throw new Error('支付组件暂时不可用，请稍后重试。');
     if (tipDialog.open) {
       tipDialog.close();
       tipDialogClosedForCheckout = true;
@@ -2010,7 +2111,7 @@ function renderBilibiliAttemptPreview(parsedUrl: URL, message: string): MediaMet
     allowedActions: ['download', 'transcode', 'thumbnail'],
     policy: {
       downloadAllowed: true,
-      reason: `${message} 你仍可确认权限后，让云端 yt-dlp 直接尝试下载。`
+      reason: `${message} 确认你有权处理后，仍可以继续尝试导入。`
     }
   };
   renderMediaPreview(metadata, parsedUrl.toString());
@@ -2062,8 +2163,8 @@ function isBilibiliDownloadUrl(url: URL): boolean {
 function metadataProviderLabel(provider: string): string {
   if (provider === 'bilibili') return 'Bilibili';
   if (provider === 'youtube-oembed') return 'YouTube';
-  if (provider === 'direct-media') return 'Direct Media';
-  return provider || 'Media';
+  if (provider === 'direct-media') return '视频直链';
+  return provider || '视频来源';
 }
 
 function mediaMetadataLine(metadata: MediaMetadata): string {
@@ -2144,8 +2245,8 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     }
 
     if ((!response || !response.ok) && youtubeDownload) {
-      setUrlDownloadStatus('VPS 下载链未获取到视频，正在尝试原有云端引擎。', 'warn');
-      setUrlDownloadProgress('正在切换云端下载引擎', null);
+      setUrlDownloadStatus('第一次获取没有成功，正在换一种方式重试。', 'warn');
+      setUrlDownloadProgress('正在重新尝试获取视频', null);
       response = await fetch(CLOUD_DOWNLOADER_URL, {
         method: 'POST',
         mode: 'cors',
@@ -2332,7 +2433,9 @@ function sanitizeDownloadedFilename(filename: string): string {
 }
 
 function addFiles(files: File[], selectAdded = false): void {
-  const validFiles = files.filter(isSupportedMediaFile);
+  if (isBusy() && !(selectAdded && isUrlDownloading)) { setHomeStatus('请等待当前任务完成后再添加文件。'); return; }
+  if (isDemoProject) restoreWorkspaceAfterDemo();
+  const validFiles = files.filter((file) => isSupportedMediaFile(file) && file.size > 0);
   if (validFiles.length === 0) {
     setHomeStatus('没有检测到可处理的视频/音频文件。');
     return;
@@ -2435,63 +2538,51 @@ function removeFile(index: number): void {
 }
 
 async function processCurrentFile(): Promise<boolean> {
-  if (!selectedFile || isBusy()) return false;
+  if (!selectedFile || isBusy() || isDemoProject) return false;
   const file = selectedFile;
+  if (isAudioSource(file)) {
+    showWorkspace();
+    workspaceView.classList.remove('side-collapsed');
+    $<HTMLDetailsElement>('.notes-disclosure').open = true;
+    toggleSideBtn.setAttribute('aria-expanded', 'true');
+    $<HTMLElement>('#workspaceImport').hidden = true;
+    $<HTMLElement>('#toggleImportBtn').setAttribute('aria-expanded', 'false');
+    setStatus('这是音频文件，没有可提取的画面。可在“逐字稿与笔记”中开始转写。');
+    return false;
+  }
+  const previous = snapshotWorkspace();
+  let started = false;
+  let completed = false;
+  isExtracting = true;
+  extractionAbort = new AbortController();
+  const signal = extractionAbort.signal;
   setWorkspaceMode('video');
   showWorkspace();
-  setProgress('上传中', 3, true);
-  setStatus(`上传中：${file.name}`);
-
-  const reportGateStatus = (message: string) => {
-    setStatus(message);
-    setHomeStatus(message);
-    setProgress(message, 1, true);
-  };
-  if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', reportGateStatus)) {
-    setProgress('未开始生成', 100);
-    return false;
-  }
-  if (!await ensureVideoDurationAllowed(file, reportGateStatus)) {
-    setProgress('未开始生成', 100);
-    return false;
-  }
-
-  const settings = readSettings();
-  isPerceivedUploading = true;
   updateActionState();
+  setProgress('正在检查视频', undefined, true);
+  setStatus(`正在读取本地视频：${file.name}`);
+  $<HTMLElement>('#workspaceImport').hidden = true;
+  const reportGateStatus = (message: string) => { setStatus(message); setHomeStatus(message); };
   try {
-    await runPerceivedUploadStage({
-      label: '上传视频中',
-      doneLabel: '上传完成，正在处理。',
-      totalBytes: file.size,
-      onProgress: (label, percent) => setProgress(label, percent, true),
-      onStatus: setStatus
-    });
-    await runPerceivedProcessingStage({
-      label: '快速处理视频中',
-      doneLabel: '处理完成，正在生成页面。',
-      onProgress: (label, percent) => setProgress(label, percent, true),
-      onStatus: setStatus
-    });
-  } finally {
-    isPerceivedUploading = false;
-  }
-  resetFrameOutputs();
-
-  isExtracting = true;
-  setStateStatus(file, 'processing');
-  updateActionState();
-  renderFileList();
-  let completed = false;
-
-  try {
-    setProgress('页面生成中', 73, true);
-    setStatus(`页面生成中：${file.name}。关键页面会陆续显示。`);
+    if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', reportGateStatus)) {
+      hideProgress();
+      return false;
+    }
+    signal.throwIfAborted();
+    if (!await ensureVideoDurationAllowed(file, reportGateStatus)) {
+      hideProgress();
+      return false;
+    }
+    signal.throwIfAborted();
+    const settings = readSettings();
+    started = true;
+    resetFrameOutputs();
+    setStateStatus(file, 'processing');
+    renderFileList();
+    setStatus(`正在提取 ${file.name}，页面会陆续出现。请保持此页面打开。`);
     const result = await extractSlidesFromFile(file, settings, {
-      onMetadata: (meta) => {
-        videoMeta = meta;
-        setupTimeline(meta.duration);
-      },
+      signal,
+      onMetadata: (meta) => { videoMeta = meta; setupTimeline(meta.duration); },
       onKeep: (slide) => {
         slides.push(slide);
         appendSlideCard(slide);
@@ -2499,41 +2590,40 @@ async function processCurrentFile(): Promise<boolean> {
         updateTimelineMarkers();
       },
       onProgress: ({ completed, total, time, duration, kept }) => {
-        setProgress(`页面生成中：${completed} / ${total}，已生成 ${kept} 页`, 73 + Math.round((completed / Math.max(total, 1)) * 23));
-        setStatus(`页面生成中：${formatTime(time)} / ${formatTime(duration)}，已生成 ${kept} 页`);
+        setProgress(`扫描 ${formatTime(time)} / ${formatTime(duration)} · 找到 ${kept} 页`, Math.round(completed / Math.max(total, 1) * 100));
         updateExtractionTimeline(time);
       }
     });
     slides = result.slides;
     videoMeta = result.meta;
     forceTimelineToEnd();
-    setProgress('页面生成完成', 100);
-    setStatus(`页面生成完成：共 ${slides.length} 页。顶部导出栏可直接下载 PDF、PPTX 或 Frames ZIP。`);
-    setStateForFile(file, {
-      slides,
-      transcript: transcriptEl.value,
-      summary: summaryEl.value,
-      illustratedNotes: illustratedNotesMarkdown,
-      videoMeta,
-      status: 'done',
-      processedAt: new Date().toISOString()
-    });
-    await recordUsage('video_conversion', 1, {
-      name: file.name,
-      duration_seconds: Math.round(videoMeta.duration),
-      slides: slides.length
-    });
     completed = true;
+    setStateForFile(file, { ...snapshotWorkspace(), status: 'done', processedAt: new Date().toISOString() });
+    if (slides[0]) setPreview(slides[0]);
+    setProgress('提取完成', 100);
+    setStatus(`已提取 ${slides.length} 页。取消勾选可排除重复页，拖动可排序，然后选择格式导出。`);
+    await recordUsage('video_conversion', 1, { name: file.name, duration_seconds: Math.round(videoMeta.duration), slides: slides.length });
   } catch (error) {
-    const message = error instanceof Error ? error.message : '页面生成失败，请查看控制台。';
-    console.error(error);
-    setProgress('页面生成失败', 100);
-    setStatus(message);
-    setStateStatus(file, 'error', message);
+    const stopped = signal.aborted;
+    const message = stopped ? '已停止提取，本次未计入转换额度。' : error instanceof Error ? error.message : '提取没有完成，请换用可播放的 MP4 文件后重试。';
+    if (started) {
+      if (previous.slides.length) {
+        setStateForFile(file, previous);
+        loadStateIntoWorkspace(file);
+      } else {
+        setStateForFile(file, { ...snapshotWorkspace(), status: 'error', error: message });
+      }
+    }
+    hideProgress();
+    setStatus(message + (previous.slides.length ? ' 之前的编辑结果已保留。' : slides.length ? ` 已提取的 ${slides.length} 页可检查并导出。` : ' 可以重新选择文件或重试。'));
   } finally {
+    extractionAbort = null;
     isExtracting = false;
+    undoSnapshot = null;
     renderFileList();
+    renderSlides();
     updateActionState();
+    if (slides.length) scheduleDraftSave();
   }
   return completed;
 }
@@ -2544,11 +2634,9 @@ async function batchExtractAndDownloadZip(): Promise<void> {
     setHomeStatus('当前套餐不支持批量处理；专业版或终身版可批量生成并打包 ZIP。');
     return;
   }
-  if (!await ensureUsageCapacity('video_conversion', selectedFiles.length, '视频转换次数', setHomeStatus)) return;
-  const settings = readSettings();
   const files = selectedFiles.slice();
-  const zip = new JSZip();
   const successfulFiles: string[] = [];
+  const failedFiles: string[] = [];
   isBatchProcessing = true;
   homeView.hidden = false;
   workspaceView.hidden = true;
@@ -2556,6 +2644,10 @@ async function batchExtractAndDownloadZip(): Promise<void> {
   renderFileList();
 
   try {
+    if (!await ensureUsageCapacity('video_conversion', files.length, '视频转换次数', setHomeStatus)) return;
+    const settings = readSettings();
+    const zip = new JSZip();
+    persistWorkspaceToState();
     for (const [index, file] of files.entries()) {
       currentFileIndex = selectedFiles.indexOf(file);
       selectedFile = file;
@@ -2563,52 +2655,71 @@ async function batchExtractAndDownloadZip(): Promise<void> {
       renderFileList();
       setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name}`);
 
-      const result = await extractSlidesFromFile(file, settings, {
-        onMetadata: (meta) => {
-          videoMeta = meta;
-          setupTimeline(meta.duration);
-        },
-        onProgress: ({ completed, total, time, duration, kept }) => {
-          const filePercent = Math.round((completed / Math.max(total, 1)) * 100);
-          setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 已生成 ${kept} 页`);
+      try {
+        let durationMessage = '';
+        if (!await ensureVideoDurationAllowed(file, (message) => { durationMessage = message; setHomeStatus(message); })) {
+          throw new Error(durationMessage || '无法读取这个视频的时长。');
         }
-      });
+        const result = await extractSlidesFromFile(file, settings, {
+          onMetadata: (meta) => {
+            videoMeta = meta;
+            setupTimeline(meta.duration);
+          },
+          onProgress: ({ completed, total, time, duration, kept }) => {
+            const filePercent = Math.round((completed / Math.max(total, 1)) * 100);
+            setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 已生成 ${kept} 页`);
+          }
+        });
 
-      setStateForFile(file, {
-        slides: result.slides,
-        transcript: getState(file).transcript,
-        summary: getState(file).summary,
-        illustratedNotes: getState(file).illustratedNotes,
-        videoMeta: result.meta,
-        status: 'done',
-        processedAt: new Date().toISOString()
-      });
-      addSlidesToZip(zip, file, result.slides);
-      successfulFiles.push(file.name);
+        setStateForFile(file, {
+          slides: result.slides,
+          transcript: getState(file).transcript,
+          summary: getState(file).summary,
+          illustratedNotes: getState(file).illustratedNotes,
+          videoMeta: result.meta,
+          status: 'done',
+          processedAt: new Date().toISOString()
+        });
+        addSlidesToZip(zip, file, result.slides);
+        successfulFiles.push(file.name);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '这个视频未能完成生成。';
+        failedFiles.push(file.name);
+        setStateStatus(file, 'error', message);
+        setHomeStatus(`${file.name} 未完成：${message}。继续处理其余视频。`);
+      }
       renderFileList();
       await yieldToBrowser();
     }
 
-    setHomeStatus('正在生成 frames zip...');
+    if (successfulFiles.length === 0) {
+      setHomeStatus(`本次 ${files.length} 个视频均未完成。展开队列可查看原因，修正后可单独重试。`);
+      return;
+    }
+    setHomeStatus('正在打包页面图片...');
     const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-      setHomeStatus(`正在生成 frames zip：${Math.round(metadata.percent)}%`);
+      setHomeStatus(`正在打包页面图片：${Math.round(metadata.percent)}%`);
     });
     downloadBlob(blob, `vid2deck-frames-${timestampForFilename()}.zip`);
-    setHomeStatus(`批量完成：已处理 ${files.length} 个视频，并下载 frames zip。`);
+    setHomeStatus(`批量完成：${successfulFiles.length} 个视频的页面图片已打包下载。${failedFiles.length > 0 ? `另有 ${failedFiles.length} 个未完成，请在队列中查看原因并重试。` : ''}`);
   } catch (error) {
     console.error(error);
     setHomeStatus(error instanceof Error ? error.message : '批量生成失败。');
   } finally {
-    isBatchProcessing = false;
-    if (successfulFiles.length > 0) {
-      await recordUsage('video_conversion', successfulFiles.length, {
-        batch: true,
-        files: successfulFiles.slice(0, 30)
-      });
+    try {
+      if (successfulFiles.length > 0) {
+        await recordUsage('video_conversion', successfulFiles.length, {
+          batch: true,
+          files: successfulFiles.slice(0, 30)
+        });
+      }
+    } finally {
+      isBatchProcessing = false;
+      if (selectedFile) loadStateIntoWorkspace(selectedFile);
+      renderFileList();
+      updateActionState();
+    scheduleDraftSave();
     }
-    if (selectedFile) loadStateIntoWorkspace(selectedFile);
-    renderFileList();
-    updateActionState();
   }
 }
 
@@ -2616,7 +2727,7 @@ async function downloadProcessedFramesZip(): Promise<void> {
   if (isBusy()) return;
   const processed = selectedFiles.filter((file) => getState(file).slides.length > 0);
   if (processed.length === 0) {
-    setHomeStatus('还没有已处理的 frames 可以打包。');
+    setHomeStatus('还没有已完成的页面图片可以打包。');
     return;
   }
   isBatchProcessing = true;
@@ -2625,13 +2736,13 @@ async function downloadProcessedFramesZip(): Promise<void> {
     const zip = new JSZip();
     processed.forEach((file) => addSlidesToZip(zip, file, getState(file).slides));
     const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-      setHomeStatus(`正在打包已处理 frames：${Math.round(metadata.percent)}%`);
+      setHomeStatus(`正在打包已完成页面：${Math.round(metadata.percent)}%`);
     });
     downloadBlob(blob, `vid2deck-processed-frames-${timestampForFilename()}.zip`);
-    setHomeStatus(`已下载 ${processed.length} 个已处理视频的 frames zip。`);
+    setHomeStatus(`已下载 ${processed.length} 个视频的页面图片压缩包。`);
   } catch (error) {
     console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : 'Frames zip 生成失败。');
+    setHomeStatus(error instanceof Error ? error.message : '页面图片打包失败，请重试。');
   } finally {
     isBatchProcessing = false;
     updateActionState();
@@ -2641,39 +2752,41 @@ async function downloadProcessedFramesZip(): Promise<void> {
 async function transcribeCurrentFile(): Promise<boolean> {
   if (!selectedFile || isBusy()) return false;
   const file = selectedFile;
+  const previousTranscript = transcriptEl.value;
+  let completed = false;
+  isTranscribing = true;
+  updateActionState();
   let transcribeMinutes = 1;
   try {
     const meta = videoMeta ?? await readFileVideoMetadata(file);
     transcribeMinutes = Math.max(1, Math.ceil(meta.duration / 60));
-  } catch (error) {
-    setStatus(error instanceof Error ? error.message : '无法读取视频时长。');
-    return false;
-  }
-  if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return false;
-
-  try {
-    isTranscribing = true;
-    updateActionState();
+    if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return false;
     transcriptEl.value = '';
     setProgress('准备转写音频', 0);
     setStatus(`正在转写：${file.name}，结果会分段输出。`);
     const transcriptText = await transcribeLocally(file, setStatus);
+    if (!transcriptText.trim() && previousTranscript.trim()) transcriptEl.value = previousTranscript;
     setProgress('转写完成', 100);
-    setStatus(transcriptText ? '转写完成。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
+    setStatus(transcriptText ? '转写完成。' : previousTranscript.trim() ? '未识别到有效语音，已保留之前的逐字稿。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     await recordUsage('transcribe_minute', transcribeMinutes, {
       name: file.name,
       minutes: transcribeMinutes
     });
+    completed = Boolean(transcriptText.trim());
   } catch (error) {
     console.error(error);
+    if (previousTranscript.trim()) transcriptEl.value = previousTranscript;
+    persistWorkspaceToState();
     setProgress('转写失败', 100);
-    setStatus(error instanceof Error ? error.message : '转写失败，请查看控制台。');
+    const message = error instanceof Error ? error.message : '逐字稿没有生成成功，请重试或换一个包含清晰语音的视频。';
+    setStatus(`${message}${previousTranscript.trim() ? ' 已保留之前的逐字稿。' : transcriptEl.value.trim() ? ' 已保留完成的部分，可以复制或下载。' : ''}`);
   } finally {
     isTranscribing = false;
     updateActionState();
+    scheduleDraftSave();
   }
-  return Boolean(transcriptEl.value.trim());
+  return completed;
 }
 
 transcribeBtn.addEventListener('click', () => transcribeCurrentFile());
@@ -2688,10 +2801,10 @@ async function generateSummary(): Promise<void> {
     if (!transcriptForSummary) setStatus('没有逐字稿可总结。');
     return;
   }
-  if (!await ensureUsageCapacity('summary_generation', 1, '摘要次数', setStatus)) return;
+  isSummarizing = true;
+  updateActionState();
   try {
-    isSummarizing = true;
-    updateActionState();
+    if (!await ensureUsageCapacity('summary_generation', 1, '摘要次数', setStatus)) return;
     setProgress('正在生成摘要', 50, true);
     setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成摘要...`);
     summaryEl.value = await summarizeWithApi(transcriptForSummary, 'summary', selectedFile?.name ?? '');
@@ -2705,6 +2818,7 @@ async function generateSummary(): Promise<void> {
   } finally {
     isSummarizing = false;
     updateActionState();
+    scheduleDraftSave();
   }
 }
 
@@ -2731,11 +2845,10 @@ async function generateIllustratedNotes(forceRegenerate = false): Promise<void> 
       return;
     }
   }
-  if (!await ensureUsageCapacity('summary_generation', 1, '图文笔记次数', setStatus)) return;
-
+  isGeneratingNotes = true;
+  updateActionState();
   try {
-    isGeneratingNotes = true;
-    updateActionState();
+    if (!await ensureUsageCapacity('summary_generation', 1, '图文笔记次数', setStatus)) return;
     setProgress('正在生成图文笔记', 56, true);
     setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成图文笔记...`);
     illustratedNotesMarkdown = await summarizeWithApi(
@@ -2755,6 +2868,7 @@ async function generateIllustratedNotes(forceRegenerate = false): Promise<void> 
   } finally {
     isGeneratingNotes = false;
     updateActionState();
+    scheduleDraftSave();
   }
 }
 
@@ -2831,7 +2945,7 @@ function renderFileList(): void {
       const frames = document.createElement('button');
       frames.type = 'button';
       frames.className = 'file-result-btn';
-      frames.textContent = '下载 Frames';
+      frames.textContent = '下载页面图片';
       frames.disabled = isBusy();
       frames.addEventListener('click', async (event) => {
         event.stopPropagation();
@@ -2904,86 +3018,33 @@ function openProcessedFile(index: number): void {
   setWorkspaceMode('video');
   chooseFile(index);
   showWorkspace();
-  setStatus('已回到上次处理结果，可继续勾选、裁剪、删除或补抓 frame。');
+  setStatus('已回到当前处理结果，可继续勾选、裁剪、删除或补抓页面。');
 }
 
-async function downloadProcessedPdf(index: number): Promise<void> {
-  const file = selectedFiles[index];
-  if (!file) return;
-  const selectedSlides = getState(file).slides.filter((slide) => slide.selected);
-  if (selectedSlides.length === 0) {
-    setHomeStatus('这个视频还没有可下载的选中 frame。');
-    return;
-  }
-  try {
-    setHomeStatus(`正在生成 ${file.name} 的 PDF...`);
-    const pdfBlob = await makePdf(selectedSlides);
-    downloadBlob(pdfBlob, `${baseName(file.name)}.pdf`);
-    setHomeStatus(`已下载 ${file.name} 的 PDF。`);
-  } catch (error) {
-    console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
-  }
-}
+async function downloadProcessedPdf(index: number): Promise<void> { await exportProcessedFile(index, 'pdf'); }
+async function downloadProcessedPptx(index: number): Promise<void> { await exportProcessedFile(index, 'pptx'); }
+async function downloadSingleFramesZip(index: number): Promise<void> { await exportProcessedFile(index, 'zip'); }
 
-async function downloadProcessedPptx(index: number): Promise<void> {
-  const file = selectedFiles[index];
-  if (!file) return;
-  const selectedSlides = getState(file).slides.filter((slide) => slide.selected);
-  if (selectedSlides.length === 0) {
-    setHomeStatus('这个视频还没有可下载的选中页面。');
-    return;
-  }
-  try {
-    setHomeStatus(`正在生成 ${file.name} 的 PPTX...`);
-    const pptxBlob = await makePptx(selectedSlides);
-    downloadBlob(pptxBlob, `${baseName(file.name)}.pptx`);
-    setHomeStatus(`已下载 ${file.name} 的 PPTX。`);
-  } catch (error) {
-    console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : 'PPTX 生成失败。');
-  }
-}
-
-async function downloadSingleFramesZip(index: number): Promise<void> {
-  const file = selectedFiles[index];
-  if (!file) return;
-  const state = getState(file);
-  if (state.slides.length === 0) return;
-  try {
-    const zip = new JSZip();
-    addSlidesToZip(zip, file, state.slides);
-    const blob = await zip.generateAsync({ type: 'blob' });
-    downloadBlob(blob, `${baseName(file.name)}-frames.zip`);
-    setHomeStatus(`已下载 ${file.name} 的 frames zip。`);
-  } catch (error) {
-    console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : 'Frames zip 生成失败。');
-  }
+async function exportProcessedFile(index: number, format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
+  if (isBusy() || !selectedFiles[index]) return;
+  chooseFile(index);
+  setHomeStatus(`正在生成 ${selectedFiles[index].name} 的导出文件…`);
+  await exportSelected(format);
+  setHomeStatus(statusEl.textContent ?? '导出完成，请查看浏览器下载列表。');
+  renderFileList();
 }
 
 async function downloadImagesAsPptx(): Promise<void> {
   if (selectedImageFiles.length === 0 || isBusy()) return;
+  if (isDemoProject) restoreWorkspaceAfterDemo();
+  const files = selectedImageFiles.slice();
   isBatchProcessing = true;
   updateActionState();
+  renderImageFileList();
   try {
-    await runPerceivedUploadStage({
-      label: '上传图片中',
-      doneLabel: '上传完成，正在处理。',
-      totalBytes: totalFileBytes(selectedImageFiles),
-      itemCount: selectedImageFiles.length,
-      onProgress: (label, percent) => setImageStatus(`${label}：${percent}%`),
-      onStatus: setImageStatus
-    });
-    await runPerceivedProcessingStage({
-      label: '快速处理图片中',
-      doneLabel: '处理完成，正在生成 PPTX。',
-      onProgress: (label, percent) => setImageStatus(`${label}：${percent}%`),
-      onStatus: setImageStatus,
-      durationMs: 380
-    });
-    setImageStatus('正在生成图片页...');
-    const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
+    setImageStatus(`正在读取 ${files.length} 张本地图片...`);
+    await yieldToBrowser();
+    const imageSlides = await buildSlidesFromImages(files, (index, total) => {
       setImageStatus(`正在生成图片页：${index} / ${total}`);
     });
     setImageStatus('正在生成图片版 PPTX...');
@@ -2995,46 +3056,38 @@ async function downloadImagesAsPptx(): Promise<void> {
     setImageStatus(error instanceof Error ? error.message : '图片生成 PPTX 失败。');
   } finally {
     isBatchProcessing = false;
+    renderImageFileList();
     updateActionState();
   }
 }
 
 async function openImagesInWorkspace(): Promise<void> {
   if (selectedImageFiles.length === 0 || isBusy()) return;
-  if (!await ensureUsageCapacity('editable_slide', selectedImageFiles.length, '可编辑幻灯片', setImageStatus)) return;
+  if (isDemoProject) restoreWorkspaceAfterDemo();
+  const files = selectedImageFiles.slice();
+  let workspaceOpened = false;
   isBatchProcessing = true;
-  isPerceivedUploading = true;
   updateActionState();
+  renderImageFileList();
   try {
+    if (!await ensureUsageCapacity('editable_slide', files.length, '文字识别页面', setImageStatus)) return;
+    persistWorkspaceToState();
     setWorkspaceMode('image');
     selectedFile = new File([], `image-deck-${timestampForFilename()}.images`, { type: 'application/x-vid2deck-image-deck' });
     currentFileIndex = -1;
     resetCurrentFileState();
+    workspaceOpened = true;
     showWorkspace();
-    await runPerceivedUploadStage({
-      label: '上传图片中',
-      doneLabel: '上传完成，正在处理。',
-      totalBytes: totalFileBytes(selectedImageFiles),
-      itemCount: selectedImageFiles.length,
-      onProgress: (label, percent) => setProgress(label, percent, true),
-      onStatus: setStatus
-    });
-    await runPerceivedProcessingStage({
-      label: '快速处理图片中',
-      doneLabel: '处理完成，正在加载页面。',
-      onProgress: (label, percent) => setProgress(label, percent, true),
-      onStatus: setStatus,
-      durationMs: 380
-    });
-    isPerceivedUploading = false;
-    updateActionState();
+    setProgress('正在读取本地图片', 5, true);
+    setStatus(`正在读取 ${files.length} 张本地图片，文件不会上传。`);
+    await yieldToBrowser();
 
-    setProgress('页面加载中', 73, true);
-    setStatus('页面加载中，图片页会陆续出现。');
+    setProgress('页面加载中', 10, true);
+    setStatus('正在生成图片页面，结果会陆续出现。');
     slides = [];
     slidesEl.innerHTML = '';
-    const imageSlides = await buildSlidesFromImages(selectedImageFiles, (index, total) => {
-      setProgress(`页面加载中：${index} / ${total}`, 73 + Math.round((index / Math.max(total, 1)) * 12), true);
+    const imageSlides = await buildSlidesFromImages(files, (index, total) => {
+      setProgress(`页面加载中：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 38), true);
     }, (slide) => {
       slides.push(slide);
       appendSlideCard(slide);
@@ -3044,33 +3097,44 @@ async function openImagesInWorkspace(): Promise<void> {
     slides = imageSlides;
     videoMeta = null;
     if (slides[0]) setPreview(slides[0]);
-    setProgress('图片页已准备，正在识别文字', 86, true);
+    setProgress('图片页已准备，正在识别文字', 50, true);
     setStatus('正在识别图片文字，并生成可编辑文本框。');
     const textBoxCount = await recognizeSlidesToTextBoxes(slides, {
       replaceExisting: true,
       onProgress: (index, total, message) => {
-        const base = 86;
-        const span = 13;
+        const base = 50;
+        const span = 49;
         setProgress(`识别文字：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
       }
     });
     renderSlides();
     if (slides[0]) setPreview(slides[0]);
-    setProgress('OCR 完成', 100);
+    setProgress('文字识别完成', 100);
     setStatus(`已生成 ${slides.length} 张图片页，并自动识别出 ${textBoxCount} 个可编辑文本框。顶部导出 PPTX 后可直接编辑文字。`);
     persistWorkspaceToState({ markProcessed: true });
     await recordUsage('editable_slide', slides.length, {
       source: 'image_workspace',
-      images: selectedImageFiles.length,
+      images: files.length,
       text_boxes: textBoxCount
     });
   } catch (error) {
     console.error(error);
-    setStatus(error instanceof Error ? error.message : '图片进入编辑模式失败。');
+    const message = error instanceof Error ? error.message : '图片进入编辑模式失败。';
+    if (workspaceOpened && slides.length > 0) {
+      persistWorkspaceToState({ markProcessed: true });
+      renderSlides();
+      if (slides[0]) setPreview(slides[0]);
+      setProgress('已保留加载的图片页', 100);
+      setStatus(`${message} 已保留 ${slides.length} 页，可以先导出图片版 PPTX，或稍后重试文字识别。`);
+    } else {
+      setImageStatus(message);
+      setStatus(message);
+    }
   } finally {
     isBatchProcessing = false;
-    isPerceivedUploading = false;
+    renderImageFileList();
     updateActionState();
+    scheduleDraftSave();
   }
 }
 
@@ -3124,10 +3188,11 @@ async function maskNotebookPdf(
   file: File,
   onProgress: (page: number, total: number, detectedCount: number) => void
 ): Promise<{ blob: Blob; pageCount: number; detectedPageCount: number }> {
+  const { jsPDF } = await import('jspdf');
   const pdfjs = await loadPdfJs();
   const documentData = await file.arrayBuffer();
   const pdfDocument = await pdfjs.getDocument({ data: documentData }).promise;
-  let outputPdf: jsPDF | null = null;
+  let outputPdf: JsPdfDocument | null = null;
   let detectedPageCount = 0;
 
   try {
@@ -3474,7 +3539,7 @@ async function startWorkspaceUrlDownload(mode: UrlDownloadMode): Promise<void> {
   mediaRightsConfirm.checked = workspaceRightsConfirm.checked;
   setWorkspaceUrlStatus(mode === 'extract' ? '正在获取视频并准备生成页面。' : '正在下载到队列。', 'warn');
   await downloadVideoFromUrl(mode);
-  if (!isUrlDownloading) {
+  if (!videoUrlInput.value.trim()) {
     workspaceVideoUrlInput.value = '';
     workspaceRightsConfirm.checked = false;
   }
@@ -3487,6 +3552,7 @@ function addWorkspaceFiles(files: File[]): void {
   showWorkspace();
   if (selectedFile && slides.length === 0) {
     setWorkspaceUrlStatus(`已加入：${selectedFile.name}。点击“开始当前任务”即可生成页面。`, 'ok');
+    setStatus(`已选择 ${selectedFile.name}，点击上方“开始当前任务”。`);
     emptyWorkspaceStartBtn.focus();
   }
 }
@@ -3495,18 +3561,19 @@ function openWorkspaceFromNav(): void {
   setWorkspaceMode(workspaceMode);
   showWorkspace();
   if (!selectedFile && slides.length === 0) {
-    setStatus('工作台还没有任务。请先回主页粘贴链接、上传视频或录制屏幕。');
+    setStatus('选择本地视频或粘贴链接开始，也可以回首页体验示例。');
   }
   updateActionState();
 }
 
 function showOrdersPlaceholder(): void {
-  setWorkspaceMode(workspaceMode);
-  showWorkspace();
-  setStatus('订单入口已在左侧。当前版本会把会员状态显示在顶部账号区；订单明细页下一步接支付后台。');
+  window.open('/pricing/', '_blank', 'noopener');
 }
 
 function focusLoginPanel(): void {
+  if (!isBusy()) persistWorkspaceToState();
+  if (isDemoProject) restoreWorkspaceAfterDemo();
+  void loadAuthCaptcha();
   workspaceView.hidden = true;
   homeView.hidden = false;
   requestAnimationFrame(() => {
@@ -3516,22 +3583,28 @@ function focusLoginPanel(): void {
 }
 
 function returnHomeForVideoStart(): void {
+  if (!isBusy()) persistWorkspaceToState();
   workspaceView.hidden = true;
   homeView.hidden = false;
   hideProgress();
+  const closedDemo = isDemoProject;
+  if (closedDemo) restoreWorkspaceAfterDemo();
   requestAnimationFrame(() => {
     document.querySelector('.video-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    videoUrlInput.focus({ preventScroll: true });
+    dropzone.focus({ preventScroll: true });
   });
-  setHomeStatus('在这里粘贴视频链接、上传文件或录制屏幕，处理后会自动进入工作台。');
+  setHomeStatus(closedDemo
+    ? '交互示例已关闭。现在可以粘贴链接、上传文件或录制屏幕。'
+    : '在这里粘贴视频链接、上传文件或录制屏幕，处理后会自动进入工作台。');
 }
 
 function showWorkspace(): void {
+  if (slides.length) $<HTMLElement>('#workspaceImport').hidden = true;
   homeView.hidden = true;
   workspaceView.hidden = false;
-  captureTimeline.hidden = workspaceMode !== 'video' || !selectedFile;
+  captureTimeline.hidden = workspaceMode !== 'video' || !selectedFile || isDemoProject || isAudioSource(selectedFile);
   updateWorkspaceEmptyState();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 function setWorkspaceMode(mode: WorkspaceMode): void {
@@ -3540,8 +3613,151 @@ function setWorkspaceMode(mode: WorkspaceMode): void {
   workspaceSubtitle.textContent = mode === 'image'
     ? '图片页会在这里勾选、编辑文本框并导出 PPTX。'
     : '视频生成页面后，在这里勾选、预览、补抓和导出。';
-  captureTimeline.hidden = mode !== 'video' || !selectedFile;
+  captureTimeline.hidden = mode !== 'video' || !selectedFile || isDemoProject || isAudioSource(selectedFile);
   updateWorkspaceEmptyState();
+}
+
+function openDemoProject(): void {
+  if (isBusy()) {
+    setHomeStatus('请等待当前任务完成后再打开交互示例。');
+    return;
+  }
+  if (isDemoProject) return;
+  persistWorkspaceToState();
+  demoSnapshot = { file: selectedFile, mode: workspaceMode, state: snapshotWorkspace(), index: currentFileIndex };
+  demoRestoreFileIndex = currentFileIndex;
+  undoSnapshot = null;
+  isDemoProject = true;
+  currentFileIndex = -1;
+  selectedFile = new File([], 'Vid2PPT-交互示例.mp4', { type: 'video/mp4', lastModified: 0 });
+  slides = createDemoSlides();
+  videoMeta = null;
+  activeSlideId = slides[0]?.id ?? null;
+  activeTextBoxId = null;
+  timelineTime = 0;
+  extractionTimelineMax = 0;
+  transcriptEl.value = '[00:00 - 00:28] 从视频中识别真正出现过的页面。\n[00:28 - 00:55] 合并重复画面，并保留原始图表与顺序。\n[00:55 - 01:18] 导出前可以勾选、排序、裁剪或删除。';
+  summaryEl.value = '这是一个内置交互示例，用来体验页面检查与导出流程，不代表任何特定视频的转换结果。';
+  illustratedNotesMarkdown = '';
+  setWorkspaceMode('video');
+  persistWorkspaceToState({ markProcessed: true });
+  renderSlides();
+  if (slides[0]) setPreview(slides[0]);
+  hideProgress();
+  showWorkspace();
+  $<HTMLElement>('#workspaceImport').hidden = true;
+  workspaceSubtitle.textContent = '交互示例：试试勾选、拖动排序、裁剪和导出；不会计入额度。';
+  setStatus('这是内置交互示例，不代表特定视频的实际提取页数。你可以直接调整页面顺序或下载结果。');
+  updateActionState();
+}
+
+function restoreWorkspaceAfterDemo(): void {
+  if (!isDemoProject) return;
+  isDemoProject = false;
+  const previous = demoSnapshot;
+  demoSnapshot = null;
+  currentFileIndex = previous?.index ?? demoRestoreFileIndex;
+  demoRestoreFileIndex = -1;
+  selectedFile = previous?.file ?? null;
+  if (selectedFile && previous) {
+    setStateForFile(selectedFile, previous.state);
+    loadStateIntoWorkspace(selectedFile);
+  } else resetCurrentFileState();
+  setWorkspaceMode(previous?.mode ?? 'video');
+}
+
+function createDemoSlides(): Slide[] {
+  const specs = [
+    { title: '从视频到页面', subtitle: '保留原画面，不重新编写内容', accent: '#5d78e8', variant: 0 },
+    { title: '自动去掉重复画面', subtitle: '同一页连续出现，只保留清晰的一张', accent: '#f47a45', variant: 1 },
+    { title: '导出前由你决定', subtitle: '勾选 · 排序 · 裁剪 · 补抓', accent: '#178a61', variant: 2 }
+  ];
+  return specs.map((spec, index) => ({
+    id: 9001 + index,
+    time: [0, 28, 55][index] ?? index * 25,
+    hash: BigInt(index + 1),
+    dataUrl: createDemoSlideImage(spec.title, spec.subtitle, spec.accent, spec.variant),
+    width: 1600,
+    height: 900,
+    selected: true,
+    textBoxes: []
+  }));
+}
+
+function createDemoSlideImage(title: string, subtitle: string, accent: string, variant: number): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1600;
+  canvas.height = 900;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  ctx.fillStyle = variant === 0 ? '#101828' : '#f4f5f1';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = accent;
+  ctx.fillRect(100, 92, 86, 12);
+  ctx.fillStyle = variant === 0 ? '#ffffff' : '#101828';
+  ctx.font = '800 76px Inter, system-ui, sans-serif';
+  ctx.fillText(title, 100, 215);
+  ctx.fillStyle = variant === 0 ? '#cbd5e1' : '#5d6879';
+  ctx.font = '34px Inter, system-ui, sans-serif';
+  ctx.fillText(subtitle, 100, 280);
+
+  if (variant === 0) {
+    ['视频画面', '页面去重', '检查导出'].forEach((label, index) => {
+      const x = 100 + index * 470;
+      ctx.fillStyle = index === 1 ? accent : '#1d2a45';
+      roundedRect(ctx, x, 390, 410, 260, 28);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 34px Inter, system-ui, sans-serif';
+      ctx.fillText(label, x + 38, 470);
+      ctx.fillStyle = index === 1 ? '#dce3ff' : '#8f9bb0';
+      ctx.fillRect(x + 38, 520, 260, 16);
+      ctx.fillRect(x + 38, 560, 190, 16);
+    });
+  } else if (variant === 1) {
+    [0.58, 0.58, 0.91, 0.91, 0.68].forEach((height, index) => {
+      const x = 130 + index * 250;
+      ctx.fillStyle = index === 2 ? accent : '#d9dee7';
+      roundedRect(ctx, x, 700 - height * 360, 150, height * 360, 18);
+      ctx.fill();
+      ctx.fillStyle = '#101828';
+      ctx.font = '700 25px Inter, system-ui, sans-serif';
+      ctx.fillText(index === 2 ? '保留' : index === 3 ? '重复' : `帧 ${index + 1}`, x + 32, 755);
+    });
+  } else {
+    ['勾选需要的页面', '拖动调整顺序', '下载 PPTX / PDF'].forEach((label, index) => {
+      const y = 370 + index * 140;
+      ctx.fillStyle = '#ffffff';
+      roundedRect(ctx, 100, y, 1120, 94, 20);
+      ctx.fill();
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(155, y + 47, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#101828';
+      ctx.font = '700 32px Inter, system-ui, sans-serif';
+      ctx.fillText(label, 210, y + 58);
+    });
+  }
+  ctx.fillStyle = variant === 0 ? '#718096' : '#7a8494';
+  ctx.font = '700 24px Inter, system-ui, sans-serif';
+  ctx.fillText(`Vid2PPT 交互示例 · ${variant + 1}/3`, 100, 830);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
 }
 
 function getState(file: File): FileJobState {
@@ -3577,7 +3793,7 @@ function setStateForFile(file: File, state: FileJobState): void {
 }
 
 function persistWorkspaceToState(options: { markProcessed?: boolean } = {}): void {
-  if (!selectedFile) return;
+  if (!selectedFile || isDemoProject) return;
   const previous = getState(selectedFile);
   setStateForFile(selectedFile, {
     slides,
@@ -3585,14 +3801,16 @@ function persistWorkspaceToState(options: { markProcessed?: boolean } = {}): voi
     summary: summaryEl.value,
     illustratedNotes: illustratedNotesMarkdown,
     videoMeta,
-    status: slides.length > 0 ? 'done' : previous.status,
+    status: isExtracting ? previous.status : slides.length > 0 ? 'done' : previous.status,
     error: previous.error,
     processedAt: options.markProcessed ? new Date().toISOString() : previous.processedAt
   });
+  if (!isBusy()) scheduleDraftSave();
 }
 
 function loadStateIntoWorkspace(file: File): void {
   const state = getState(file);
+  undoSnapshot = null;
   slides = cloneSlides(state.slides);
   videoMeta = state.videoMeta ? { ...state.videoMeta } : null;
   activeSlideId = slides[0]?.id ?? null;
@@ -3657,6 +3875,7 @@ async function extractSlidesFromFile(
   file: File,
   settings: Settings,
   hooks: {
+    signal?: AbortSignal;
     onMetadata?: (meta: VideoMeta) => void;
     onKeep?: (slide: Slide) => void;
     onProgress?: (data: { completed: number; total: number; time: number; duration: number; kept: number }) => void;
@@ -3665,7 +3884,9 @@ async function extractSlidesFromFile(
   const url = URL.createObjectURL(file);
   const extractors: FrameExtractor[] = [];
   try {
+    hooks.signal?.throwIfAborted();
     const meta = await readVideoMetadata(url);
+    hooks.signal?.throwIfAborted();
     hooks.onMetadata?.(meta);
     const times = buildFrameTimes(meta.duration, settings.sampleEvery);
     const workerCount = Math.min(FRAME_CONCURRENCY, times.length || 1);
@@ -3694,9 +3915,11 @@ async function extractSlidesFromFile(
 
     const runCapture = async (extractor: FrameExtractor) => {
       while (nextCapture < times.length) {
+        hooks.signal?.throwIfAborted();
         const index = nextCapture;
         nextCapture += 1;
         const frame = await extractor.capture(index, times[index]);
+        hooks.signal?.throwIfAborted();
         captured.set(index, frame);
         completed += 1;
         commitReadyFrames();
@@ -3704,7 +3927,10 @@ async function extractSlidesFromFile(
       }
     };
 
-    await Promise.all(extractors.map((extractor) => runCapture(extractor)));
+    const outcomes = await Promise.allSettled(extractors.map((extractor) => runCapture(extractor)));
+    const failure = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+    hooks.signal?.throwIfAborted();
     commitReadyFrames();
     return { slides: kept, meta };
   } finally {
@@ -3799,30 +4025,34 @@ async function captureManualFrameAt(time: number): Promise<void> {
   if (!selectedFile || !videoMeta || isBusy()) return;
   const file = selectedFile;
   const url = URL.createObjectURL(file);
+  isBatchProcessing = true;
+  updateActionState();
   let extractor: FrameExtractor | null = null;
   try {
     const requestedTime = Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0));
-    setProgress(`正在补抓 ${formatClock(requestedTime)} 的 frame`, 50, true);
+    setProgress(`正在补抓 ${formatClock(requestedTime)} 的页面`, 50, true);
     extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
     const frame = await extractor.capture(slides.length, requestedTime);
-    const slide: Slide = { id: slides.length + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected(), textBoxes: [] };
+    const slide: Slide = { id: Math.max(0, ...slides.map((item) => item.id)) + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected(), textBoxes: [] };
+    rememberSlideEdit();
     slides.push(slide);
-    sortAndReindexSlides();
     timelineTime = frame.time;
     updateTimelinePosition();
     renderSlides();
     setPreview(slide);
-    setStatus(`已补抓 ${formatClock(frame.time)} 的 frame。`);
+    setStatus(`已补抓 ${formatClock(frame.time)} 的页面并加入末尾，可拖动调整位置。`);
     setProgress('补抓完成', 100);
     persistWorkspaceToState({ markProcessed: true });
     renderFileList();
   } catch (error) {
     console.error(error);
-    setStatus(error instanceof Error ? error.message : '补抓 frame 失败。');
+    setStatus(error instanceof Error ? error.message : '补抓页面失败，请换一个时间点重试。');
   } finally {
     extractor?.dispose();
     URL.revokeObjectURL(url);
+    isBatchProcessing = false;
     updateActionState();
+    scheduleDraftSave();
   }
 }
 
@@ -3882,6 +4112,7 @@ function hammingDistance(a: bigint, b: bigint): number {
 
 async function makePdf(items: Slide[]): Promise<Blob> {
   if (items.length === 0) throw new Error('没有可导出的页面。');
+  const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -3892,19 +4123,20 @@ async function makePdf(items: Slide[]): Promise<Blob> {
     const drawHeight = slide.height * ratio;
     const imageX = (pageWidth - drawWidth) / 2;
     const imageY = (pageHeight - drawHeight) / 2;
-    pdf.addImage(slide.dataUrl, 'JPEG', imageX, imageY, drawWidth, drawHeight);
-    for (const box of slide.textBoxes ?? []) {
-      const [r, g, b] = hexToRgb(normalizeHexColor(box.color));
-      const fontSize = Math.max(6, box.fontSize * (drawWidth / 960));
-      const x = imageX + (box.x / 100) * drawWidth;
-      const y = imageY + (box.y / 100) * drawHeight + fontSize;
-      const width = (box.width / 100) * drawWidth;
-      pdf.setTextColor(r, g, b);
-      pdf.setFontSize(fontSize);
-      pdf.setFont('helvetica', box.bold ? 'bold' : 'normal');
-      const lines = pdf.splitTextToSize(box.text || ' ', width);
-      pdf.text(lines, x, y, { maxWidth: width, align: box.align });
+    let imageData = slide.dataUrl;
+    if (slide.textBoxes?.some((box) => box.text.trim())) {
+      await document.fonts?.ready;
+      const image = await loadImage(slide.dataUrl);
+      const canvas = document.createElement('canvas');
+      canvas.width = slide.width;
+      canvas.height = slide.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('当前浏览器无法渲染 PDF 文字，请改用 PPTX 导出。');
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      paintPdfTextBoxes(ctx, canvas.width, canvas.height, slide.textBoxes);
+      imageData = canvas.toDataURL('image/jpeg', 0.95);
     }
+    pdf.addImage(imageData, 'JPEG', imageX, imageY, drawWidth, drawHeight);
     await yieldToBrowser();
   }
   return pdf.output('blob');
@@ -3962,23 +4194,26 @@ async function runOcrForSelectedSlides(): Promise<void> {
   const fallback = getActiveSlide();
   const targetSlides = targets.length > 0 ? targets : fallback ? [fallback] : [];
   if (targetSlides.length === 0) {
-    setStatus('请先选择至少一页再运行 OCR。');
+    setStatus('请先选择至少一页再识别文字。');
     return;
   }
-  if (!await ensureUsageCapacity('editable_slide', targetSlides.length, '可编辑幻灯片', setStatus)) return;
+  const previousTextBoxes = targetSlides.map((slide) => ({ slide, boxes: slide.textBoxes.map((box) => ({ ...box })) }));
+  isBatchProcessing = true;
+  updateActionState();
   try {
-    setProgress('正在准备 OCR', 5, true);
-    setStatus('正在自动 OCR 勾选页面。识别结果会替换这些页面现有文本框。');
+    if (!await ensureUsageCapacity('editable_slide', targetSlides.length, '文字识别页面', setStatus)) return;
+    setProgress('正在准备文字识别', 5, true);
+    setStatus('正在识别勾选页面的文字；新结果会替换这些页面现有文本框。');
     const textBoxCount = await recognizeSlidesToTextBoxes(targetSlides, {
       replaceExisting: true,
       onProgress: (index, total, message) => {
-        setProgress(`自动 OCR：${index} / ${total} · ${message}`, 5 + Math.round((index / Math.max(total, 1)) * 90), true);
+        setProgress(`文字识别：${index} / ${total} · ${message}`, 5 + Math.round((index / Math.max(total, 1)) * 90), true);
       }
     });
     renderSlides();
     if (targetSlides[0]) setPreview(targetSlides[0]);
-    setProgress('OCR 完成', 100);
-    setStatus(`OCR 完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
+    setProgress('文字识别完成', 100);
+    setStatus(`文字识别完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     await recordUsage('editable_slide', targetSlides.length, {
       source: 'workspace_ocr',
@@ -3987,9 +4222,16 @@ async function runOcrForSelectedSlides(): Promise<void> {
     });
   } catch (error) {
     console.error(error);
-    setStatus(error instanceof Error ? error.message : 'OCR 失败。');
+    previousTextBoxes.forEach(({ slide, boxes }) => { slide.textBoxes = boxes; });
+    renderSlides();
+    persistWorkspaceToState();
+    const message = error instanceof Error ? error.message : '文字识别失败，请稍后重试。';
+    setProgress('文字识别未完成', 100);
+    setStatus(`${message} 已保留原有文本框，可以重试。`);
   } finally {
+    isBatchProcessing = false;
     updateActionState();
+    scheduleDraftSave();
   }
 }
 
@@ -4219,59 +4461,37 @@ function formatOcrLoggerMessage(message: { status?: string; progress?: number })
   return `${status}${progress}`;
 }
 
-async function downloadSelectedPdf(): Promise<void> {
-  const selectedSlides = slides.filter((slide) => slide.selected);
-  if (!selectedFile || selectedSlides.length === 0) {
-    setStatus('请至少勾选一张 frame。');
-    return;
-  }
-  try {
-    setProgress('正在生成选中页面 PDF', 50, true);
-    const pdfBlob = await makePdf(selectedSlides);
-    downloadBlob(pdfBlob, `${baseName(selectedFile.name)}.pdf`);
-    setProgress('PDF 已生成', 100);
-    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 PDF。`);
-  } catch (error) {
-    console.error(error);
-    setStatus(error instanceof Error ? error.message : 'PDF 生成失败。');
-  }
-}
+async function downloadSelectedPdf(): Promise<void> { await exportSelected('pdf'); }
+async function downloadSelectedPptx(): Promise<void> { await exportSelected('pptx'); }
+async function downloadSelectedFramesZip(): Promise<void> { await exportSelected('zip'); }
 
-async function downloadSelectedPptx(): Promise<void> {
-  const selectedSlides = slides.filter((slide) => slide.selected);
-  if (!selectedFile || selectedSlides.length === 0) {
-    setStatus('请至少勾选一张页面。');
-    return;
-  }
+async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
+  if (isBusy()) return;
+  const items = cloneSlides(slides.filter((slide) => slide.selected));
+  const file = selectedFile;
+  if (!file || !items.length) { setStatus('请至少勾选 1 页后导出。'); return; }
+  isExporting = true;
+  updateActionState();
+  const label = format === 'zip' ? '页面图片 ZIP' : format.toUpperCase();
+  setProgress(`正在生成 ${label} · ${items.length} 页`, undefined, true);
   try {
-    setProgress('正在生成选中页面 PPTX', 50, true);
-    const pptxBlob = await makePptx(selectedSlides);
-    downloadBlob(pptxBlob, `${baseName(selectedFile.name)}.pptx`);
-    setProgress('PPTX 已生成', 100);
-    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 PPTX。`);
+    let blob: Blob;
+    if (format === 'pdf') blob = await makePdf(items);
+    else if (format === 'pptx') blob = await makePptx(items);
+    else {
+      const zip = new JSZip();
+      addSlidesToZip(zip, file, items);
+      blob = await zip.generateAsync({ type: 'blob' });
+    }
+    downloadBlob(blob, `${baseName(file.name)}.${format}`);
+    setProgress(`${label} 已生成`, 100);
+    setStatus(`已生成 ${items.length} 页 ${label}，请在浏览器下载列表中查看。可以继续导出其他格式。`);
   } catch (error) {
-    console.error(error);
-    setStatus(error instanceof Error ? error.message : 'PPTX 生成失败。');
-  }
-}
-
-async function downloadSelectedFramesZip(): Promise<void> {
-  const selectedSlides = slides.filter((slide) => slide.selected);
-  if (!selectedFile || selectedSlides.length === 0) {
-    setStatus('请至少勾选一张页面。');
-    return;
-  }
-  try {
-    setProgress('正在生成选中页面 Frames ZIP', 50, true);
-    const zip = new JSZip();
-    addSlidesToZip(zip, selectedFile, selectedSlides);
-    const blob = await zip.generateAsync({ type: 'blob' });
-    downloadBlob(blob, `${baseName(selectedFile.name)}-selected-frames.zip`);
-    setProgress('Frames ZIP 已生成', 100);
-    setStatus(`已下载 ${selectedSlides.length} 张选中页面的 Frames ZIP。`);
-  } catch (error) {
-    console.error(error);
-    setStatus(error instanceof Error ? error.message : 'Frames ZIP 生成失败。');
+    hideProgress();
+    setStatus(error instanceof Error ? error.message : `${label} 生成失败，页面已保留，请重试。`);
+  } finally {
+    isExporting = false;
+    updateActionState();
   }
 }
 
@@ -4434,7 +4654,7 @@ function pptxTextBoxXml(box: SlideTextBox, shapeId: number, placement: { x: numb
 function pptxAppXml(slideCount: number): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <Application>Vid2PPT Deck</Application>
+  <Application>Vid2PPT</Application>
   <PresentationFormat>Widescreen</PresentationFormat>
   <Slides>${slideCount}</Slides>
 </Properties>`;
@@ -4444,9 +4664,9 @@ function pptxCoreXml(): string {
   const now = new Date().toISOString();
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Vid2PPT Deck Export</dc:title>
-  <dc:creator>Vid2PPT Deck</dc:creator>
-  <cp:lastModifiedBy>Vid2PPT Deck</cp:lastModifiedBy>
+  <dc:title>Vid2PPT Export</dc:title>
+  <dc:creator>Vid2PPT</dc:creator>
+  <cp:lastModifiedBy>Vid2PPT</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
   <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
 </cp:coreProperties>`;
@@ -4498,7 +4718,7 @@ function pptxSlideLayoutXml(): string {
 
 function pptxThemeXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Vid2PPT Deck">
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Vid2PPT">
   <a:themeElements>
     <a:clrScheme name="Office">
       <a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
@@ -4662,27 +4882,156 @@ function transcribeChunk(worker: Worker, id: number, audio: Float32Array): Promi
   });
 }
 
+function clearSlideDropIndicators(): void {
+  slidesEl.querySelectorAll<HTMLElement>('.slide-card').forEach((card) => {
+    card.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after');
+    delete card.dataset.dropPosition;
+  });
+}
+
+function finishSlideReorder(slideId: number, previousIndex: number): void {
+  const nextIndex = slides.findIndex((slide) => slide.id === slideId);
+  if (nextIndex < 0 || nextIndex === previousIndex) return;
+  persistWorkspaceToState({ markProcessed: true });
+  renderSlides();
+  setStatus(`已将第 ${previousIndex + 1} 页移到第 ${nextIndex + 1} 页，勾选和当前预览保持不变。`);
+}
+
+function moveSlideByStep(slideId: number, direction: -1 | 1): void {
+  if (isBusy()) {
+    setStatus('请等待当前任务完成后再调整页面顺序。');
+    return;
+  }
+  const previousIndex = slides.findIndex((slide) => slide.id === slideId);
+  const nextIndex = previousIndex + direction;
+  if (previousIndex < 0 || nextIndex < 0 || nextIndex >= slides.length) return;
+  rememberSlideEdit();
+  const [movedSlide] = slides.splice(previousIndex, 1);
+  if (!movedSlide) return;
+  slides.splice(nextIndex, 0, movedSlide);
+  finishSlideReorder(slideId, previousIndex);
+}
+
+function moveSlideAroundTarget(slideId: number, targetSlideId: number, placeAfter: boolean): void {
+  if (isBusy()) {
+    setStatus('请等待当前任务完成后再调整页面顺序。');
+    return;
+  }
+  const previousIndex = slides.findIndex((slide) => slide.id === slideId);
+  const targetIndex = slides.findIndex((slide) => slide.id === targetSlideId);
+  if (previousIndex < 0 || targetIndex < 0 || slideId === targetSlideId) return;
+  rememberSlideEdit();
+  const [movedSlide] = slides.splice(previousIndex, 1);
+  if (!movedSlide) return;
+  const remainingTargetIndex = slides.findIndex((slide) => slide.id === targetSlideId);
+  slides.splice(remainingTargetIndex + (placeAfter ? 1 : 0), 0, movedSlide);
+  finishSlideReorder(slideId, previousIndex);
+}
+
+function updateSlideDropIndicator(card: HTMLElement, event: DragEvent): void {
+  if (draggedSlideId === null || card.dataset.slideId === String(draggedSlideId)) return;
+  slidesEl.querySelectorAll<HTMLElement>('.slide-card.is-drop-before, .slide-card.is-drop-after').forEach((candidate) => {
+    if (candidate === card) return;
+    candidate.classList.remove('is-drop-before', 'is-drop-after');
+    delete candidate.dataset.dropPosition;
+  });
+  const bounds = card.getBoundingClientRect();
+  const midpointX = bounds.left + bounds.width / 2;
+  const midpointY = bounds.top + bounds.height / 2;
+  const pointerIsNearSameRow = Math.abs(event.clientY - midpointY) <= bounds.height * 0.3;
+  const placeAfter = pointerIsNearSameRow ? event.clientX >= midpointX : event.clientY >= midpointY;
+  card.classList.toggle('is-drop-before', !placeAfter);
+  card.classList.toggle('is-drop-after', placeAfter);
+  card.dataset.dropPosition = placeAfter ? 'after' : 'before';
+}
+
+function syncSlideOrderControls(): void {
+  const cards = Array.from(slidesEl.querySelectorAll<HTMLElement>('.slide-card'));
+  cards.forEach((card, index) => {
+    card.draggable = cards.length > 1;
+    const previousButton = card.querySelector<HTMLButtonElement>('.move-slide-previous');
+    const nextButton = card.querySelector<HTMLButtonElement>('.move-slide-next');
+    if (previousButton) previousButton.disabled = index === 0;
+    if (nextButton) nextButton.disabled = index === cards.length - 1;
+  });
+}
+
 function appendSlideCard(slide: Slide): void {
   const card = document.createElement('figure');
   card.className = 'slide-card';
   if (slide.id === activeSlideId) card.classList.add('is-active');
   card.dataset.slideId = String(slide.id);
-  const caption = workspaceMode === 'image' ? `#${slide.id} · 图片页` : `#${slide.id} · ${formatTime(slide.time)}`;
+  card.draggable = slides.length > 1;
+  const slideIndex = slides.findIndex((item) => item.id === slide.id);
+  const pageNumber = slideIndex + 1;
+  const caption = workspaceMode === 'image' ? `第 ${pageNumber} 页 · 图片页` : `第 ${pageNumber} 页 · ${formatTime(slide.time)}`;
+  card.setAttribute('aria-label', `${caption}，可拖动排序`);
   card.innerHTML = `
     <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入导出</span></label>
     <div class="frame-tools">
-      <button class="add-text-box" title="添加可编辑文本框" type="button">T</button>
-      <button class="crop-frame" title="裁剪" type="button">⌗</button>
-      <button class="delete-frame" title="删除" type="button">🗑</button>
+      <button class="add-text-box" title="添加可编辑文本框" aria-label="为第 ${pageNumber} 页添加文本框" type="button">T</button>
+      <button class="crop-frame" title="裁剪" aria-label="裁剪第 ${pageNumber} 页" type="button">⌗</button>
+      <button class="delete-frame" title="删除" aria-label="删除第 ${pageNumber} 页" type="button">🗑</button>
     </div>
-    <div class="slide-thumb">
-      <img src="${slide.dataUrl}" alt="Slide ${slide.id}" />
+    <div class="slide-thumb" style="aspect-ratio: ${slide.width} / ${slide.height}">
+      <img src="${slide.dataUrl}" alt="第 ${pageNumber} 页预览" loading="lazy" tabindex="0" role="button" aria-label="预览第 ${pageNumber} 页" />
       <div class="text-box-layer"></div>
     </div>
-    <figcaption>${caption}</figcaption>
+    <figcaption>
+      <span class="slide-caption-text"><span class="slide-drag-hint" aria-hidden="true">⠿</span>${caption}</span>
+      <span class="slide-order-controls" aria-label="第 ${pageNumber} 页排序">
+        <button class="move-slide-previous" type="button" title="前移一页" aria-label="将第 ${pageNumber} 页前移" ${slideIndex <= 0 ? 'disabled' : ''}>←</button>
+        <button class="move-slide-next" type="button" title="后移一页" aria-label="将第 ${pageNumber} 页后移" ${slideIndex >= slides.length - 1 ? 'disabled' : ''}>→</button>
+      </span>
+    </figcaption>
   `;
+  card.addEventListener('dragstart', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (slides.length < 2 || isBusy() || target?.closest('button, input, label, .slide-text-box')) {
+      event.preventDefault();
+      if (isBusy()) setStatus('请等待当前任务完成后再调整页面顺序。');
+      return;
+    }
+    draggedSlideId = slide.id;
+    event.dataTransfer?.setData('application/x-vid2ppt-slide-id', String(slide.id));
+    event.dataTransfer?.setData('text/plain', String(slide.id));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    card.classList.add('is-dragging');
+  });
+  card.addEventListener('dragenter', (event) => {
+    if (draggedSlideId === null || draggedSlideId === slide.id) return;
+    event.preventDefault();
+    updateSlideDropIndicator(card, event);
+  });
+  card.addEventListener('dragover', (event) => {
+    if (draggedSlideId === null || draggedSlideId === slide.id) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    updateSlideDropIndicator(card, event);
+  });
+  card.addEventListener('dragleave', (event) => {
+    if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+    card.classList.remove('is-drop-before', 'is-drop-after');
+    delete card.dataset.dropPosition;
+  });
+  card.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const sourceSlideId = draggedSlideId;
+    const placeAfter = card.dataset.dropPosition === 'after';
+    clearSlideDropIndicators();
+    draggedSlideId = null;
+    if (sourceSlideId === null) return;
+    moveSlideAroundTarget(sourceSlideId, slide.id, placeAfter);
+  });
+  card.addEventListener('dragend', () => {
+    clearSlideDropIndicators();
+    draggedSlideId = null;
+  });
   const img = card.querySelector<HTMLImageElement>('img');
   img?.addEventListener('click', () => setPreview(slide));
+  img?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPreview(slide); }
+  });
   card.querySelector<HTMLDivElement>('.slide-thumb')?.addEventListener('click', () => {
     setPreview(slide);
     activeTextBoxId = null;
@@ -4702,16 +5051,31 @@ function appendSlideCard(slide: Slide): void {
   card.querySelector<HTMLButtonElement>('.delete-frame')?.addEventListener('click', (event) => { event.stopPropagation(); deleteSlide(slide.id); });
   card.querySelector<HTMLButtonElement>('.crop-frame')?.addEventListener('click', (event) => { event.stopPropagation(); openCropDialog(slide); });
   card.querySelector<HTMLButtonElement>('.add-text-box')?.addEventListener('click', (event) => {
+    if (isBusy()) return;
     event.stopPropagation();
+    workspaceView.classList.remove('side-collapsed');
+    $<HTMLDetailsElement>('.editor-disclosure').open = true;
+    toggleSideBtn.setAttribute('aria-expanded', 'true');
     setPreview(slide);
     addTextBoxToActiveSlide();
   });
+  card.querySelector<HTMLButtonElement>('.move-slide-previous')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    moveSlideByStep(slide.id, -1);
+  });
+  card.querySelector<HTMLButtonElement>('.move-slide-next')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    moveSlideByStep(slide.id, 1);
+  });
+  card.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.frame-checkbox, .frame-tools button').forEach((control) => { control.disabled = isBusy(); });
   slidesEl.appendChild(card);
+  syncSlideOrderControls();
   refreshSlideTextLayer(slide);
   if (!activeSlideId && slide.id === 1) setPreview(slide);
 }
 
 function renderSlides(): void {
+  draggedSlideId = null;
   slidesEl.innerHTML = '';
   if (activeSlideId && !slides.some((slide) => slide.id === activeSlideId)) activeSlideId = slides[0]?.id ?? null;
   if (!activeSlideId && slides[0]) activeSlideId = slides[0].id;
@@ -4874,10 +5238,10 @@ function updateTextBoxPanel(syncValues = true): void {
     control.disabled = !hasBox || isBusy();
   });
   textLayerHint.textContent = hasBox
-    ? `正在编辑第 ${slide?.id ?? '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
+    ? `正在编辑第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
     : hasSlide
-      ? `当前选中第 ${slide?.id ?? '-'} 页；可自动 OCR 勾选页，也可手动补文本框。`
-      : '进入编辑模式后会自动 OCR；也可以对勾选页重新 OCR。';
+      ? `当前选中第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页；可识别勾选页文字，也可手动补文本框。`
+      : '选择页面后，可识别文字或手动添加文本框。';
 
   if (!syncValues) return;
   if (!box) {
@@ -4926,30 +5290,26 @@ function isTextAlign(value: string): value is SlideTextBox['align'] {
 }
 
 function deleteSlide(id: number): void {
-  slides = slides.filter((slide) => slide.id !== id);
+  if (isBusy()) return;
+  const index = slides.findIndex((slide) => slide.id === id);
+  if (index < 0) return;
+  rememberSlideEdit();
+  slides.splice(index, 1);
   if (activeSlideId === id) {
-    activeSlideId = null;
+    activeSlideId = slides[Math.min(index, slides.length - 1)]?.id ?? null;
     activeTextBoxId = null;
   }
-  sortAndReindexSlides();
-  if (!activeSlideId) activeSlideId = slides[0]?.id ?? null;
   renderSlides();
-  if (slides[0]) setPreview(slides[0]);
-  else {
-    previewImage.removeAttribute('src');
-    previewEmpty.hidden = false;
-  }
-  setStatus(workspaceMode === 'image' ? '已删除图片页。' : '已删除 frame。');
-  persistWorkspaceToState({ markProcessed: slides.length > 0 });
+  const active = getActiveSlide();
+  if (active) setPreview(active);
+  else { previewImage.removeAttribute('src'); previewEmpty.hidden = false; }
+  setStatus(`已删除第 ${index + 1} 页，其余页面顺序保持不变。可点击“撤销上一步”恢复。`);
+  persistWorkspaceToState();
   renderFileList();
 }
 
-function sortAndReindexSlides(): void {
-  slides.sort((a, b) => a.time - b.time);
-  slides.forEach((slide, index) => { slide.id = index + 1; });
-}
-
 function openCropDialog(slide: Slide): void {
+  if (isBusy()) return;
   cropTargetSlideId = slide.id;
   cropImage.src = slide.dataUrl;
   cropLeft.value = '0';
@@ -4961,32 +5321,52 @@ function openCropDialog(slide: Slide): void {
 
 async function applyCrop(): Promise<void> {
   const slide = slides.find((item) => item.id === cropTargetSlideId);
-  if (!slide) return;
+  if (!slide || isBusy()) return;
   const left = clamp(Number(cropLeft.value || 0), 0, 99) / 100;
   const top = clamp(Number(cropTop.value || 0), 0, 99) / 100;
   const widthPct = clamp(Number(cropWidth.value || 100), 1, 100) / 100;
   const heightPct = clamp(Number(cropHeight.value || 100), 1, 100) / 100;
-  const img = await loadImage(slide.dataUrl);
-  const sx = Math.floor(img.naturalWidth * left);
-  const sy = Math.floor(img.naturalHeight * top);
-  const sw = Math.max(1, Math.min(Math.floor(img.naturalWidth * widthPct), img.naturalWidth - sx));
-  const sh = Math.max(1, Math.min(Math.floor(img.naturalHeight * heightPct), img.naturalHeight - sy));
-  const canvas = document.createElement('canvas');
-  canvas.width = sw;
-  canvas.height = sh;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return;
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-  slide.dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-  slide.width = sw;
-  slide.height = sh;
-  slide.hash = visualHash(ctx, sw, sh);
-  cropDialog.close();
-  renderSlides();
-  setPreview(slide);
-  setStatus('已裁剪 frame。');
-  persistWorkspaceToState({ markProcessed: slides.length > 0 });
-  renderFileList();
+  isBatchProcessing = true;
+  cropApplyBtn.disabled = true;
+  updateActionState();
+  try {
+    const img = await loadImage(slide.dataUrl);
+    const sx = Math.floor(img.naturalWidth * left);
+    const sy = Math.floor(img.naturalHeight * top);
+    const sw = Math.max(1, Math.min(Math.floor(img.naturalWidth * widthPct), img.naturalWidth - sx));
+    const sh = Math.max(1, Math.min(Math.floor(img.naturalHeight * heightPct), img.naturalHeight - sy));
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('当前浏览器无法创建裁剪画布，请重试。');
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    rememberSlideEdit();
+    slide.textBoxes = cropTextBoxes(slide.textBoxes, {
+      x: sx / img.naturalWidth,
+      y: sy / img.naturalHeight,
+      width: sw / img.naturalWidth,
+      height: sh / img.naturalHeight
+    });
+    if (!slide.textBoxes.some((box) => box.id === activeTextBoxId)) activeTextBoxId = null;
+    slide.dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    slide.width = sw;
+    slide.height = sh;
+    slide.hash = visualHash(ctx, sw, sh);
+    cropDialog.close();
+    renderSlides();
+    setPreview(slide);
+    setStatus('已裁剪页面，文本框已同步到新画面。');
+    persistWorkspaceToState({ markProcessed: slides.length > 0 });
+    renderFileList();
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : '裁剪未能完成，请重试。');
+  } finally {
+    isBatchProcessing = false;
+    cropApplyBtn.disabled = false;
+    updateActionState();
+    scheduleDraftSave();
+  }
 }
 
 function setPreview(slide: Slide): void {
@@ -5002,6 +5382,7 @@ function setupTimeline(duration: number): void {
   extractionTimelineMax = 0;
   lastTimelinePaint = 0;
   timelineDurationEl.textContent = formatClock(duration);
+  timelineRail.setAttribute('aria-valuemax', String(Math.max(0, Math.round(duration))));
   timelineMarkers.innerHTML = '';
   updateTimelinePosition();
 }
@@ -5036,6 +5417,9 @@ function updateTimelinePosition(): void {
   timelineHandle.style.left = `${percent}%`;
   timelineTimeEl.textContent = formatClock(timelineTime);
   timelineDurationEl.textContent = formatClock(duration);
+  timelineRail.setAttribute('aria-valuenow', String(Math.max(0, Math.round(timelineTime))));
+  timelineRail.setAttribute('aria-valuemax', String(Math.max(0, Math.round(duration))));
+  timelineRail.setAttribute('aria-valuetext', formatClock(timelineTime));
 }
 
 function updateTimelineMarkers(): void {
@@ -5064,8 +5448,24 @@ function updateActionState(): void {
   const imageMode = workspaceMode === 'image';
   const limits = currentLimits();
   const selectedCount = slides.filter((slide) => slide.selected).length;
+  selectAllBox.disabled = busy || !slides.length;
+  $<HTMLButtonElement>('#undoEditBtn').disabled = busy || !undoSnapshot || undoSnapshot.file !== selectedFile;
+  $<HTMLButtonElement>('#selectAllReviewBtn').disabled = busy || !slides.length;
+  $<HTMLButtonElement>('#reextractBtn').disabled = busy;
+  $<HTMLElement>('#reextractBtn').hidden = isDemoProject || workspaceMode !== 'video' || currentFileIndex < 0;
+  $<HTMLElement>('#cancelExtractionBtn').hidden = !isExtracting;
+  slidesEl.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.frame-checkbox, .frame-tools button').forEach((control) => { control.disabled = busy; });
+  $<HTMLElement>('#notesLoginBtn').hidden = !!authSession || isDemoProject;
+  $<HTMLElement>('#notesAccessHint').textContent = isDemoProject ? '这是示例逐字稿与摘要；导入自己的视频后可生成实际内容。' : authSession ? '逐字稿在本机识别；摘要与笔记会发送必要文本。选择好页面后再生成笔记。' : '逐字稿在本机识别；摘要与图文笔记需登录，会发送必要文本。';
+  const limit = limits.video_max_minutes;
+  $<HTMLButtonElement>('#toggleImportBtn').disabled = busy;
+  $<HTMLElement>('#sourceQuota').textContent = `${planLabel(currentPlan())} · ${limit === null ? '不限时长' : `${limit} 分钟以内`} · 本月${quotaText('video_conversion')}`;
   const waitingForMediaRights = !mediaPreview.hidden && !mediaRightsConfirm.checked && currentMediaMetadata?.provider === 'bilibili';
   extractBtn.disabled = !hasVideoFile || busy;
+  extractBtn.textContent = !busy && isAudioSource(selectedFile) ? '打开音频转写' : busy ? '正在处理…' : !hasVideoFile ? '选择文件后开始提取' : slides.length && !isDemoProject ? '继续检查已提取页面' : '开始提取页面';
+  batchZipBtn.hidden = selectedFiles.length < 2;
+  $<HTMLElement>('#batchPlanHint').hidden = selectedFiles.length < 2 || limits.batch_processing;
+  downloadFramesZipBtn.hidden = selectedFiles.every((file) => !getState(file).slides.length);
   batchZipBtn.disabled = selectedFiles.length === 0 || busy || !limits.batch_processing;
   batchZipBtn.title = limits.batch_processing ? '' : '批量处理属于专业版和终身版权益';
   downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
@@ -5109,8 +5509,21 @@ function updateActionState(): void {
 
 function updateWorkspaceEmptyState(): void {
   const hasSlides = slides.length > 0;
-  const busy = isUrlDownloading || isPerceivedUploading || isExtracting || isBatchProcessing || isRecording;
+  const audioSource = isAudioSource(selectedFile);
+  workspaceView.classList.toggle('audio-mode', audioSource);
+  const busy = isUrlDownloading || isExtracting || isBatchProcessing || isRecording;
   workspaceEmptyState.hidden = hasSlides;
+  $<HTMLElement>('#reviewToolbar').hidden = !hasSlides;
+  if (busy) $<HTMLElement>('#workspaceImport').hidden = true;
+  else if (!hasSlides) $<HTMLElement>('#workspaceImport').hidden = false;
+  $<HTMLElement>('#toggleImportBtn').setAttribute('aria-expanded', String(!$<HTMLElement>('#workspaceImport').hidden));
+  document.querySelectorAll<HTMLElement>('[data-step]').forEach((step) => {
+    const current = busy ? 'extract' : hasSlides ? 'review' : 'source';
+    if (step.dataset.step === current) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+  workspaceView.classList.toggle('has-timeline', !captureTimeline.hidden);
+  workspaceSubtitle.textContent = selectedFile ? selectedFile.name : '选择来源开始转换';
   slidesEl.hidden = !hasSlides;
   workspaceEmptyState.classList.toggle('is-busy', busy);
   emptyWorkspaceStartBtn.disabled = isBusy();
@@ -5124,14 +5537,6 @@ function updateWorkspaceEmptyState(): void {
     workspaceEmptyTitle.textContent = '正在获取视频';
     workspaceEmptyBody.textContent = '下载完成后会自动进入页面生成，左侧会显示处理进度；完成后页面会出现在这里。';
     emptyWorkspaceStartBtn.textContent = '正在获取视频';
-    emptyWorkspaceStartBtn.disabled = true;
-    return;
-  }
-
-  if (isPerceivedUploading) {
-    workspaceEmptyTitle.textContent = '上传中';
-    workspaceEmptyBody.textContent = '正在上传并准备页面，完成后会进入快速处理，随后页面会陆续出现在这里。';
-    emptyWorkspaceStartBtn.textContent = '上传中';
     emptyWorkspaceStartBtn.disabled = true;
     return;
   }
@@ -5152,10 +5557,17 @@ function updateWorkspaceEmptyState(): void {
     return;
   }
 
+  if (audioSource) {
+    workspaceEmptyTitle.textContent = '把音频整理成文字';
+    workspaceEmptyBody.textContent = '音频没有视频页面。点击“编辑与笔记”，展开“逐字稿与笔记”开始转写；完成后可下载逐字稿。';
+    emptyWorkspaceStartBtn.textContent = '打开音频转写';
+    return;
+  }
+
   if (selectedFile && workspaceMode === 'video') {
     workspaceEmptyTitle.textContent = '当前视频还没有生成页面';
-    workspaceEmptyBody.textContent = `当前视频：${selectedFile.name}。点击下方按钮开始生成页面，进度会显示在左侧。`;
-    emptyWorkspaceStartBtn.textContent = '开始生成';
+    workspaceEmptyBody.textContent = `已选择 ${selectedFile.name}。点击上方“开始当前任务”，自动提取页面后再检查与导出。`;
+    emptyWorkspaceStartBtn.textContent = '开始当前任务';
     emptyWorkspaceStartBtn.disabled = false;
     return;
   }
@@ -5170,7 +5582,7 @@ function updateWorkspaceEmptyState(): void {
 
   workspaceEmptyTitle.textContent = '工作台还没有任务';
   workspaceEmptyBody.textContent = '在顶部横向输入框粘贴 B 站或 YouTube 链接，也可以上传视频或录制屏幕。处理后生成进度和可导出的页面会出现在这里。';
-  emptyWorkspaceStartBtn.textContent = '去粘贴链接';
+  emptyWorkspaceStartBtn.textContent = '选择本地视频';
   emptyWorkspaceStartBtn.disabled = false;
 }
 
@@ -5196,7 +5608,7 @@ function updateResultDock(selectedCount: number): void {
 
   if (busy) {
     resultBadge.textContent = '正在处理';
-    resultTitle.textContent = isGeneratingNotes
+    resultTitle.textContent = isExporting ? '正在生成导出文件' : isGeneratingNotes
       ? '正在生成图文笔记'
       : isSummarizing
         ? '正在生成摘要'
@@ -5205,7 +5617,7 @@ function updateResultDock(selectedCount: number): void {
           : hasSlides ? `已生成 ${slides.length} 页，继续处理中` : '正在生成页面';
     resultSubtitle.textContent = isGeneratingNotes
       ? `正在整理为${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}并匹配关键页面。`
-      : '处理完成后，立即下载按钮会自动可用。';
+      : '处理完成后可检查页面，并选择格式导出。';
     return;
   }
 
@@ -5221,13 +5633,13 @@ function updateResultDock(selectedCount: number): void {
   if (selectedCount === 0) {
     resultBadge.textContent = '需要选择';
     resultTitle.textContent = `已生成 ${slides.length} 页`;
-    resultSubtitle.textContent = '请至少勾选 1 页，之后即可下载 PDF、PPTX 或 Frames ZIP。';
+    resultSubtitle.textContent = '请至少勾选 1 页，之后即可下载 PDF、PPTX 或页面图片。';
     return;
   }
 
   resultBadge.textContent = '可以导出';
   resultTitle.textContent = `已生成 ${slides.length} 页，已选 ${selectedCount} 页`;
-  resultSubtitle.textContent = '默认全选。取消勾选会从导出文件中排除对应页面。';
+  resultSubtitle.textContent = isDemoProject ? '交互示例 · 不计额度 · 可体验勾选、排序、裁剪与导出' : 'PPTX 保留原画面；需要可编辑文字，可在“编辑与笔记”中识别。';
 }
 
 function setAllSlidesSelected(selected: boolean): void {
@@ -5238,16 +5650,22 @@ function setAllSlidesSelected(selected: boolean): void {
   updateActionState();
 }
 
-function getDefaultNewSlideSelected(): boolean {
-  if (slides.length === 0) return true;
-  return selectAllBox.checked;
+function isAudioSource(file: File | null): boolean {
+  return !!file && (file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus)$/i.test(file.name));
 }
 
+function getDefaultNewSlideSelected(): boolean { return true; }
+
 async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<void> {
+  if (isBusy()) return;
   if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+    setStatus('当前浏览器不支持屏幕录制。请改用本地视频。');
     setHomeStatus('当前浏览器不支持屏幕录制。请使用最新版 Chrome / Edge / Safari。');
     return;
   }
+  isPreparingRecording = true;
+  updateActionState();
+  setStatus('请选择要录制的标签页、窗口或屏幕。');
   try {
     recordedChunks = [];
     recordingCompletionMode = mode;
@@ -5261,12 +5679,16 @@ async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<vo
     });
     mediaRecorder.start(1000);
     isRecording = true;
+    setStatus('正在录制屏幕，停止后会继续处理。');
     setHomeStatus(mode === 'extract' ? '正在录制屏幕。完成后点击“停止录制并直接生成”。' : '正在录制屏幕。完成后点击“停止录制并加入队列”。');
   } catch (error) {
     console.error(error);
     cleanupRecording();
-    setHomeStatus(error instanceof Error ? `屏幕录制未开始：${error.message}` : '屏幕录制未开始。');
+    const message = error instanceof DOMException && error.name === 'NotAllowedError' ? '已取消录屏。可以重新选择屏幕，或改用本地视频。' : '录屏未能开始，请重试或选择本地视频。';
+    setHomeStatus(message);
+    setStatus(message);
   } finally {
+    isPreparingRecording = false;
     updateActionState();
   }
 }
@@ -5527,87 +5949,12 @@ function printIllustratedNotes(): void {
 }
 
 function readSettings(): Settings {
-  return {
-    sampleEvery: Math.max(0.5, Number($<HTMLInputElement>('#sampleEvery').value || 1)),
-    duplicateThreshold: Number($<HTMLInputElement>('#duplicateThreshold').value || 4),
-    minGap: Math.max(0, Number($<HTMLInputElement>('#minGap').value || 3))
+  const value = (id: string, fallback: number, min: number, max: number) => {
+    const raw = $<HTMLInputElement>(id).value;
+    const number = raw.trim() ? Number(raw) : fallback;
+    return Number.isFinite(number) ? clamp(number, min, max) : fallback;
   };
-}
-
-function totalFileBytes(files: File[] | FileList | File): number {
-  if (files instanceof File) return files.size;
-  return Array.from(files).reduce((total, file) => total + file.size, 0);
-}
-
-function currentNetworkMbpsHint(): number {
-  const navigatorWithConnection = navigator as Navigator & { connection?: { downlink?: number } };
-  const downlink = Number(navigatorWithConnection.connection?.downlink);
-  return Number.isFinite(downlink) && downlink > 0 ? downlink : 12;
-}
-
-function perceivedUploadDurationMs(totalBytes: number, itemCount = 1): number {
-  const fastMbps = Math.max(4, currentNetworkMbpsHint() * PERCEIVED_UPLOAD_SPEEDUP);
-  const estimatedMs = (Math.max(totalBytes, 256_000) * 8 / (fastMbps * 1_000_000)) * 1000;
-  const itemWarmupMs = Math.min(360, Math.max(0, itemCount - 1) * 45);
-  return clamp(estimatedMs + itemWarmupMs, PERCEIVED_UPLOAD_MIN_MS, PERCEIVED_UPLOAD_MAX_MS);
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function runPerceivedUploadStage(options: {
-  label: string;
-  doneLabel?: string;
-  totalBytes: number;
-  itemCount?: number;
-  from?: number;
-  to?: number;
-  onProgress: (label: string, percent: number) => void;
-  onStatus: (message: string) => void;
-}): Promise<void> {
-  const from = options.from ?? 3;
-  const to = options.to ?? 56;
-  const duration = perceivedUploadDurationMs(options.totalBytes, options.itemCount ?? 1);
-  const start = performance.now();
-  let elapsed = 0;
-  while (elapsed < duration) {
-    const ratio = clamp(elapsed / duration, 0, 1);
-    const eased = 1 - Math.pow(1 - ratio, 2.2);
-    const percent = Math.round(from + (to - from) * eased);
-    options.onProgress(options.label, percent);
-    options.onStatus(`${options.label}：${percent}%`);
-    await wait(72);
-    elapsed = performance.now() - start;
-  }
-  options.onProgress(options.doneLabel ?? '上传完成', to);
-  options.onStatus(options.doneLabel ?? '上传完成，正在处理。');
-}
-
-async function runPerceivedProcessingStage(options: {
-  label: string;
-  doneLabel?: string;
-  from?: number;
-  to?: number;
-  durationMs?: number;
-  onProgress: (label: string, percent: number) => void;
-  onStatus: (message: string) => void;
-}): Promise<void> {
-  const from = options.from ?? 58;
-  const to = options.to ?? 72;
-  const duration = options.durationMs ?? PERCEIVED_PROCESSING_MS;
-  const start = performance.now();
-  let elapsed = 0;
-  while (elapsed < duration) {
-    const ratio = clamp(elapsed / duration, 0, 1);
-    const percent = Math.round(from + (to - from) * ratio);
-    options.onProgress(options.label, percent);
-    options.onStatus(`${options.label}：${percent}%`);
-    await wait(64);
-    elapsed = performance.now() - start;
-  }
-  options.onProgress(options.doneLabel ?? '处理完成', to);
-  options.onStatus(options.doneLabel ?? '处理完成，正在生成页面。');
+  return { sampleEvery: value('#sampleEvery', 1, 0.5, 60), duplicateThreshold: value('#duplicateThreshold', 4, 1, 20), minGap: value('#minGap', 3, 0, 120) };
 }
 
 function setProgress(label: string, percent?: number, indeterminate = false): void {
@@ -5618,9 +5965,13 @@ function setProgress(label: string, percent?: number, indeterminate = false): vo
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
     progressFill.style.width = `${clamped}%`;
     progressPercent.textContent = indeterminate ? `${clamped}% · 处理中` : `${clamped}%`;
+    progressTrack.setAttribute('aria-valuenow', String(clamped));
+    progressTrack.setAttribute('aria-valuetext', `${label}，${clamped}%`);
   } else {
     progressFill.style.width = '100%';
     progressPercent.textContent = '处理中';
+    progressTrack.removeAttribute('aria-valuenow');
+    progressTrack.setAttribute('aria-valuetext', `${label}，处理中`);
   }
 }
 
@@ -5729,3 +6080,132 @@ function formatBytes(bytes: number): string {
 }
 function yieldToBrowser(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 0)); }
 function sleep(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+function snapshotWorkspace(): FileJobState {
+  return { slides: cloneSlides(slides), transcript: transcriptEl.value, summary: summaryEl.value,
+    illustratedNotes: illustratedNotesMarkdown, videoMeta: videoMeta ? { ...videoMeta } : null,
+    status: slides.length ? 'done' : 'queued', processedAt: new Date().toISOString() };
+}
+
+function rememberSlideEdit(): void {
+  undoSnapshot = { slides: cloneSlides(slides), activeSlideId, file: selectedFile };
+}
+
+function scheduleDraftSave(): void {
+  if (isDemoProject || !selectedFile || (!slides.length && !transcriptEl.value.trim())) return;
+  draftRevision += 1;
+  const revision = draftRevision;
+  const draft: WorkspaceDraft = { version: 1, file: selectedFile, state: snapshotWorkspace(), mode: workspaceMode, savedAt: new Date().toISOString() };
+  $<HTMLElement>('#draftStatus').textContent = '正在保存当前任务到本机…';
+  window.clearTimeout(draftTimer);
+  draftTimer = window.setTimeout(() => {
+    draftWrites = draftWrites.catch(() => {}).then(() => writeDraft(draft)).then(() => {
+      savedDraftRevision = revision;
+      if (revision === draftRevision) $<HTMLElement>('#draftStatus').textContent = '当前任务已保存到此浏览器 · 关闭后可继续';
+    }).catch(() => {
+      $<HTMLElement>('#draftStatus').textContent = '本机保存暂不可用，请在离开前导出结果。';
+    });
+  }, 650);
+}
+
+async function discoverDraft(): Promise<void> {
+  try {
+    const draft = await readDraft<WorkspaceDraft>();
+    if (!draft || draft.version !== 1 || !(draft.file instanceof File) || !Array.isArray(draft.state?.slides)) return;
+    savedDraft = draft;
+    $<HTMLElement>('#resumeDraftText').textContent = `继续上次：${draft.file.name} · ${draft.state.slides.length} 页`;
+    $<HTMLElement>('#resumeDraftBanner').hidden = false;
+  } catch { /* Local conversion remains usable when storage is unavailable. */ }
+}
+
+function setSourceTab(source: string, focus = false): void {
+  const panels: Record<string, string> = { local: '#sourceLocal', url: '#sourceUrl', record: '#sourceRecord' };
+  document.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((button) => {
+    const selected = button.dataset.source === source;
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    if (selected && focus) button.focus();
+  });
+  Object.entries(panels).forEach(([key, selector]) => { $<HTMLElement>(selector).hidden = key !== source; });
+  extractBtn.hidden = source !== 'local' && !selectedFiles.length;
+  setHomeStatus(source === 'local' ? '文件留在本机。选择后即可开始提取。' : source === 'url' ? '在线链接由服务端临时获取。导入失败时可改用本地文件或录屏。' : '录屏在本机处理，停止后自动提取页面。');
+}
+
+document.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((button, index, buttons) => {
+  button.addEventListener('click', () => setSourceTab(button.dataset.source ?? 'local'));
+  button.addEventListener('keydown', (event) => {
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % buttons.length;
+    else if (event.key === 'ArrowLeft') next = (index + buttons.length - 1) % buttons.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = buttons.length - 1;
+    else return;
+    event.preventDefault();
+    setSourceTab(buttons[next].dataset.source ?? 'local', true);
+  });
+});
+
+$<HTMLButtonElement>('#toggleImportBtn').addEventListener('click', () => {
+  const panel = $<HTMLElement>('#workspaceImport');
+  panel.hidden = !panel.hidden;
+  $<HTMLElement>('#toggleImportBtn').setAttribute('aria-expanded', String(!panel.hidden));
+});
+$<HTMLButtonElement>('#cancelExtractionBtn').addEventListener('click', () => {
+  extractionAbort?.abort();
+  setStatus('正在停止，已完成的页面会保留。');
+});
+$<HTMLButtonElement>('#notesLoginBtn').addEventListener('click', focusLoginPanel);
+$<HTMLButtonElement>('#selectAllReviewBtn').addEventListener('click', () => setAllSlidesSelected(true));
+$<HTMLButtonElement>('#reextractBtn').addEventListener('click', () => { $<HTMLElement>('#reextractPanel').hidden = false; });
+$<HTMLButtonElement>('#cancelReextractBtn').addEventListener('click', () => { $<HTMLElement>('#reextractPanel').hidden = true; });
+$<HTMLButtonElement>('#confirmReextractBtn').addEventListener('click', () => {
+  $<HTMLElement>('#reextractPanel').hidden = true;
+  void processCurrentFile();
+});
+$<HTMLButtonElement>('#undoEditBtn').addEventListener('click', () => {
+  if (!undoSnapshot || undoSnapshot.file !== selectedFile || isBusy()) return;
+  slides = cloneSlides(undoSnapshot.slides);
+  activeSlideId = undoSnapshot.activeSlideId;
+  activeTextBoxId = null;
+  undoSnapshot = null;
+  renderSlides();
+  const active = getActiveSlide();
+  if (active) setPreview(active);
+  persistWorkspaceToState();
+  setStatus('已撤销上一次页面操作，页面与顺序已恢复。');
+});
+$<HTMLButtonElement>('#dismissDraftBtn').addEventListener('click', () => { $<HTMLElement>('#resumeDraftBanner').hidden = true; });
+$<HTMLButtonElement>('#resumeDraftBtn').addEventListener('click', () => {
+  if (!savedDraft || isBusy()) return;
+  if (isDemoProject) restoreWorkspaceAfterDemo();
+  persistWorkspaceToState();
+  const draft = savedDraft;
+  selectedFile = draft.file;
+  if (draft.mode === 'video') {
+    const existing = selectedFiles.findIndex((file) => fileKey(file) === fileKey(draft.file));
+    if (existing < 0) selectedFiles.push(draft.file);
+    currentFileIndex = existing >= 0 ? existing : selectedFiles.length - 1;
+  } else currentFileIndex = -1;
+  setStateForFile(draft.file, draft.state);
+  loadStateIntoWorkspace(draft.file);
+  setWorkspaceMode(draft.mode);
+  $<HTMLElement>('#resumeDraftBanner').hidden = true;
+  $<HTMLElement>('#workspaceImport').hidden = true;
+  showWorkspace();
+  renderFileList();
+  updateActionState();
+  setStatus('已恢复上次的页面、排序与文字，可继续编辑或导出。');
+  $<HTMLElement>('#draftStatus').textContent = '已恢复此浏览器保存的任务';
+  scheduleDraftSave();
+});
+window.addEventListener('beforeunload', (event) => {
+  if ((!isDemoProject && isBusy()) || draftRevision > savedDraftRevision) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
+// Dropping a file outside a picker should not navigate away and discard the task.
+window.addEventListener('dragover', (event) => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
+window.addEventListener('drop', (event) => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
+workspaceView.classList.add('side-collapsed');
+void discoverDraft();

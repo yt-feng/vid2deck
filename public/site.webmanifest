@@ -1,0 +1,17 @@
+{
+  "name": "Vid2PPT",
+  "short_name": "Vid2PPT",
+  "description": "把视频里的页面提取成 PPTX、PDF 和可复用资料。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f1",
+  "theme_color": "#101828",
+  "icons": [
+    {
+      "src": "/brand/vid2ppt-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

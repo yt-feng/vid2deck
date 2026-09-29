@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /sponsor/
+Disallow: /one-time-pass/
+
+Sitemap: https://vid2ppt.com/sitemap.xml

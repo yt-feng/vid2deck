@@ -56,18 +56,14 @@ PLAN_LABELS = {
 }
 
 
-DEFAULT_OWNER_USERNAMES = {"kcdesk", "twotigers_vid"}
-
-
 def is_owner_identity(email: str = "", username: str = "") -> bool:
-    configured_usernames = csv_set(os.getenv("VID2PPT_OWNER_USERNAMES", ""))
-    configured_emails = csv_set(os.getenv("VID2PPT_OWNER_EMAILS", ""))
-    owner_usernames = DEFAULT_OWNER_USERNAMES | configured_usernames
+    owner_usernames = csv_set(os.getenv("VID2PPT_OWNER_USERNAMES", ""))
+    owner_emails = csv_set(os.getenv("VID2PPT_OWNER_EMAILS", ""))
     normalized_username = (username or "").strip().lower().removeprefix("@")
     normalized_email = (email or "").strip().lower()
     if normalized_username and normalized_username in owner_usernames:
         return True
-    if normalized_email and normalized_email in configured_emails:
+    if normalized_email and normalized_email in owner_emails:
         return True
     return normalized_email in {f"{name}@users.vid2ppt.com" for name in owner_usernames}
 

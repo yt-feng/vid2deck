@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler
 from typing import Any
 
 try:
+    from _auth import normalize_username, verify_user_token
+    from _contact import handle_contact_options, handle_contact_post, send_contact_json
     from _supabase import (
         find_sponsor_order_by_code,
         find_sponsor_order_by_request_id,
@@ -25,6 +27,8 @@ try:
         utc_now_iso,
     )
 except ModuleNotFoundError:
+    from api._auth import normalize_username, verify_user_token
+    from api._contact import handle_contact_options, handle_contact_post, send_contact_json
     from api._supabase import (
         find_sponsor_order_by_code,
         find_sponsor_order_by_request_id,
@@ -44,8 +48,8 @@ CODE_RE = re.compile(r"^[A-Z0-9-]{8,40}$")
 EVENT_RE = re.compile(r"^[a-z][a-z0-9_.-]{1,80}$")
 ALLOWED_EVENTS = {"video_conversion", "editable_slide", "summary_generation", "transcribe_minute"}
 KCDESK_GIFT_PLAN_CODES = {"NOVA-3D", "NOVA-M", "NOVA-Q", "NOVA-Y", "NOVA-2Y"}
-ADMIN_USERNAME = os.getenv("VID2PPT_ADMIN_USERNAME", "twotigers_vid")
-ADMIN_PASSWORD = os.getenv("VID2PPT_ADMIN_PASSWORD", "1108")
+ADMIN_USERNAME = normalize_username(os.getenv("VID2PPT_ADMIN_USERNAME", "twotigers_vid"))
+ADMIN_PASSWORD = os.getenv("VID2PPT_ADMIN_PASSWORD", "")
 ADMIN_TOKEN_TTL_SECONDS = int(os.getenv("VID2PPT_ADMIN_TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 
 
@@ -54,6 +58,9 @@ class handler(BaseHTTPRequestHandler):
         try:
             params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             action = str((params.get("action") or ["usage"])[0]).strip().lower()
+            if action == "contact":
+                send_contact_json(self, {"detail": "Please use the contact form to send a message."}, 405)
+                return
             if action == "admin_data":
                 admin = verify_admin_header(self.headers.get("authorization", ""))
                 if not admin:
@@ -73,9 +80,12 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, **public_code_payload(order)})
                 return
 
-            email = normalize_email((params.get("email") or [""])[0])
-            if not email:
-                self.send_json({"detail": "Valid email is required"}, 400)
+            email, error_status = authenticated_email(
+                self.headers.get("authorization", ""),
+                (params.get("email") or [""])[0],
+            )
+            if error_status:
+                self.send_json(auth_error_payload(error_status), error_status)
                 return
             self.send_json(usage_payload(email))
         except Exception as exc:
@@ -83,9 +93,13 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            data = self.read_json()
             params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             query_action = str((params.get("action") or [""])[0])
+            if query_action.strip().lower() == "contact":
+                # Contact owns validation and reads the bounded body itself.
+                handle_contact_post(self)
+                return
+            data = self.read_json()
             action = str(data.get("action") or query_action or "record_usage").strip().lower()
             if action == "admin_login":
                 self.handle_admin_login(data)
@@ -106,14 +120,18 @@ class handler(BaseHTTPRequestHandler):
             self.send_json({"detail": str(exc)}, 500)
 
     def handle_record_usage(self, data: dict[str, Any]) -> None:
-        email = normalize_email(str(data.get("email") or ""))
+        email, error_status = authenticated_email(
+            self.headers.get("authorization", ""),
+            data.get("email"),
+        )
+        if error_status:
+            self.send_json(auth_error_payload(error_status), error_status)
+            return
+
         event_type = str(data.get("event_type") or "").strip()
         units = int(data.get("units") or 1)
         metadata = data.get("metadata")
 
-        if not email:
-            self.send_json({"detail": "Valid email is required"}, 400)
-            return
         if event_type not in ALLOWED_EVENTS:
             self.send_json({"detail": "Unsupported usage event"}, 400)
             return
@@ -130,7 +148,11 @@ class handler(BaseHTTPRequestHandler):
     def handle_admin_login(self, data: dict[str, Any]) -> None:
         username = str(data.get("username") or "")
         password = str(data.get("password") or "")
-        if not hmac.compare_digest(username, ADMIN_USERNAME) or not hmac.compare_digest(password, ADMIN_PASSWORD):
+        if (
+            not admin_credentials_configured()
+            or not hmac.compare_digest(username, ADMIN_USERNAME)
+            or not hmac.compare_digest(password, ADMIN_PASSWORD)
+        ):
             self.send_json({"detail": "Invalid admin login"}, 401)
             return
         self.send_json({"token": create_admin_token(username), "username": username})
@@ -262,6 +284,10 @@ class handler(BaseHTTPRequestHandler):
         self.send_json({"valid": True, "redeemed": True, "order": public_redeem_order({**order, **updated})})
 
     def do_OPTIONS(self) -> None:
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if str((params.get("action") or [""])[0]).strip().lower() == "contact":
+            handle_contact_options(self)
+            return
         self.send_response(204)
         self.send_cors_headers()
         self.end_headers()
@@ -292,6 +318,41 @@ def normalize_email(value: str) -> str:
     return email if EMAIL_RE.match(email) else ""
 
 
+def authenticated_email(authorization: str, requested_value: Any = "") -> tuple[str, int | None]:
+    identity = bearer_identity(authorization)
+    email = normalize_email(str(identity.get("email") or ""))
+    if not email:
+        return "", 401
+
+    requested_text = str(requested_value or "").strip()
+    if not requested_text:
+        return email, None
+    requested_email = normalize_email(requested_text)
+    if not requested_email:
+        return "", 400
+    if requested_email != email:
+        return "", 403
+    return email, None
+
+
+def bearer_identity(header: str) -> dict[str, Any]:
+    parts = header.strip().split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        return {}
+    try:
+        return verify_user_token(parts[1].strip())
+    except Exception:
+        return {}
+
+
+def auth_error_payload(status: int) -> dict[str, str]:
+    if status == 400:
+        return {"detail": "Valid email is required"}
+    if status == 403:
+        return {"detail": "Email does not match authenticated user"}
+    return {"detail": "User login required"}
+
+
 def usage_payload(email: str) -> dict[str, Any]:
     period_start = month_start_iso()
     events = list_usage_events(email, period_start)
@@ -319,10 +380,18 @@ def month_start_iso() -> str:
 
 def admin_secret() -> bytes:
     secret = os.getenv("AUTH_SECRET") or os.getenv("AUTH_CODE") or os.getenv("VID2PPT_ADMIN_SECRET") or ADMIN_PASSWORD
+    if not secret:
+        raise RuntimeError("Admin authentication unavailable")
     return secret.strip().encode("utf-8")
 
 
+def admin_credentials_configured() -> bool:
+    return bool(ADMIN_USERNAME and ADMIN_PASSWORD.strip())
+
+
 def create_admin_token(username: str) -> str:
+    if not admin_credentials_configured() or not hmac.compare_digest(username, ADMIN_USERNAME):
+        raise RuntimeError("Admin authentication unavailable")
     payload = {"kind": "admin", "sub": username, "iat": int(time.time())}
     payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode("utf-8").rstrip("=")
@@ -331,6 +400,8 @@ def create_admin_token(username: str) -> str:
 
 
 def verify_admin_header(header: str) -> dict[str, Any] | None:
+    if not admin_credentials_configured():
+        return None
     prefix = "Bearer "
     if not header.startswith(prefix):
         return None

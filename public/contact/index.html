@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>联系我们｜Vid2PPT</title>
+  <meta name="description" content="通过联系表单或 info@vid2ppt.com 联系 Vid2PPT，获取产品使用、账号、订单与合作支持。" />
+  <meta name="theme-color" content="#101828" />
+  <link rel="canonical" href="https://vid2ppt.com/contact/" />
+  <link rel="icon" type="image/svg+xml" href="/brand/vid2ppt-mark.svg" />
+  <style>
+    :root { color: #101828; background: #f4f5f1; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #3157d5; text-underline-offset: 3px; }
+    .wrap { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 48px; }
+    .nav, .footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; color: #101828; font-size: 1.1rem; font-weight: 900; text-decoration: none; }
+    .brand img { display: block; width: 38px; height: 38px; }
+    .contact-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: clamp(28px, 5vw, 64px); margin-top: 44px; align-items: start; }
+    .contact-intro { padding-top: 16px; }
+    .eyebrow { margin: 0 0 16px; color: #3157d5; font-size: .8rem; font-weight: 850; letter-spacing: .12em; }
+    h1 { margin: 0 0 22px; font-size: clamp(2.3rem, 5vw, 3.65rem); line-height: 1.16; letter-spacing: -.045em; }
+    h2 { margin: 0; font-size: 1.4rem; letter-spacing: -.025em; }
+    p { color: #526071; line-height: 1.8; }
+    .intro-copy { margin: 0 0 28px; font-size: 1.05rem; }
+    .email-card { padding: 22px 0; border-block: 1px solid #d9dfe7; }
+    .email-card strong { display: block; margin-bottom: 8px; font-size: .92rem; }
+    .email-card a { display: inline-flex; align-items: center; min-height: 44px; font-size: clamp(1.2rem, 3vw, 1.45rem); font-weight: 800; overflow-wrap: anywhere; }
+    .email-card p { margin: 7px 0 0; font-size: .9rem; }
+    .contact-tips { margin-top: 25px; }
+    .contact-tips h2 { font-size: 1rem; }
+    .contact-tips p { margin-top: 8px; font-size: .92rem; }
+    .contact-card { padding: clamp(22px, 4vw, 36px); background: #fff; border: 1px solid #dfe3e8; border-radius: 22px; box-shadow: 0 18px 55px rgba(16,24,40,.055); }
+    .form-intro { margin: 8px 0 24px; font-size: .9rem; }
+    fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    .field { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 8px; color: #253247; font-size: .94rem; font-weight: 750; }
+    label span { margin-left: 6px; color: #697587; font-size: .84rem; font-weight: 400; }
+    input, textarea { display: block; width: 100%; padding: 12px 13px; color: #101828; background: #fff; border: 1px solid #bbc6d5; border-radius: 10px; font: inherit; font-size: 1rem; line-height: 1.5; }
+    input:hover, textarea:hover { border-color: #7387a4; }
+    textarea { min-height: 180px; resize: vertical; }
+    input:disabled, textarea:disabled { color: #526071; background: #f6f8fb; }
+    .field-help { margin: 7px 0 0; font-size: .8rem; line-height: 1.65; }
+    .field-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .message-count { color: #697587; font-size: .78rem; white-space: nowrap; }
+    .form-trap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .privacy-note { margin: 0 0 20px; font-size: .83rem; }
+    .verification { margin: 0 0 20px; padding: 14px; background: #f6f8fb; border: 1px solid #e1e5eb; border-radius: 12px; }
+    .verification-label { display: block; margin-bottom: 10px; color: #394557; font-size: .86rem; font-weight: 750; }
+    #contactTurnstile { min-height: 65px; }
+    .verification-status { margin: 8px 0 0; color: #526071; font-size: .8rem; }
+    .verification-retry { min-height: 44px; margin-top: 4px; padding: 8px 0; color: #3157d5; background: none; border: 0; font: inherit; font-size: .86rem; font-weight: 750; cursor: pointer; }
+    .submit-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; width: 100%; padding: 12px 20px; color: #fff; background: #3157d5; border: 0; border-radius: 10px; font: inherit; font-weight: 800; cursor: pointer; }
+    .submit-button:hover { background: #2447b5; }
+    .submit-button:disabled { background: #687cae; cursor: wait; }
+    .form-status { margin: 16px 0 0; padding: 13px 15px; border-radius: 10px; font-size: .9rem; line-height: 1.75; overflow-wrap: anywhere; }
+    .form-status:empty { display: none; }
+    .form-status[data-state="pending"] { color: #344866; background: #f1f5fa; }
+    .form-status[data-state="success"] { color: #176440; background: #edf8f0; }
+    .form-status[data-state="error"] { color: #993d20; background: #fff3ed; }
+    .footer { justify-content: center; margin-top: 44px; padding-top: 24px; color: #697587; border-top: 1px solid #d9dfe7; font-size: .9rem; }
+    .footer a { color: inherit; font-weight: 750; text-decoration: none; }
+    @media (max-width: 760px) { .contact-layout { grid-template-columns: 1fr; margin-top: 28px; gap: 25px; } .contact-intro { padding-top: 0; } h1 { max-width: 600px; } .contact-tips { margin-top: 20px; } .intro-copy { margin-bottom: 20px; } .email-card { padding: 16px 0; } }
+    @media (max-width: 420px) { .field-meta { align-items: flex-start; } .field-help { max-width: 210px; } }
+  </style>
+  <link rel="stylesheet" href="/support-pages.css" />
+</head>
+<body>
+  <a class="skip-link" href="#contactForm">跳到联系表单</a>
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="/" aria-label="Vid2PPT 首页"><img src="/brand/vid2ppt-mark.svg" alt="" /><span>Vid2PPT</span></a>
+      <nav class="site-nav" aria-label="主要导航"><a href="/pricing/">套餐与价格</a><a href="/contact/" aria-current="page">联系我们</a><a class="nav-cta" href="/#workspace">返回工作台</a></nav>
+    </header>
+    <main class="contact-layout" id="mainContent">
+      <section class="contact-intro" aria-labelledby="contactTitle">
+        <p class="eyebrow">我们在这里，帮你继续</p>
+        <h1 id="contactTitle">遇到问题，<br />或有个好建议？</h1>
+        <p class="intro-copy">产品使用、账号与订单、合作或反馈，都可以在这里告诉我们。我们会通过你填写的邮箱回复。</p>
+        <div class="email-card"><strong>也可以直接发送邮件</strong><a href="mailto:info@vid2ppt.com">info@vid2ppt.com <span aria-hidden="true">↗</span></a><p>需要附上截图或文件时，发送邮件会更方便。</p></div>
+        <div class="contact-tips"><h2>这些信息能帮助我们更快理解问题</h2><p>使用问题请说明操作步骤、设备与浏览器，以及看到的错误提示。订单问题请提供订单号与购买邮箱。</p></div>
+      </section>
+      <section class="contact-card" aria-labelledby="formTitle">
+        <h2 id="formTitle">给我们留言</h2>
+        <p class="form-intro">无需登录。除姓名外，以下信息均需填写。</p>
+        <noscript><p>请启用 JavaScript 以提交表单，或直接发送邮件至 <a href="mailto:info@vid2ppt.com">info@vid2ppt.com</a>。</p></noscript>
+        <form id="contactForm" action="/api/contact" method="post">
+          <fieldset id="contactFields" aria-label="联系信息">
+            <div class="field"><label for="contactName">姓名<span>可选</span></label><input id="contactName" name="name" autocomplete="name" maxlength="100" placeholder="我们该如何称呼你" /></div>
+            <div class="field"><label for="contactEmail">回复邮箱</label><input id="contactEmail" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder="you@example.com" aria-describedby="emailHelp" /><p class="field-help" id="emailHelp">请填写你能收信的邮箱，方便我们回复。</p></div>
+            <div class="field"><label for="contactSubject">主题</label><input id="contactSubject" name="subject" required maxlength="160" placeholder="例如：导出 PPTX 时出现错误" /></div>
+            <div class="field"><label for="contactMessage">详细内容</label><textarea id="contactMessage" name="message" required minlength="10" maxlength="5000" rows="7" placeholder="请描述你遇到的问题，或想与我们分享的建议。" aria-describedby="messageHelp messageCount"></textarea><div class="field-meta"><p class="field-help" id="messageHelp">请填写 10–5,000 个字符，无需提供密码或付款卡号。</p><span class="message-count" id="messageCount">0 / 5,000</span></div></div>
+            <div class="form-trap" aria-hidden="true"><label for="contactWebsite">请留空</label><input id="contactWebsite" name="website" autocomplete="off" tabindex="-1" maxlength="200" /></div>
+          </fieldset>
+          <div class="verification" aria-describedby="verificationStatus"><span class="verification-label">发送前，请完成验证</span><div id="contactTurnstile"></div><p class="verification-status" id="verificationStatus" role="status" aria-live="polite">正在加载验证…</p><button class="verification-retry" id="verificationRetry" type="button" hidden>重新验证</button></div>
+          <p class="privacy-note">你提交的邮箱和留言仅用于处理、回复本次请求及必要的服务支持。详见<a href="/privacy/#section-3" target="_blank" rel="noopener">隐私说明（新窗口）</a>。</p>
+          <button class="submit-button" id="contactSubmit" type="submit" disabled>发送消息 <span aria-hidden="true">→</span></button>
+          <p class="form-status" id="contactStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+        </form>
+      </section>
+    </main>
+    <footer class="footer"><a href="/">首页</a><a href="/pricing/">套餐与价格</a><a href="mailto:info@vid2ppt.com">info@vid2ppt.com</a><a href="/terms-and-conditions/">服务条款</a><a href="/privacy/">隐私说明</a><a href="/refund/">退款政策</a><span>© 2026 Vid2PPT</span></footer>
+  </div>
+  <script>
+    (function () {
+      var form = document.getElementById('contactForm');
+      var fields = document.getElementById('contactFields');
+      var name = document.getElementById('contactName');
+      var email = document.getElementById('contactEmail');
+      var subject = document.getElementById('contactSubject');
+      var message = document.getElementById('contactMessage');
+      var website = document.getElementById('contactWebsite');
+      var submit = document.getElementById('contactSubmit');
+      var status = document.getElementById('contactStatus');
+      var count = document.getElementById('messageCount');
+      var verificationStatus = document.getElementById('verificationStatus');
+      var verificationRetry = document.getElementById('verificationRetry');
+      var turnstileSitekey = '0x4AAAAAAEsNisWAHle1m_JT';
+      var turnstileToken = '';
+      var turnstileWidget = null;
+      var verificationTimer = null;
+      var sending = false;
+      var pendingRequest = null;
+      var initialSubject = new URLSearchParams(window.location.search).get('subject');
+      if (initialSubject) subject.value = initialSubject.slice(0, 160);
+      function setStatus(text, state) { status.textContent = text; status.setAttribute('data-state', state); }
+      function updateCount() { count.textContent = message.value.length.toLocaleString('en-US') + ' / 5,000'; }
+      function verificationFailed(text) {
+        clearTimeout(verificationTimer);
+        turnstileToken = '';
+        submit.disabled = true;
+        verificationStatus.textContent = text;
+        verificationRetry.hidden = false;
+      }
+      function resetVerification() {
+        turnstileToken = '';
+        submit.disabled = true;
+        verificationRetry.hidden = true;
+        verificationStatus.textContent = '正在重新验证…';
+        try {
+          if (window.turnstile && turnstileWidget !== null) window.turnstile.reset(turnstileWidget);
+          else if (window.turnstile) window.onContactTurnstileLoad();
+          else loadVerification();
+        } catch (error) { verificationFailed('验证暂时不可用，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
+      }
+      window.onContactTurnstileLoad = function () {
+        clearTimeout(verificationTimer);
+        if (turnstileWidget !== null) return;
+        try {
+          turnstileWidget = window.turnstile.render('#contactTurnstile', {
+            sitekey: turnstileSitekey, action: 'contact', theme: 'light', size: 'compact', retry: 'never', 'response-field': false,
+            callback: function (token) {
+              turnstileToken = token;
+              submit.disabled = sending;
+              verificationStatus.textContent = '验证通过，可以发送消息。';
+              verificationRetry.hidden = true;
+            },
+            'expired-callback': function () { resetVerification(); },
+            'error-callback': function () { verificationFailed('验证未完成。请重新验证，或直接发邮件至 info@vid2ppt.com。'); },
+            'timeout-callback': function () { verificationFailed('验证已超时，请点击「重新验证」后继续。'); },
+            'unsupported-callback': function () { verificationFailed('当前浏览器暂不支持此验证。可换一个浏览器，或直接发邮件至 info@vid2ppt.com。'); }
+          });
+        } catch (error) { verificationFailed('验证暂时不可用，请重新验证，或直接发邮件至 info@vid2ppt.com。'); }
+      };
+      function loadVerification() {
+        verificationRetry.hidden = true;
+        verificationStatus.textContent = '正在加载验证…';
+        var oldScript = document.getElementById('contactTurnstileScript');
+        if (oldScript) oldScript.remove();
+        var script = document.createElement('script');
+        script.id = 'contactTurnstileScript';
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onContactTurnstileLoad';
+        script.async = true;
+        script.defer = true;
+        script.onerror = function () { verificationFailed('验证组件未能加载。请重试，或直接发邮件至 info@vid2ppt.com。'); };
+        verificationTimer = setTimeout(function () { verificationFailed('验证加载较慢。可以重新验证，或直接发邮件至 info@vid2ppt.com。'); }, 15000);
+        document.head.appendChild(script);
+      }
+      verificationRetry.addEventListener('click', function () { if (!sending) resetVerification(); });
+      loadVerification();
+      message.addEventListener('input', function () { message.setCustomValidity(''); updateCount(); });
+      subject.addEventListener('input', function () { subject.setCustomValidity(''); });
+      fields.addEventListener('input', function () { pendingRequest = null; });
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (sending) return;
+        email.value = email.value.trim();
+        subject.value = subject.value.trim();
+        var body = { name: name.value.trim(), email: email.value, subject: subject.value, message: message.value.trim(), website: website.value };
+        subject.setCustomValidity(body.subject ? '' : '请填写留言主题。');
+        message.setCustomValidity(body.message.length >= 10 && body.message.length <= 5000 ? '' : '请填写 10–5,000 个字符的详细内容。');
+        if (!form.reportValidity()) return;
+        if (!turnstileToken) { verificationFailed('请先完成上方验证，再发送消息。'); return; }
+        var requestKey = JSON.stringify(body);
+        if (!pendingRequest || pendingRequest.key !== requestKey) pendingRequest = { key: requestKey, id: crypto.randomUUID() };
+        body.request_id = pendingRequest.id;
+        body.turnstile_token = turnstileToken;
+        sending = true;
+        fields.disabled = true;
+        submit.disabled = true;
+        submit.textContent = '正在发送…';
+        form.setAttribute('aria-busy', 'true');
+        setStatus('正在发送，请稍候。', 'pending');
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 45000);
+        try {
+          var response = await fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+          var data = await response.json().catch(function () { return {}; });
+          if (!response.ok || data.success !== true) throw new Error(typeof data.detail === 'string' && data.detail ? data.detail : '暂时无法发送，请稍后重试，或直接发邮件至 info@vid2ppt.com。');
+          var reference = typeof data.reference === 'string' ? data.reference : '';
+          setStatus('消息已提交，我们会通过 ' + body.email + ' 回复。' + (reference ? '参考编号：' + reference + '。' : '') + '感谢你的留言。', 'success');
+          form.reset();
+          pendingRequest = null;
+          updateCount();
+        } catch (error) {
+          setStatus((error.name === 'AbortError' || error instanceof TypeError) ? '暂时未能确认提交结果。你的内容已保留，可稍后重试，或直接发邮件至 info@vid2ppt.com。' : error.message, 'error');
+        } finally {
+          clearTimeout(timeout);
+          sending = false;
+          fields.disabled = false;
+          submit.textContent = '发送消息 →';
+          form.removeAttribute('aria-busy');
+          resetVerification();
+        }
+      });
+    }());
+  </script>
+</body>
+</html>
