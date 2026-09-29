@@ -1,7 +1,9 @@
 User-agent: *
 Allow: /
+Allow: /blog/
 Disallow: /admin/
 Disallow: /sponsor/
 Disallow: /one-time-pass/
+Disallow: /api/
 
 Sitemap: https://vid2ppt.com/sitemap.xml

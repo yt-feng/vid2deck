@@ -45,9 +45,18 @@ test('each article has answer-friendly metadata, breadcrumbs, FAQ and a product 
 test('blog support assets and sitemap point to real pages', () => {
   const sitemap = read('sitemap.xml');
   const llms = read('llms.txt');
+  const hub = read('blog/index.html');
+  const feed = read('blog/feed.xml');
+  const robots = read('robots.txt');
+  assert.match(hub, /application\/rss\+xml/);
+  assert.match(llms, /https:\/\/vid2ppt\.com\/blog\/feed\.xml/);
+  assert.match(robots, /Sitemap: https:\/\/vid2ppt\.com\/sitemap\.xml/);
   for (const path of ['/blog/', '/editorial-policy/', ...articleSlugs.map(slug => `/blog/${slug}/`)]) {
     assert.equal(existsSync(publicPath(`${path.slice(1)}index.html`)), true, `missing ${path}`);
     assert.match(sitemap, new RegExp(`https://vid2ppt\\.com${path.replaceAll('/', '\\/')}`));
     assert.match(llms, new RegExp(`https://vid2ppt\\.com${path.replaceAll('/', '\\/')}`));
+  }
+  for (const slug of articleSlugs) {
+    assert.match(feed, new RegExp(`https://vid2ppt\\.com/blog/${slug}/`));
   }
 });

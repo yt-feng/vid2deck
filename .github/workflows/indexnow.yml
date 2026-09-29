@@ -1,0 +1,31 @@
+name: Notify Bing and IndexNow
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+  push:
+    branches: [main, codex/video-notes-growth]
+    paths:
+      - 'public/blog/**'
+      - 'public/sitemap.xml'
+      - 'public/robots.txt'
+      - 'public/llms.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Submit current URLs
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: node scripts/submit-indexnow.mjs

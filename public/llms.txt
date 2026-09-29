@@ -7,6 +7,7 @@ Vid2PPT 是一个浏览器视频整理工具。用户可以导入本地视频、
 - 首页：https://vid2ppt.com/
 - 使用指南：https://vid2ppt.com/guide/
 - 文章库：https://vid2ppt.com/blog/
+- 文章 RSS：https://vid2ppt.com/blog/feed.xml
 - 套餐与价格：https://vid2ppt.com/pricing/
 - 隐私说明：https://vid2ppt.com/privacy/
 - 编辑说明：https://vid2ppt.com/editorial-policy/
@@ -32,3 +33,9 @@ Vid2PPT 是一个浏览器视频整理工具。用户可以导入本地视频、
 ## 说明
 
 文章由 Vid2PPT 编辑部维护，AI 可以参与初稿整理，发布前经过人工复核。产品能力、额度和隐私说明以官网当前页面为准。
+
+## 机器读取入口
+
+- robots：https://vid2ppt.com/robots.txt
+- sitemap：https://vid2ppt.com/sitemap.xml
+- RSS：https://vid2ppt.com/blog/feed.xml

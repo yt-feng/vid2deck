@@ -1,0 +1,73 @@
+name: Daily blog publishing
+
+on:
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+    inputs:
+      publish_date:
+        description: 'UTC date to evaluate (YYYY-MM-DD)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Validate the queue without writing files'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: daily-blog-publishing
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish the next approved article
+        env:
+          PUBLISH_DATE: ${{ inputs.publish_date }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -eu
+          cmd=(node scripts/blog-daily-update.mjs)
+          if [ -n "${PUBLISH_DATE}" ]; then cmd+=(--date "${PUBLISH_DATE}"); fi
+          if [ "${DRY_RUN}" = "true" ]; then cmd+=(--dry-run); fi
+          "${cmd[@]}"
+
+      - name: Validate generated release
+        run: |
+          npm test
+          npm run build
+          git diff --check
+
+      - name: Open a publishing pull request
+        if: ${{ inputs.dry_run != true }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: automation/blog-daily
+          delete-branch: true
+          commit-message: 'content: publish daily blog article'
+          title: 'Publish daily blog article'
+          body: |
+            This pull request contains the next approved article from `content/blog-queue.json`.
+
+            The generator updates the article page, the blog index, `public/sitemap.xml`, and the RSS feed together. Review the generated page and merge when ready.
+          labels: |
+            content
+            seo

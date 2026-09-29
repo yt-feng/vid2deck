@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Vid2PPT 文章</title>
+    <link>https://vid2ppt.com/blog/</link>
+    <description>视频笔记、视频转 PPT、课程复习与培训资料整理方法。</description>
+    <language>zh-CN</language>
+    <lastBuildDate>Tue, 29 Sep 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="https://vid2ppt.com/blog/feed.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>视频笔记怎么做：从课程录屏到可回看的资料</title>
+      <link>https://vid2ppt.com/blog/video-to-notes-guide/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/video-to-notes-guide/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>把页面、时间位置和关键讲解放在同一份资料里，建立适合复习的阅读路径。</description>
+    </item>
+    <item>
+      <title>视频转 PPT 的实际流程：保留图表与时间位置</title>
+      <link>https://vid2ppt.com/blog/video-notes-vs-ppt-pdf/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/video-notes-vs-ppt-pdf/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>从素材准备到页面筛选，了解视频画面如何成为可分享、可回看的演示资料。</description>
+    </item>
+    <item>
+      <title>线上课程怎么整理成笔记：一套适合复习的做法</title>
+      <link>https://vid2ppt.com/blog/course-video-notes/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/course-video-notes/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>使用画面索引、时间位置与文字要点建立课程复习资料。</description>
+    </item>
+    <item>
+      <title>把培训录屏变成团队资料：从一次观看到长期复用</title>
+      <link>https://vid2ppt.com/blog/training-video-to-handout/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/training-video-to-handout/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>保留流程、示例、关键页面和时间位置，建立团队培训资料。</description>
+    </item>
+    <item>
+      <title>视频从哪里来：课程、会议与公开视频的获取路径</title>
+      <link>https://vid2ppt.com/blog/where-to-get-videos/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/where-to-get-videos/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>从课程资料、会议录屏、手机相册、云盘和公开视频开始准备可保存的素材。</description>
+    </item>
+    <item>
+      <title>B 站、YouTube 与本地视频：导入方式怎么选</title>
+      <link>https://vid2ppt.com/blog/youtube-bilibili-local-video/</link>
+      <guid isPermaLink="true">https://vid2ppt.com/blog/youtube-bilibili-local-video/</guid>
+      <pubDate>Tue, 29 Sep 2026 00:00:00 GMT</pubDate>
+      <description>比较链接导入、本地文件和屏幕录制，找到适合当前素材的整理入口。</description>
+    </item>
+  </channel>
+</rss>
