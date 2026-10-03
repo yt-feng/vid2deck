@@ -1,135 +1,41 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
 
-const html = readFileSync(new URL('../public/one-time-pass/index.html', import.meta.url), 'utf8');
+const publicRoot = new URL('../public/', import.meta.url);
+const html = readFileSync(new URL('one-time-pass/index.html', publicRoot), 'utf8');
 
-function pageHarness() {
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const elements = new Map();
-  const requests = [];
-  const checkouts = [];
-  let focused = null;
-  let callback;
-
-  class Element {
-    constructor(attributes = {}) {
-      this.attributes = attributes;
-      this.events = {};
-      this.value = '';
-      this.textContent = '';
-      this.disabled = false;
-      this.className = '';
-    }
-    addEventListener(type, handler) { (this.events[type] ||= []).push(handler); }
-    fire(type) {
-      return Promise.all((this.events[type] || []).map(handler => handler({ preventDefault() {} })));
-    }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    removeAttribute(name) { delete this.attributes[name]; }
-    focus() { focused = this; }
-  }
-
-  for (const match of html.matchAll(/<[^>]+\bid="([^"]+)"[^>]*>/g)) {
-    elements.set(match[1], new Element());
-  }
-
-  const storage = new Map();
-  const storageApi = {
-    getItem(key) { return storage.get(key) ?? null; },
-    setItem(key, value) { storage.set(key, value); }
-  };
-  const config = {
-    PADDLE_CLIENT_TOKEN: 'test-client',
-    PADDLE_PRICE_DAY_PASS: 'day-pass-price'
-  };
-  const window = {
-    location: { search: '', origin: 'http://localhost' },
-    Paddle: {
-      Initialize(options) { callback = options.eventCallback; },
-      Checkout: { open(options) { checkouts.push(options); } }
-    },
-    matchMedia: () => ({ matches: true })
-  };
-  const fetch = async url => {
-    requests.push(url);
-    return { ok: true, json: async () => ({ config }) };
-  };
-
-  vm.runInContext(script, vm.createContext({
-    window,
-    fetch,
-    localStorage: storageApi,
-    URLSearchParams,
-    document: {
-      getElementById: id => elements.get(id),
-      createElement: () => new Element(),
-      head: { appendChild() {} }
-    }
-  }));
-
-  return {
-    elements,
-    requests,
-    checkouts,
-    get focused() { return focused; },
-    paymentEvent(name) { callback({ name }); },
-    flush() { return new Promise(resolve => setImmediate(resolve)); }
-  };
-}
-
-test('one-time pass page is a quiet noindex entry with quantity checkout controls', () => {
-  assert.match(html, /name="robots" content="noindex,nofollow"/);
-  assert.match(html, /Vid2PPT One-time Pass/);
-  assert.match(html, /id="passQuantity"[^>]*min="1"[^>]*max="999"/);
+test('one-time pass remains a quiet noindex entry at its canonical purchase URL', () => {
+  assert.match(html, /<html\s+lang="en"/);
+  assert.match(html, /<meta\s+name="robots"\s+content="noindex,nofollow"\s*\/>/);
+  assert.match(html, /<link\s+rel="canonical"\s+href="https:\/\/vid2ppt\.com\/one-time-pass\/"\s*\/>/);
+  assert.match(html, /<title>Vid2PPT \| 24-hour pass<\/title>/);
+  assert.match(html, /<meta\s+name="description"\s+content="[^"]*Paddle[^"]*"/);
 });
 
-test('one-time pass validates email and sends the entered quantity to Paddle', async () => {
-  const page = pageHarness();
-  const get = id => page.elements.get(id);
-
-  get('passQuantity').value = '10';
-  await get('passQuantity').fire('input');
-  assert.equal(get('passTotal').textContent, '¥99.00');
-  assert.equal(get('passPayButton').textContent, '支付 ¥99.00');
-
-  await get('oneTimePassForm').fire('submit');
-  assert.equal(page.checkouts.length, 0);
-  assert.equal(page.focused, get('passEmail'));
-  assert.equal(get('passEmail').attributes['aria-invalid'], 'true');
-
-  get('passEmail').value = 'buyer@example.test';
-  await get('oneTimePassForm').fire('submit');
-  await get('oneTimePassForm').fire('submit');
-  await page.flush();
-
-  assert.equal(page.requests.length, 1);
-  assert.equal(page.checkouts.length, 1);
-  assert.equal(page.checkouts[0].items.length, 1);
-  assert.equal(page.checkouts[0].items[0].priceId, 'day-pass-price');
-  assert.equal(page.checkouts[0].items[0].quantity, 10);
-  assert.equal(page.checkouts[0].customer.email, 'buyer@example.test');
-  assert.equal(page.checkouts[0].customData.plan, 'day_pass');
-  assert.equal(page.checkouts[0].customData.source, 'one_time_pass_page');
-  assert.equal(page.checkouts[0].customData.order_kind, 'one_time_pass');
-  assert.equal(page.checkouts[0].customData.quantity, 10);
-  assert.equal(page.checkouts[0].settings.successUrl, 'http://localhost/one-time-pass/?checkout=success');
-
-  page.paymentEvent('checkout.closed');
-  assert.equal(get('passPayButton').disabled, false);
-  assert.match(get('passStatus').textContent, /支付窗口已关闭/);
+test('one-time pass loads shared localization before the deferred payment runtime', () => {
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 2, 'the entry must use the shared runtime without a duplicate inline checkout');
+  assert.match(scripts[0][1], /\bsrc="\/global-language\.js"/);
+  assert.doesNotMatch(scripts[0][1], /\b(?:async|defer)\b/);
+  assert.match(scripts[1][1], /\bsrc="\/global-page\.js"/);
+  assert.match(scripts[1][1], /\bdefer\b/);
+  for (const script of scripts) assert.equal(script[2].trim(), '');
+  assert.match(html, /<link\s+rel="stylesheet"\s+href="\/global-pages\.css"/);
+  for (const file of ['global-language.js', 'global-page.js', 'global-pages.css']) {
+    assert.ok(readFileSync(new URL(file, publicRoot), 'utf8').trim(), `${file} must exist at the entry's root-relative asset URL`);
+  }
+  const runtime = readFileSync(new URL('global-page.js', publicRoot), 'utf8');
+  assert.match(runtime, /location\.pathname[^;]*['"]\/one-time-pass['"]/);
+  assert.match(runtime, /source:\s*page\s*===\s*['"]pass['"]\s*\?\s*['"]one_time_pass_page['"]/);
 });
 
-test('one-time pass rejects non-integer and out-of-range quantities', async () => {
-  const page = pageHarness();
-  const get = id => page.elements.get(id);
-  get('passEmail').value = 'buyer@example.test';
-
-  for (const value of ['0', '1.5', '1000']) {
-    get('passQuantity').value = value;
-    await get('oneTimePassForm').fire('submit');
-    assert.equal(page.checkouts.length, 0);
-    assert.match(get('passStatus').textContent, /1–999/);
-  }
+test('the loading fallback has English support guidance without stale prices or checkout controls', () => {
+  assert.match(html, /<main\s+class="global-error">/);
+  const fallback = html.match(/<noscript>([\s\S]*?)<\/noscript>/)?.[1];
+  assert.ok(fallback);
+  assert.match(fallback, /Enable JavaScript/);
+  assert.match(fallback, /href="mailto:info@vid2ppt\.com"/);
+  assert.doesNotMatch(html, /CNY|人民币|¥|￥|9\.90|MAX_QUANTITY|UNIT_PRICE|max="999"/);
+  assert.doesNotMatch(html, /<form\b|<input\b|Paddle\.Checkout/);
 });

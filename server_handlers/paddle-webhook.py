@@ -610,10 +610,10 @@ def purchased_quantity_for_price(value: Any, price_id: str) -> int | None:
             item = as_dict(item_value)
             current_price_id = first_text(as_dict(item.get("price")).get("id"), item.get("price_id"), item.get("priceId"))
             if current_price_id == price_id:
-                total += parse_positive_int(item.get("quantity")) or 0
+                total += parse_positive_int(item.get("quantity"), max_value=999999) or 0
         if total:
             # Alternative item representations describe the same purchase.
-            return min(total, 999)
+            return min(total, 999999)
     return None
 
 

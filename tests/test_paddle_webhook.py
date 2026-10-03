@@ -110,6 +110,34 @@ class PurchasedPriceTests(unittest.TestCase):
                 self.assertTrue(result["processed"])
                 self.assertEqual(save.call_args.args[1]["current_period_end"], expected)
 
+    def test_large_purchased_day_pass_quantities_are_fully_granted(self) -> None:
+        for quantity, expected in ((1000, "2029-06-29T12:00:00Z"), (999999, "4764-08-29T12:00:00Z")):
+            with self.subTest(quantity=quantity), patch.object(webhook, "save_entitlement", side_effect=lambda email, fields: fields) as save, patch.object(webhook, "insert_usage_event"):
+                result = webhook.process_event(self.day_pass_event(quantity))
+                self.assertTrue(result["processed"])
+                self.assertEqual(save.call_args.args[1]["current_period_end"], expected)
+
+    def test_large_purchased_quantity_wins_over_conflicting_customer_claims(self) -> None:
+        event = self.day_pass_event(1000)
+        event["data"]["custom_data"].update({
+            "quantity": 1,
+            "pass_quantity": 1,
+            "billing_quantity": 1,
+            "items": [{"price": {"id": "pri_day"}, "quantity": 999999}],
+        })
+        event["data"]["items"].append({"price": {"id": "pri_other"}, "quantity": 999999})
+        with patch.object(webhook, "save_entitlement", side_effect=lambda email, fields: fields) as save, patch.object(webhook, "insert_usage_event"):
+            webhook.process_event(event)
+        self.assertEqual(save.call_args.args[1]["current_period_end"], "2029-06-29T12:00:00Z")
+
+    def test_purchased_quantity_cap_prevents_datetime_overflow(self) -> None:
+        event = self.day_pass_event(999999999)
+        event["data"]["items"].append({"price": {"id": "pri_day"}, "quantity": 999999999})
+        with patch.object(webhook, "save_entitlement", side_effect=lambda email, fields: fields) as save, patch.object(webhook, "insert_usage_event"):
+            result = webhook.process_event(event)
+        self.assertTrue(result["processed"])
+        self.assertEqual(save.call_args.args[1]["current_period_end"], "4764-08-29T12:00:00Z")
+
     def test_day_pass_quantity_and_purchase_time_ignore_customer_metadata(self) -> None:
         event = self.day_pass_event(1)
         event["data"]["custom_data"].update({
