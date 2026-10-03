@@ -1,0 +1,252 @@
+{
+  "base": "https://vid2ppt.com",
+  "assets_verified": 40,
+  "locales_verified": 33,
+  "paddle_environment": "production",
+  "required_config_present": true,
+  "unauthenticated_entitlement_status": 401,
+  "unsigned_webhook_status": 401,
+  "real_payment_submitted": false,
+  "results": [
+    {
+      "path": "/global-language.js",
+      "status": 200,
+      "sha256": "ab5ab84dfda9ac84f695becd8e36e28271050506d872dcbd75cec1fed3a52021",
+      "matches_local": true
+    },
+    {
+      "path": "/global-page.js",
+      "status": 200,
+      "sha256": "931f39f501e5cc263a1e7f8c8cc4549b3f3ffbf260d5643b1550ee34bca5129a",
+      "matches_local": true
+    },
+    {
+      "path": "/global-home.js",
+      "status": 200,
+      "sha256": "5291f340ad4c6d0e25014e08d9e480fcbcf51bd0bd9fe0f16d45c42d9620db9d",
+      "matches_local": true
+    },
+    {
+      "path": "/global-pages.css",
+      "status": 200,
+      "sha256": "288c9ecd155e63e746d6d9b0f21137ef0b038ab82224996fc3e15d1845328f36",
+      "matches_local": true
+    },
+    {
+      "path": "/welcome/",
+      "status": 200,
+      "sha256": "db62fbb1215673e3e235c5167c3b5348a4b6213b8f9fce913dc4dc767b5eefa8",
+      "matches_local": true
+    },
+    {
+      "path": "/pricing/",
+      "status": 200,
+      "sha256": "e846ee08a6676e2a1fc257cf7cfc2d491fe9db96b7a23908c68e020a92de6d7b",
+      "matches_local": true
+    },
+    {
+      "path": "/one-time-pass/",
+      "status": 200,
+      "sha256": "b3c5b206ba5864ea59ce7ceb1c89f7a360a65f1d1a0f8f4314b664f17eb470ce",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ar.json",
+      "status": 200,
+      "sha256": "763b500245014adc81e4688b18fd7e978374fd3bdc948184d60991aefdd048e4",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/bn.json",
+      "status": 200,
+      "sha256": "8c55383b8f3e286fabf788ad5b6a0e58f48e377e2eb7753499c4998d7219e53e",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/cs.json",
+      "status": 200,
+      "sha256": "22bccb458e2ad2a30868aad5741b1e31069f88483dbdc34fcf6fc4bee9e1a615",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/da.json",
+      "status": 200,
+      "sha256": "8948c1ee7dee0c61eb7cdcbcd0dcc5f4bd6a7d0578e8bbb8d471e67097ac2821",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/de.json",
+      "status": 200,
+      "sha256": "78689d6c076d6440a4148e6c048c63a2a33aa4b1d698e91893eee4b1a0b2d911",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/el.json",
+      "status": 200,
+      "sha256": "7f78818ff5e5edf5af8ac65950a1f8fbfccb656579ebf188d189cf1fc05a5450",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/en.json",
+      "status": 200,
+      "sha256": "f74da9a1c28be44999aeba33fcc2d5751416b5531c9512fa1072610d248ef9ca",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/es.json",
+      "status": 200,
+      "sha256": "52c95920c8fed82cc67532ac1f4ef68a762119f9494e109c65c7866110ffc31e",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/fi.json",
+      "status": 200,
+      "sha256": "b397d46de9279d07c8d7c475f3f37bc78e73d6ea45f58c5396c36a1b1804953d",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/fr.json",
+      "status": 200,
+      "sha256": "63cd3ed1e2652e013392f8086e76bc32791635b856b7f81224e590651c551b6d",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/he.json",
+      "status": 200,
+      "sha256": "77b753d1746632a95033442b85d14a412882db9538497a863a18c829aeadde76",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/hi.json",
+      "status": 200,
+      "sha256": "d2391194d97581c0cff0a61fcc77432e225ac213cc329315bc0bfd421acd4f95",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/hu.json",
+      "status": 200,
+      "sha256": "f46d030d183853002b02c0c40d980d5209e286fe0dd9e397816a829f0999be7f",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/id.json",
+      "status": 200,
+      "sha256": "0bb427acff1540f9432838345c3d80ca9551c305e0cae5fcbd3e42233abe61ab",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/it.json",
+      "status": 200,
+      "sha256": "d5a256b15fd94d4796167efcfaa5cc16cb89dc7af6a017b2f1c92e0dd71d5ec2",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ja.json",
+      "status": 200,
+      "sha256": "139c8c55f915e51118d77726bf7c19a634cbc8b141364cc2816d6325368f79a8",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ko.json",
+      "status": 200,
+      "sha256": "6f0e7c6a7d6382f5c3ae5a9316d106ca041593d0ffb9564b6659cf63fc4b75b5",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ms.json",
+      "status": 200,
+      "sha256": "9deba9439a0e7e6e9f5766f127d25738e775d70e44665d09ea6281ef01f31953",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/nl.json",
+      "status": 200,
+      "sha256": "5e595d4ed16a8f00757dd2b0bfd3cce7d24a9f19ea848de0ecc0f5aebffe16c6",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/no.json",
+      "status": 200,
+      "sha256": "91802de020199e05ee9e9558c106e62441e10cceba50a304ac8b9a8350b34e78",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pl.json",
+      "status": 200,
+      "sha256": "e5651220550df2239486ad5734a7c35fb590592548b37248f8681e9b950d80e9",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pt-BR.json",
+      "status": 200,
+      "sha256": "06a53f603f88bcc17ecb21b0c8d9e1bb890179a5c43cbd71908e0e991442d393",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pt.json",
+      "status": 200,
+      "sha256": "a58b3472d3a1949faa2803b8360499ab055f64b897e00c2f07a3832582bdda5b",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ro.json",
+      "status": 200,
+      "sha256": "8cc5bde910fc412a142a6219ffb64a9bc5f4283eb26dae8fedb071ed8e8b176c",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ru.json",
+      "status": 200,
+      "sha256": "602ac87ee7463061b18068a3c9455f2ca9dc7425dc124326e9add9d98e84e923",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/sv.json",
+      "status": 200,
+      "sha256": "54be6aa0311c9bb0d8abfed549b3d517cf48a6e01513f728c17c2e407033ffd3",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/th.json",
+      "status": 200,
+      "sha256": "0c6b76821bab68fd410c507c6b56f01c9c9c5789f48b637370646ddfa71eaba9",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/tl.json",
+      "status": 200,
+      "sha256": "b676d7360581fb377df9f50e99baa08d5307b4ff3d88bf507621e7a32eddc3cb",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/tr.json",
+      "status": 200,
+      "sha256": "ab2532b91c895c7735060ddb0c4942ba1de3ebd9d28bf95a0a8054af3587a507",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/uk.json",
+      "status": 200,
+      "sha256": "3c82ac4c60ec234e7ea8764d0e82b31d1c0948f4eb344f56a5c30e69ca5f4b19",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/vi.json",
+      "status": 200,
+      "sha256": "b18ec336acde35ee49fa99469ef10bdb68840e79c613e495dd6868b08fdb8ccd",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/zh-CN.json",
+      "status": 200,
+      "sha256": "4b403b171880fe9fae6db5b959e3df1b0d24d4983f006e324ead830231e7bb4b",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/zh-TW.json",
+      "status": 200,
+      "sha256": "7272d989872c7bade8a2b014b2d7089f54f1dc530eb5221a9ff41179b67f76d0",
+      "matches_local": true
+    }
+  ]
+}

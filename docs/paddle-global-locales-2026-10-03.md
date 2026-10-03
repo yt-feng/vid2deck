@@ -27,3 +27,20 @@ Opening a checkout and passing mocked webhook tests do not demonstrate a real ch
 - Existing product, export, blog, contact and API regression suites plus TypeScript/Vite production build.
 
 Paddle locale contract: https://developer.paddle.com/paddle-js/methods/paddle-checkout-open/
+
+## Production acceptance
+
+- Final production deployment: `dpl_6YhpjPizQ6xXG1uzkCNCpYkc38Qy`, READY, aliased to vid2ppt.com and www.vid2ppt.com.
+- Implementation commits: `5a34ea1` and `b0eac01` on `codex/paddle-global-locales-20261003`.
+- Cloud build: 83 Node tests and 81 Python tests passed; Vite production build succeeded.
+- All 33 language JSON files and seven page/scripts/style resources returned successfully and matched local SHA-256/source bytes.
+- Unauthenticated entitlement queries and unsigned webhook deliveries returned 401.
+- Browser opened Pro in English (CN¥39/month), a day pass in French (CN¥9.90), and Lifetime in French (CN¥498). Paddle returned URLs preserved the selected page language. No payment was submitted.
+- Root `/?lang=en` navigated to the English product homepage.
+- Purchase pages use a loading state until the selected language is ready, avoiding an initial Chinese page during switching.
+
+Evidence: `paddle-global-locales-live-2026-10-03.json` and `payment-qa/` screenshots.
+
+## Existing lifecycle follow-up
+
+Subscription events still write a single entitlement row per email. The audit reproduced an older Pro cancellation overwriting a Lifetime entitlement. Refund/adjustment lifecycle handling is also absent. These existing lifecycle behaviors were not changed in this localization release, and a completed real-payment / entitlement-write buyer flow remains unverified.
