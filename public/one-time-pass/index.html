@@ -78,6 +78,9 @@
     }
   </style>
   <link rel="stylesheet" href="/support-pages.css" />
+  <link rel="stylesheet" href="/global-pages.css" />
+  <script src="/global-language.js"></script>
+  <script src="/global-page.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#mainContent">跳到正文</a>
@@ -148,6 +151,7 @@
 
   <script>
     (function () {
+      if (window.Vid2PPTLocale) return;
       var PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
       var AUTH_STORAGE_KEY = 'vid2deck.auth.session';
       var STORAGE_EMAIL_KEY = 'vid2deck.checkout.email';

@@ -2,7 +2,7 @@ import { defineConfig, type Connect } from 'vite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const directoryPages = new Set(['admin', 'sponsor', 'pricing', 'privacy', 'refund', 'terms-and-conditions', 'contact', 'one-time-pass', 'guide', 'blog', 'editorial-policy']);
+const directoryPages = new Set(['admin', 'sponsor', 'pricing', 'privacy', 'refund', 'terms-and-conditions', 'contact', 'one-time-pass', 'guide', 'blog', 'editorial-policy', 'welcome']);
 
 function serveDirectoryPages(middlewares: Connect.Server, root: string): void {
   middlewares.use((request, response, next) => {

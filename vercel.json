@@ -66,5 +66,5 @@
       "maxDuration": 300
     }
   },
-  "buildCommand": "uv run --no-project --with httpx==0.28.1 python -m unittest tests.test_media_temp_cleanup tests.test_service_router tests.test_api_authorization tests.test_contact_api tests.test_video_notes_summary -q && npm test && npm run build"
+  "buildCommand": "uv run --no-project --with httpx==0.28.1 python -m unittest tests.test_media_temp_cleanup tests.test_service_router tests.test_api_authorization tests.test_contact_api tests.test_video_notes_summary tests.test_paddle_webhook -q && npm test && npm run build"
 }

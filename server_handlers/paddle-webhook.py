@@ -501,15 +501,36 @@ def current_period_end_for_plan(plan: str, lifetime: bool, data: dict[str, Any])
     if lifetime:
         return None
 
+    if plan == "day_pass":
+        price_id = (os.getenv("PADDLE_PRICE_DAY_PASS") or "").strip()
+        quantity = purchased_quantity_for_price(data, price_id) or 1
+        purchased_at = purchase_timestamp(data)
+        if purchased_at:
+            return (purchased_at + timedelta(days=quantity)).isoformat().replace("+00:00", "Z")
+        return future_iso(days=quantity)
+
     period = as_dict(data.get("current_billing_period"))
     period_end = first_text(period.get("ends_at"), data.get("next_billed_at"), data.get("billing_period_end"))
     if period_end:
         return period_end
 
-    if plan == "day_pass":
-        return future_iso(days=1)
     if plan == "pro":
         return future_iso(days=31)
+    return None
+
+
+def purchase_timestamp(data: dict[str, Any]) -> datetime | None:
+    # Paddle's billed_at is stable across paid/completed deliveries. Customer
+    # custom data is intentionally excluded from the access-period calculation.
+    for value in (data.get("billed_at"), data.get("completed_at")):
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc)
     return None
 
 
@@ -554,21 +575,46 @@ def normalize_email(value: str) -> str:
     return email
 
 
+def purchased_item_groups(value: Any) -> tuple[Any, ...]:
+    data = as_dict(value)
+    return (
+        data.get("items"),
+        data.get("line_items"),
+        as_dict(data.get("details")).get("line_items"),
+    )
+
+
 def collect_price_ids(value: Any) -> list[str]:
     found: list[str] = []
-
-    def walk(node: Any) -> None:
-        if isinstance(node, dict):
-            for child in node.values():
-                walk(child)
-        elif isinstance(node, list):
-            for child in node:
-                walk(child)
-        elif isinstance(node, str) and node.startswith("pri_") and node not in found:
-            found.append(node)
-
-    walk(value)
+    # Only Paddle's purchased line items identify a paid product. Custom data
+    # is supplied by the checkout customer and must not choose an entitlement.
+    for items in purchased_item_groups(value):
+        if not isinstance(items, list):
+            continue
+        for item_value in items:
+            item = as_dict(item_value)
+            price_id = first_text(as_dict(item.get("price")).get("id"), item.get("price_id"), item.get("priceId"))
+            if price_id and price_id.startswith("pri_") and price_id not in found:
+                found.append(price_id)
     return found
+
+
+def purchased_quantity_for_price(value: Any, price_id: str) -> int | None:
+    if not price_id:
+        return None
+    for items in purchased_item_groups(value):
+        if not isinstance(items, list):
+            continue
+        total = 0
+        for item_value in items:
+            item = as_dict(item_value)
+            current_price_id = first_text(as_dict(item.get("price")).get("id"), item.get("price_id"), item.get("priceId"))
+            if current_price_id == price_id:
+                total += parse_positive_int(item.get("quantity")) or 0
+        if total:
+            # Alternative item representations describe the same purchase.
+            return min(total, 999)
+    return None
 
 
 def quantity_for_price(value: Any, price_id: str, *, max_value: int = 999) -> int | None:

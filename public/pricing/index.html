@@ -96,6 +96,9 @@
     @media (max-width: 980px) { .cards, .service-grid, .checkout-panel, .day-pass { grid-template-columns: 1fr; } .card.featured { transform: none; } .toggle span { padding-inline: 22px; } .nav, .section-title { align-items: flex-start; flex-direction: column; } .checkout-form { grid-template-columns: 1fr; } .day-pass .cta { width: 100%; } }
   </style>
   <link rel="stylesheet" href="/support-pages.css" />
+  <link rel="stylesheet" href="/global-pages.css" />
+  <script src="/global-language.js"></script>
+  <script src="/global-page.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#mainContent">跳到正文</a>
@@ -233,6 +236,7 @@
   </div>
   <script>
     (function () {
+      if (window.Vid2PPTLocale) return;
       var PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
       var AUTH_STORAGE_KEY = 'vid2deck.auth.session';
       var STORAGE_EMAIL_KEY = 'vid2deck.checkout.email';
