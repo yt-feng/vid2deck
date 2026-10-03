@@ -14,7 +14,10 @@ The webhook now handles purchased quantities up to 999999 and continues to use a
 
 - Backend: 84 tests passed locally.
 - Frontend: 103 tests passed locally, including 33-language currency defaults, FX and quote retry, race conditions, large orders and shared-link state.
-- Production acceptance: pending deployment.
+- Production: `dpl_J3mKaffxGDqpCUWqeKXuf85x6R4V`, READY and aliased to `https://vid2ppt.com`; code commit `8c40adc`. Cloud build repeated all 187 tests and passed.
+- All 40 public resources match source bytes, including all 33 dictionaries with 102 keys. Production configuration is complete. Anonymous entitlement requests and unsigned webhooks still return 401.
+- Browser: English/US/1000 units shows approximately USD 1474.45 and actual CNY 9900.00. The real Paddle Checkout displayed 1000 units, CNY 9900.00 due today and the selected US country. Changing language retained the order and displayed EUR 1309.28 in French and JPY 232599 in Japanese.
+- Screenshots and structured live evidence are saved in `docs/payment-qa/` and `paddle-currency-landing-live-2026-10-03.json`.
 - No payment was submitted. Checkout opening is distinct from a completed paid order.
 
 ## Sources

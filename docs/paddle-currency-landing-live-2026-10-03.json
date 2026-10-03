@@ -1,0 +1,288 @@
+{
+  "base": "https://vid2ppt.com",
+  "assets_verified": 40,
+  "locales_verified": 33,
+  "paddle_environment": "production",
+  "required_config_present": true,
+  "unauthenticated_entitlement_status": 401,
+  "unsigned_webhook_status": 401,
+  "real_payment_submitted": false,
+  "results": [
+    {
+      "path": "/global-language.js",
+      "status": 200,
+      "sha256": "a2804dac1fccc5e9845ddb9e48805d2e7cbcbc4d66810e57066bf1b8615ee82a",
+      "matches_local": true
+    },
+    {
+      "path": "/global-page.js",
+      "status": 200,
+      "sha256": "8d9df20ab35709b3cefdc26e8800d3254fe4d232124c6e5378037a0f73da36a0",
+      "matches_local": true
+    },
+    {
+      "path": "/global-home.js",
+      "status": 200,
+      "sha256": "5291f340ad4c6d0e25014e08d9e480fcbcf51bd0bd9fe0f16d45c42d9620db9d",
+      "matches_local": true
+    },
+    {
+      "path": "/global-pages.css",
+      "status": 200,
+      "sha256": "22e9bbabc68b3d22358757640da63939dd54f4d3c808a68e20a4ac5a43c97e63",
+      "matches_local": true
+    },
+    {
+      "path": "/welcome/",
+      "status": 200,
+      "sha256": "db62fbb1215673e3e235c5167c3b5348a4b6213b8f9fce913dc4dc767b5eefa8",
+      "matches_local": true
+    },
+    {
+      "path": "/pricing/",
+      "status": 200,
+      "sha256": "e846ee08a6676e2a1fc257cf7cfc2d491fe9db96b7a23908c68e020a92de6d7b",
+      "matches_local": true
+    },
+    {
+      "path": "/one-time-pass/",
+      "status": 200,
+      "sha256": "a91248df2c051eb5fe3eb88098016776a4e3131adc25d394aca595f2c7155dea",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ar.json",
+      "status": 200,
+      "sha256": "6f50e535d7215665d23d9b1e63a3cf420b7f14f42499312c748df22c4a4b0789",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/bn.json",
+      "status": 200,
+      "sha256": "cd8bdb41c1f1eee671ad164f46058c75cfe328d1dfcdf922c5215a670cb7540f",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/cs.json",
+      "status": 200,
+      "sha256": "8857dbba882020cf3b1cb11a925cde8b5abef5d8c9ccc381b9aa5e33b56176d7",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/da.json",
+      "status": 200,
+      "sha256": "99a23e0aa9b16a6baf074ac3daa1650f1a1a85885ae6d906905eeb50ff372507",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/de.json",
+      "status": 200,
+      "sha256": "549da81afac18604c6fe7a15b3aa0b66ee743c885c18ffca8307fff912449a66",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/el.json",
+      "status": 200,
+      "sha256": "62e61bc33128743bf4e5b5d7eb7cd5055cd0711396d8c786197fb44a888b717a",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/en.json",
+      "status": 200,
+      "sha256": "8df16e46abc72fd362be9f9e596e4acdb11c7f1917da2bc2440dc1a2150655ea",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/es.json",
+      "status": 200,
+      "sha256": "019bcdf2dc2a52fed932a24a75465e630686dc5b30c33488c2194b1689d577f7",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/fi.json",
+      "status": 200,
+      "sha256": "a6632b87622911536a02aa5ed31c141c640548149fe91af46e79bb79fc97a550",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/fr.json",
+      "status": 200,
+      "sha256": "83f4f1c157953a62aca94d910434f1aaa90b6df4a772d8a9e130927a45d562e7",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/he.json",
+      "status": 200,
+      "sha256": "3e41c3362a441f745c830846d49c60f2b74f0049ff2f8b26f05db5f594def433",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/hi.json",
+      "status": 200,
+      "sha256": "928bd73c0d2c56d51eea8cf15ddd8554553e2a2eb932c7b2328e0db253dd5024",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/hu.json",
+      "status": 200,
+      "sha256": "e7a8e789d5381da3340058e59aae9c60d92dd2382095e50e6b17d27ceeb2b5f6",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/id.json",
+      "status": 200,
+      "sha256": "e60ef76d9c482651b86f7773b3792d5b8d6c521411a172944c4655bafa5c52b6",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/it.json",
+      "status": 200,
+      "sha256": "1ef5fbf8706caaa06ca09ee4f88170374d278f0ac766b079ae795cc37380458e",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ja.json",
+      "status": 200,
+      "sha256": "3d751195daf09e0f0a290f6c6c135b9a70c21a0ddb6dacd644669b65c19f0f8b",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ko.json",
+      "status": 200,
+      "sha256": "197e9f64bf073a7c2fdd5870a4f040b72eedb4d437dd213228202848f5d6e9a0",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ms.json",
+      "status": 200,
+      "sha256": "de1e2873d350cacad9b88cffb6fe36590751e93be9097637984f41c306d1f28a",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/nl.json",
+      "status": 200,
+      "sha256": "4b372ecc9cf844a31158170252cb01aeee6d9718c52d3dd73b1a7c2c0d43125e",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/no.json",
+      "status": 200,
+      "sha256": "2829f618fd3dd534da4c029ab075e56677c80e2c5b45b08598eb0da7207f79c2",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pl.json",
+      "status": 200,
+      "sha256": "062d6d5dada5000310ba13bf1bfbe7f24bd2be30fd93cd379f77fcc8ed2e5223",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pt-BR.json",
+      "status": 200,
+      "sha256": "d070b419f43aff7a8aedce9c9d122d70d68c9dad6a8825371f547a20e795b915",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/pt.json",
+      "status": 200,
+      "sha256": "6b4eef4d79f6aead26676029008e8c92e89564e3829e14b8e6bbef65eeade5ad",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ro.json",
+      "status": 200,
+      "sha256": "c802251dcc83802b6a2806b80234f2e217871a826dacda718c81a5e999c4c68c",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/ru.json",
+      "status": 200,
+      "sha256": "1001f7bf62610e5fe8d1b51aeb27da20c73ac40e710dc2f288ae8e7406bfb66e",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/sv.json",
+      "status": 200,
+      "sha256": "f4bcaa81e2f759509128da8ef62cd01676c91b42b5f6a5b6b35a0e26095d1bd5",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/th.json",
+      "status": 200,
+      "sha256": "fc01a239445c0211d5f2c1b09eeeb93c4704364cc3aa435522353c54514b4899",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/tl.json",
+      "status": 200,
+      "sha256": "4dbbd0dfd828ed254dd268152d2c4db96b570adfe2c5c37b5bf08e6a2660bbbc",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/tr.json",
+      "status": 200,
+      "sha256": "567914cb6368125f866cf2aebec9629c37b8ee01fc730b36ba88d32048f50a8b",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/uk.json",
+      "status": 200,
+      "sha256": "5c2de05ed22f96d291f4e3f9d416733af402a5d4f335a319db7e12cfb5f23a35",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/vi.json",
+      "status": 200,
+      "sha256": "4a1f0213f6afade3a932c92db718b99a2e1d0e3f1f0169bfa78bd22fc914aacf",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/zh-CN.json",
+      "status": 200,
+      "sha256": "5043f463b2381a0759d1c7f3d5118ebf73424d84cb6618bac8e8dd17239585d9",
+      "matches_local": true
+    },
+    {
+      "path": "/locales/zh-TW.json",
+      "status": 200,
+      "sha256": "d5ad557dac6507e9e0b265da3839d3614b17fbf93c3f87b9934fa6a8cc7a2cb8",
+      "matches_local": true
+    }
+  ],
+  "deployment_id": "dpl_J3mKaffxGDqpCUWqeKXuf85x6R4V",
+  "code_commit": "8c40adc",
+  "paddle_account_changed": false,
+  "checkout_verified": {
+    "quantity": 1000,
+    "billing_country": "US",
+    "locale": "en",
+    "charge_currency": "CNY",
+    "charge_total": "9900.00",
+    "submitted_payment": false
+  },
+  "reference_currency_scenarios": [
+    {
+      "locale": "en",
+      "currency": "USD",
+      "quantity": 1000,
+      "unit": "1.47",
+      "total": "1474.45"
+    },
+    {
+      "locale": "fr",
+      "currency": "EUR",
+      "quantity": 1000,
+      "unit": "1.31",
+      "total": "1309.28"
+    },
+    {
+      "locale": "ja",
+      "currency": "JPY",
+      "quantity": 1000,
+      "unit": "233",
+      "total": "232599"
+    }
+  ],
+  "exchange_rate_date": "2026-10-03",
+  "live_language_switch_preserved_quantity": true
+}
