@@ -239,6 +239,7 @@
     document.title = 'Vid2PPT | ' + t(page === 'welcome' ? 'title' : page === 'pass' ? 'day_pass' : 'pricing');
     var meta = document.querySelector('meta[name="description"]'); if (meta) meta.setAttribute('content', t(page === 'welcome' ? 'lead' : page === 'pass' ? 'dayDesc' : 'freeIntro'));
     document.body.innerHTML = '<div class="global-wrap">' + nav() + '<main id="globalMain">' + (page === 'welcome' ? welcome() : page === 'pricing' ? pricing() : pass()) + '</main>' + footer() + '</div>';
+    if (document.documentElement.removeAttribute) document.documentElement.removeAttribute('data-global-loading');
     document.getElementById('languageControl').appendChild(locale.selector(t('language')));
     if (page !== 'welcome') bindCheckout();
   }
@@ -259,6 +260,7 @@
     render();
   }
   boot().catch(function () {
+    if (document.documentElement.removeAttribute) document.documentElement.removeAttribute('data-global-loading');
     document.body.innerHTML = '<main class="global-error"><h1>Vid2PPT</h1><p>Unable to load this page. Please reload or contact <a href="mailto:info@vid2ppt.com">info@vid2ppt.com</a>.</p></main>';
   });
 }());

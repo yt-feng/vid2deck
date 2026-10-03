@@ -40,6 +40,9 @@
   }
   var query = new URLSearchParams(root.location.search).get('lang');
   var current = resolveLanguage(query, readSaved(), (root.navigator && (root.navigator.languages || [root.navigator.language])) || []);
+  if (/^\/(?:pricing|one-time-pass)\/?$/.test(root.location.pathname) && root.document && root.document.documentElement && root.document.documentElement.setAttribute) {
+    root.document.documentElement.setAttribute('data-global-loading', 'true');
+  }
   function save(locale) { try { root.localStorage.setItem(storageKey, normalize(locale) || 'en'); } catch (error) {} }
   if (normalize(query)) save(current);
   function localizedUrl(path, locale) {
