@@ -689,6 +689,8 @@ test('plus and minus change whole pass quantities with debounced quotes and sele
 test('the four RMB budget presets show actual payable amounts and select their quoted pass counts', async () => {
   const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN' }); await page.flush();
   assert.equal(page.presets.length, 4);
+  assert.deepEqual(page.presets.map(button => button.querySelector('.preset-code').textContent), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(page.presets.map(button => button.getAttribute('data-budget')), ['66', '178', '666', '999']);
   assert.equal(page.elements.has('globalShare'), false);
   assert.doesNotMatch(page.document.body.textContent, /Purchase link/);
   for (const [budget, count, total] of [[66, 7, 6930], [178, 18, 17820], [666, 68, 67320], [999, 101, 99990]]) {
@@ -867,4 +869,33 @@ test('a zero provider unit price disables budget presets without rendering infin
   page.presets[0].fire('click'); await page.flush();
   assert.equal(page.elements.get('globalQuantity').value, '1');
   assert.equal(page.previews.length, 1);
+});
+
+test('English and Chinese pages keep payment implementation out of visible copy while retaining actual charges and checkout data', async () => {
+  for (const lang of ['en', 'zh-CN']) {
+    for (const path of ['/welcome/', '/pricing/', '/one-time-pass/']) {
+      const pass = path === '/one-time-pass/';
+      const page = harness({ lang, path, query: pass ? 'quantity=10' : '' }); await page.flush();
+      assert.doesNotMatch(page.document.body.textContent, /Paddle|webhook|付款回调|支付回调/i, `${lang} ${path}`);
+      assert.equal(page.document.querySelector('.payment-trust'), null);
+      if (path === '/welcome/') continue;
+      if (pass) {
+        assert.deepEqual(page.presets.map(button => button.querySelector('.preset-code').textContent), ['A', 'B', 'C', 'D']);
+        assert.deepEqual(page.presets.map(button => button.getAttribute('data-budget')), ['66', '178', '666', '999']);
+      }
+      if (!pass) page.buttons.find(button => button.getAttribute('data-plan') === 'pro').fire('click');
+      const expected = formattedMinor(pass ? 9900 : 3900, 'CNY', lang) + ' (CNY)';
+      assert.ok(page.elements.get('globalChargeSummary').textContent.includes(expected), `${lang} ${path} actual charge`);
+      assert.equal(page.elements.get('globalQuoteStatus').textContent, lang === 'en' ? 'USD' : 'CNY');
+      page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+      assert.equal(page.initializations.length, 1);
+      assert.equal(page.checkouts.length, 1);
+      assert.equal(page.checkouts[0].items[0].priceId, pass ? 'day-price' : 'pro-price');
+      assert.equal(page.checkouts[0].customData.quoted_currency, 'CNY');
+      assert.equal(page.checkouts[0].customData.site_locale, lang);
+      page.initializations[0].eventCallback({ name: 'checkout.completed' }); await page.flush();
+      assert.ok(page.elements.get('globalPaymentStatus').textContent);
+      assert.doesNotMatch(page.document.body.textContent, /Paddle|webhook|付款回调|支付回调/i, `${lang} ${path} completed`);
+    }
+  }
 });
