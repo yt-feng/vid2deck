@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-04",
+  "sourceCommit": "672908939735e9095e5708640261b9d8a19bf0d0",
+  "deploymentId": "dpl_Bs4aiwMPdJuxgg8K4wTyWr97cEZq",
+  "deploymentStatus": "READY",
+  "deploymentStatusProvenance": "Parent deployment CLI returned successful production deployment",
+  "allMatched": true,
+  "resources": [
+    {
+      "path": "/global-page.js",
+      "url": "https://vid2ppt.com/global-page.js",
+      "status": 200,
+      "liveBytes": 46362,
+      "sourceBytes": 46362,
+      "liveSha256": "fd79d484c019af3d3c214dc15d075ee51eac2b4d0840ef951b7cd94713126967",
+      "sourceSha256": "fd79d484c019af3d3c214dc15d075ee51eac2b4d0840ef951b7cd94713126967",
+      "match": true
+    },
+    {
+      "path": "/global-pages.css",
+      "url": "https://vid2ppt.com/global-pages.css",
+      "status": 200,
+      "liveBytes": 20601,
+      "sourceBytes": 20601,
+      "liveSha256": "bfb832db166413d7ca3993d3261518df060848d7d8dd27b9ce4631d492a6e5c9",
+      "sourceSha256": "bfb832db166413d7ca3993d3261518df060848d7d8dd27b9ce4631d492a6e5c9",
+      "match": true
+    }
+  ]
+}

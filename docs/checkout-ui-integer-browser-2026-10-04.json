@@ -1,0 +1,109 @@
+{
+  "source_commit": "672908939735e9095e5708640261b9d8a19bf0d0",
+  "deployment_id": "dpl_Bs4aiwMPdJuxgg8K4wTyWr97cEZq",
+  "cases": [
+    {
+      "charge": "实际扣款：¥673 (CNY)。",
+      "height": 720,
+      "overflow": 0,
+      "presets": [
+        {
+          "budget": "66",
+          "code": "A",
+          "color": "rgb(36, 95, 192)",
+          "font": "24px",
+          "label": "≈ ¥66",
+          "pressed": "false",
+          "quantity": "7",
+          "total": "¥69"
+        },
+        {
+          "budget": "178",
+          "code": "B",
+          "color": "rgb(152, 82, 14)",
+          "font": "24px",
+          "label": "≈ ¥178",
+          "pressed": "false",
+          "quantity": "18",
+          "total": "¥178"
+        },
+        {
+          "budget": "666",
+          "code": "C",
+          "color": "rgb(116, 53, 173)",
+          "font": "24px",
+          "label": "≈ ¥666",
+          "pressed": "true",
+          "quantity": "68",
+          "total": "¥673"
+        },
+        {
+          "budget": "999",
+          "code": "D",
+          "color": "rgb(22, 113, 109)",
+          "font": "24px",
+          "label": "≈ ¥999",
+          "pressed": "false",
+          "quantity": "101",
+          "total": "¥1,000"
+        }
+      ],
+      "providerCopy": false,
+      "quantity": "68",
+      "test": "Chinese default C desktop",
+      "total": "¥673",
+      "unit": "¥10",
+      "width": 1280
+    },
+    {
+      "paymentEnabled": true,
+      "quantity": "101",
+      "selectedCode": "D",
+      "test": "Select D then quote",
+      "total": "¥1,000"
+    },
+    {
+      "columns": "177.5px 177.5px",
+      "overflow": 0,
+      "quantity": "68",
+      "selectedCode": "C",
+      "test": "483px C badge breakpoint",
+      "width": 483
+    },
+    {
+      "columns": "151px 151px",
+      "height": 844,
+      "overflow": 0,
+      "quantity": "68",
+      "selectedCode": "C",
+      "test": "Chinese C mobile",
+      "total": "¥673",
+      "width": 390
+    },
+    {
+      "lang": "en",
+      "overflow": 0,
+      "prices": [
+        {
+          "plan": "free",
+          "text": "Free"
+        },
+        {
+          "plan": "pro",
+          "text": "≈ $6"
+        },
+        {
+          "plan": "lifetime",
+          "text": "≈ $74"
+        },
+        {
+          "plan": "day_pass",
+          "text": "≈ $1"
+        }
+      ],
+      "test": "English pricing integer values"
+    }
+  ],
+  "payment_submitted": false,
+  "viewport_override_restored": true
+}
