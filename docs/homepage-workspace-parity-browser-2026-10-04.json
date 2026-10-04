@@ -1,0 +1,24 @@
+{
+  "source": "b9b06b8ae5b84107f88e033a3e71344dbbed15a5",
+  "deployment": "dpl_CqHF7HZ86NB8yoXxrNQbZZwJCKtN",
+  "date": "2026-10-04",
+  "chineseHome": {
+    "faqCount": 0,
+    "heading": "把视频变成便于回顾的笔记。",
+    "lang": "zh-CN",
+    "overflow": 0,
+    "preview": true,
+    "privacyNote": "用心保护您的内容。了解我们如何保护隐私",
+    "url": "https://vid2ppt.com/welcome/?lang=zh-CN&country=CN&currency=CNY"
+  },
+  "englishWorkspace": {
+    "lang": "en",
+    "ocr": "Recognize text",
+    "overflow": 0,
+    "rail": "Studio",
+    "status": "Created PPTX with 3 pages. Check your browser downloads. You can export other formats too.",
+    "url": "https://vid2ppt.com/?lang=en#start",
+    "visibleChinese": false
+  },
+  "console": []
+}
