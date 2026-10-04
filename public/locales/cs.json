@@ -6,8 +6,8 @@
   "pricing": "Tarify a ceny",
   "language": "Jazyk",
   "back": "Zpět do pracovního prostoru",
-  "local": "Místní videa se zpracovávají na vašem zařízení.",
-  "ai": "Vytvoření hlavních bodů pomocí AI vyžaduje přihlášení a odesílá potřebný text přepisu službě AI.",
+  "local": "Uchovejte původní snímky a časové značky, abyste mohli obsah spolehlivě ověřovat.",
+  "ai": "Proměňte nejdůležitější části přepisu v poznámky, ke kterým se můžete vracet.",
   "exports": "Ukládejte poznámky v HTML nebo Markdownu, soubory PDF, PPTX a obrázky.",
   "stepsTitle": "Od jednoho videa k užitečným poznámkám",
   "step1Title": "Importujte video",
@@ -23,7 +23,7 @@
   "day_pass": "Přístup na 24 hodin",
   "freeDesc": "Pro občasné zkoušení krátkých videí.",
   "proDesc": "Pro pravidelné kurzy, schůzky a delší videa.",
-  "lifetimeDesc": "Jednorázový nákup pro průběžné používání po dobu provozu služby.",
+  "lifetimeDesc": "Jeden nákup pro trvalý přístup.",
   "dayDesc": "Dočasný přístup: 20 převodů, 300 stránek OCR a 120 minut přepisu během 24 hodin. Videa do 10 minut; vždy jeden soubor.",
   "monthly": "měsíčně · obnovované předplatné",
   "oneOff": "jednorázový nákup · bez automatického obnovení",
@@ -36,7 +36,7 @@
   "transcription": "Přepis: {value}",
   "batch": "Dávkové zpracování",
   "single": "Jeden soubor najednou",
-  "unlimited": "Bez omezení tarifu; skutečné zpracování závisí na vašem zařízení, prohlížeči a kódování videa.",
+  "unlimited": "Bez omezení daných tarifem.",
   "choose": "Vybrat tarif {plan}",
   "selected": "Vybraný tarif: {plan}",
   "buyEmail": "E-mail pro nákup",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Zvýšit počet",
   "budgetPresets": "Vyberte přibližný rozpočet",
   "presetPasses": "Počet přístupů: {count}",
-  "accountTools": "Už jste zaplatili? Zkontrolujte svůj přístup"
+  "accountTools": "Už jste zaplatili? Zkontrolujte svůj přístup",
+  "privacyNote": "Váš obsah, zpracovaný s péčí.",
+  "privacyDetails": "Jak chráníme vaše soukromí"
 }

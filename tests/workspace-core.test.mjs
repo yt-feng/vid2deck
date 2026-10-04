@@ -22,7 +22,20 @@ const constantSource = mainAst.statements.filter((node) => ts.isVariableStatemen
 const coreJavaScript = ts.transpileModule(`${constantSource}\n${functionSource}`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext }
 }).outputText;
-const videoNotesContext = createContext({ exports: {} });
+const workspaceI18nContext = createContext({
+  exports: {}, console,
+  require: (name) => {
+    assert.equal(name, './workspaceEnglish.json');
+    return JSON.parse(readFileSync(resolve(root, 'src/workspaceEnglish.json'), 'utf8'));
+  }
+});
+runInContext(ts.transpileModule(readFileSync(resolve(root, 'src/workspaceI18n.ts'), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true }
+}).outputText, workspaceI18nContext);
+const videoNotesContext = createContext({ exports: {}, require: (name) => {
+  assert.equal(name, './workspaceI18n');
+  return workspaceI18nContext.exports;
+} });
 runInContext(ts.transpileModule(readFileSync(resolve(root, 'src/videoNotes.ts'), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
 }).outputText, videoNotesContext);
@@ -41,6 +54,9 @@ function workspace(overrides = {}) {
     authSession: null, pendingNotesFile: null, resultView: 'pages',
     buildVideoNoteHtml: videoNotesContext.exports.buildVideoNoteHtml,
     buildVideoNoteMarkdown: videoNotesContext.exports.buildVideoNoteMarkdown,
+    ui: workspaceI18nContext.exports.ui,
+    serviceMessage: workspaceI18nContext.exports.serviceMessage,
+    workspaceLanguage: workspaceI18nContext.exports.workspaceLanguage,
     homeView: {}, workspaceView: {}, workspaceMode: 'video',
     isDemoProject: false, undoSnapshot: null, activeSlideId: null, activeTextBoxId: null,
     isExtracting: false, isBatchProcessing: false, isUrlDownloading: false,

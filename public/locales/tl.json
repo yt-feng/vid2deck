@@ -6,8 +6,8 @@
   "pricing": "Mga plano at presyo",
   "language": "Wika",
   "back": "Bumalik sa lugar ng paggawa",
-  "local": "Pinoproseso sa iyong aparato ang mga lokal na bidyo.",
-  "ai": "Para sa mahahalagang puntong binubuo ng AI, kailangang pumasok sa iyong account. Ipinapadala sa serbisyo ng AI ang kinakailangang teksto ng transkripsiyon.",
+  "local": "Panatilihin ang orihinal na mga frame at timestamp para sa maaasahang pagrepaso.",
+  "ai": "Gawing mga tala na maaari mong balikan ang mahahalagang punto ng transcript.",
   "exports": "I-save bilang mga talang HTML o Markdown, PDF, PPTX at mga larawan.",
   "stepsTitle": "Mula sa isang bidyo tungo sa kapaki-pakinabang na mga tala",
   "step1Title": "Magdagdag ng bidyo",
@@ -23,7 +23,7 @@
   "day_pass": "24-oras na pahintulot",
   "freeDesc": "Para sa paminsan-minsang paggamit ng maiikling bidyo.",
   "proDesc": "Para sa regular na mga kurso, pagpupulong at mas mahahabang bidyo.",
-  "lifetimeDesc": "Isang pagbili para sa patuloy na paggamit habang tumatakbo ang serbisyo.",
+  "lifetimeDesc": "Isang pagbili para sa tuloy-tuloy na access.",
   "dayDesc": "Pansamantalang paggamit: 20 pagbuo ng mga tala mula sa bidyo, 300 pahina ng OCR at 120 minuto ng transkripsiyon sa loob ng 24 oras. Hanggang 10 minuto ang bidyo; isang talaksan lamang sa bawat pagkakataon.",
   "monthly": "bawat buwan · paulit-ulit na suskripsiyon",
   "oneOff": "isang beses na pagbili · walang awtomatikong pag-renew",
@@ -36,7 +36,7 @@
   "transcription": "Transkripsiyon: {value}",
   "batch": "Sabay-sabay na pagproseso",
   "single": "Isang talaksan sa bawat pagkakataon",
-  "unlimited": "Walang limitasyon sa plano; nakadepende ang aktuwal na pagproseso sa iyong aparato, browser at paraan ng pag-encode ng bidyo.",
+  "unlimited": "Walang limitasyon sa plano.",
   "choose": "Piliin ang {plan}",
   "selected": "Napili: {plan}",
   "buyEmail": "Email ng pagbili",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Dagdagan ang dami",
   "budgetPresets": "Pumili ng tinatayang badyet",
   "presetPasses": "{count} na pahintulot",
-  "accountTools": "Nakapagbayad na? Suriin ang iyong pahintulot"
+  "accountTools": "Nakapagbayad na? Suriin ang iyong pahintulot",
+  "privacyNote": "Pinangangalagaan namin ang iyong nilalaman.",
+  "privacyDetails": "Paano namin pinoprotektahan ang iyong privacy"
 }

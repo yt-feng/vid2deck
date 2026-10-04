@@ -6,8 +6,8 @@
   "pricing": "Plany i ceny",
   "language": "Język",
   "back": "Wróć do obszaru roboczego",
-  "local": "Lokalne filmy są przetwarzane na Twoim urządzeniu.",
-  "ai": "Tworzenie najważniejszych punktów z pomocą AI wymaga zalogowania i wysyła niezbędny tekst transkrypcji do usługi AI.",
+  "local": "Zachowaj oryginalne kadry i znaczniki czasu, aby z pewnością sprawdzać treść.",
+  "ai": "Zamień najważniejsze fragmenty transkrypcji w notatki, do których możesz wracać.",
   "exports": "Zapisuj notatki w HTML lub Markdown, PDF, PPTX i obrazy.",
   "stepsTitle": "Od filmu do przydatnych notatek",
   "step1Title": "Zaimportuj film",
@@ -23,7 +23,7 @@
   "day_pass": "Karnet 24-godzinny",
   "freeDesc": "Do okazjonalnego wypróbowywania krótkich filmów.",
   "proDesc": "Do regularnych kursów, spotkań i dłuższych filmów.",
-  "lifetimeDesc": "Jeden zakup zapewniający dalsze korzystanie, dopóki usługa działa.",
+  "lifetimeDesc": "Jeden zakup zapewniający stały dostęp.",
   "dayDesc": "Dostęp tymczasowy: 20 konwersji, 300 stron OCR i 120 minut transkrypcji w ciągu 24 godzin. Filmy do 10 minut; jeden plik naraz.",
   "monthly": "miesięcznie · subskrypcja odnawialna",
   "oneOff": "zakup jednorazowy · bez automatycznego odnowienia",
@@ -36,7 +36,7 @@
   "transcription": "Transkrypcja: {value}",
   "batch": "Przetwarzanie zbiorcze",
   "single": "Jeden plik naraz",
-  "unlimited": "Bez limitu w ramach planu; faktyczne przetwarzanie zależy od urządzenia, przeglądarki i kodowania filmu.",
+  "unlimited": "Bez ograniczeń wynikających z planu.",
   "choose": "Wybierz {plan}",
   "selected": "Wybrany plan: {plan}",
   "buyEmail": "Adres e-mail użyty przy zakupie",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Zwiększ liczbę",
   "budgetPresets": "Wybierz przybliżony budżet",
   "presetPasses": "Liczba karnetów: {count}",
-  "accountTools": "Już zapłacono? Sprawdź swój dostęp"
+  "accountTools": "Już zapłacono? Sprawdź swój dostęp",
+  "privacyNote": "Twoje treści pod dobrą opieką.",
+  "privacyDetails": "Jak chronimy Twoją prywatność"
 }

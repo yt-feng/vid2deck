@@ -6,8 +6,8 @@
   "pricing": "Plans and pricing",
   "language": "Language",
   "back": "Back to the workspace",
-  "local": "Local videos are processed on your device.",
-  "ai": "AI highlights require sign-in and send the necessary transcript text to the AI service.",
+  "local": "Keep original frames and timestamps for confident review.",
+  "ai": "Turn transcript highlights into notes you can revisit.",
   "exports": "Save HTML or Markdown notes, PDF, PPTX and images.",
   "stepsTitle": "From one video to useful notes",
   "step1Title": "Import a video",
@@ -23,7 +23,7 @@
   "day_pass": "24-hour pass",
   "freeDesc": "Try short videos occasionally.",
   "proDesc": "Regular courses, meetings and longer videos.",
-  "lifetimeDesc": "One purchase for ongoing use while the service operates.",
+  "lifetimeDesc": "One purchase for ongoing access.",
   "dayDesc": "Temporary access: 20 conversions, 300 OCR pages and 120 transcription minutes in 24 hours. Videos up to 10 minutes; one file at a time.",
   "monthly": "per month · recurring subscription",
   "oneOff": "one-time purchase · no automatic renewal",
@@ -36,7 +36,7 @@
   "transcription": "Transcription: {value}",
   "batch": "Batch processing",
   "single": "One file at a time",
-  "unlimited": "No plan limit; actual processing depends on your device, browser and video encoding.",
+  "unlimited": "No plan limit.",
   "choose": "Choose {plan}",
   "selected": "Selected: {plan}",
   "buyEmail": "Purchase email",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Increase quantity",
   "budgetPresets": "Choose an approximate budget",
   "presetPasses": "{count} passes",
-  "accountTools": "Already paid? Check your access"
+  "accountTools": "Already paid? Check your access",
+  "privacyNote": "Your content, handled with care.",
+  "privacyDetails": "How we protect your privacy"
 }

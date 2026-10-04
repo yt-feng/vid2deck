@@ -6,8 +6,8 @@
   "pricing": "方案與價格",
   "language": "語言",
   "back": "返回工作區",
-  "local": "本機影片會在您的裝置上處理。",
-  "ai": "AI 重點摘要需要登入，並將必要的轉錄文字傳送至 AI 服務。",
+  "local": "保留原始畫面與時間戳，方便核對與回顧。",
+  "ai": "將逐字稿重點整理成隨時可回顧的筆記。",
   "exports": "可儲存為 HTML 或 Markdown 筆記、PDF、PPTX 及圖片。",
   "stepsTitle": "從一段影片到實用筆記",
   "step1Title": "匯入影片",
@@ -23,7 +23,7 @@
   "day_pass": "24 小時通行證",
   "freeDesc": "適合偶爾處理短影片。",
   "proDesc": "適合經常處理課程、會議及較長的影片。",
-  "lifetimeDesc": "一次購買，在服務營運期間持續使用。",
+  "lifetimeDesc": "一次購買，持續使用。",
   "dayDesc": "臨時使用：24 小時內可轉換 20 次、進行 300 頁 OCR 文字辨識，並轉錄 120 分鐘。影片最長 10 分鐘，每次處理一個檔案。",
   "monthly": "每月 · 自動續訂",
   "oneOff": "一次性購買 · 不自動續訂",
@@ -36,7 +36,7 @@
   "transcription": "轉錄：{value}",
   "batch": "批次處理",
   "single": "每次處理一個檔案",
-  "unlimited": "方案不設上限；實際處理能力取決於您的裝置、瀏覽器及影片編碼。",
+  "unlimited": "無方案限制。",
   "choose": "選擇{plan}",
   "selected": "已選擇：{plan}",
   "buyEmail": "購買電子郵件",
@@ -105,5 +105,7 @@
   "increaseQuantity": "增加數量",
   "budgetPresets": "選擇大致預算",
   "presetPasses": "{count} 張通行證",
-  "accountTools": "已付款？查看使用權益"
+  "accountTools": "已付款？查看使用權益",
+  "privacyNote": "用心保護您的內容。",
+  "privacyDetails": "了解我們如何保護隱私"
 }

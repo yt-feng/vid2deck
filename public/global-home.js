@@ -9,8 +9,10 @@
     location.replace(checkout.toString());
     return;
   }
-  if (!/^#(?:start|account|workspace)$/.test(location.hash) && locale.current !== 'zh-CN') {
-    location.replace(locale.url('/welcome/'));
+  if (!/^#(?:start|account|workspace)$/.test(location.hash)) {
+    var welcome = new URL(locale.url('/welcome/'), location.origin);
+    ['country', 'currency'].forEach(function (key) { if (params.has(key)) welcome.searchParams.set(key, params.get(key)); });
+    location.replace(welcome.pathname + welcome.search);
     return;
   }
   var nav = document.querySelector('.site-nav');
@@ -43,13 +45,10 @@
     menu.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') { menu.open = false; summary.focus(); }
     });
-    if (locale.current !== 'zh-CN') {
-      var link = document.createElement('a');
-      link.href = locale.url('/welcome/'); link.textContent = 'Vid2PPT · ' + locale.languageLabel(locale.current);
-      nav.appendChild(link);
-    }
+    var brand = nav.querySelector('.site-brand');
+    if (brand) brand.href = locale.url('/welcome/');
   }
-  document.querySelectorAll('a[href^="/pricing"], a[href^="/one-time-pass"]').forEach(function (link) {
+  document.querySelectorAll('a[href^="/pricing"], a[href^="/one-time-pass"], a[href^="/privacy"], a[href^="/terms-and-conditions"], a[href^="/refund"]').forEach(function (link) {
     link.href = locale.url(link.getAttribute('href'));
   });
 }());

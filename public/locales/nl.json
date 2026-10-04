@@ -6,8 +6,8 @@
   "pricing": "Abonnementen en prijzen",
   "language": "Taal",
   "back": "Terug naar de werkruimte",
-  "local": "Lokale video’s worden op je apparaat verwerkt.",
-  "ai": "Voor AI-kernpunten moet je inloggen. De benodigde transcriptietekst wordt naar de AI-dienst verstuurd.",
+  "local": "Bewaar originele frames en tijdstempels om de inhoud met vertrouwen te controleren.",
+  "ai": "Zet de belangrijkste passages uit het transcript om in notities die je later kunt teruglezen.",
   "exports": "Sla HTML- of Markdown-notities, PDF, PPTX en afbeeldingen op.",
   "stepsTitle": "Van een video naar bruikbare notities",
   "step1Title": "Importeer een video",
@@ -23,7 +23,7 @@
   "day_pass": "24-uurs pas",
   "freeDesc": "Om af en toe korte video’s te proberen.",
   "proDesc": "Voor regelmatige cursussen, vergaderingen en langere video’s.",
-  "lifetimeDesc": "Eenmalig kopen en blijven gebruiken zolang de dienst actief is.",
+  "lifetimeDesc": "Eén aankoop voor blijvende toegang.",
   "dayDesc": "Tijdelijke toegang: 20 conversies, 300 OCR-pagina’s en 120 transcriptieminuten in 24 uur. Video’s van maximaal 10 minuten; één bestand tegelijk.",
   "monthly": "per maand · doorlopend abonnement",
   "oneOff": "eenmalige aankoop · geen automatische verlenging",
@@ -36,7 +36,7 @@
   "transcription": "Transcriptie: {value}",
   "batch": "Bestanden in groepen verwerken",
   "single": "Eén bestand tegelijk",
-  "unlimited": "Geen limiet vanuit het pakket; de werkelijke verwerking hangt af van je apparaat, browser en videocodering.",
+  "unlimited": "Geen limiet vanuit het abonnement.",
   "choose": "Kies {plan}",
   "selected": "Geselecteerd: {plan}",
   "buyEmail": "E-mailadres voor de aankoop",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Aantal verhogen",
   "budgetPresets": "Kies een globaal budget",
   "presetPasses": "{count} passen",
-  "accountTools": "Al betaald? Controleer je toegang"
+  "accountTools": "Al betaald? Controleer je toegang",
+  "privacyNote": "Je inhoud, zorgvuldig behandeld.",
+  "privacyDetails": "Hoe we je privacy beschermen"
 }

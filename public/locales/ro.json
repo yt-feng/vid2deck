@@ -6,8 +6,8 @@
   "pricing": "Planuri și prețuri",
   "language": "Limbă",
   "back": "Înapoi la spațiul de lucru",
-  "local": "Videoclipurile locale sunt procesate pe dispozitivul tău.",
-  "ai": "Extragerea ideilor principale cu AI necesită autentificare și trimite textul necesar din transcriere către serviciul AI.",
+  "local": "Păstrează cadrele originale și marcajele temporale pentru a verifica conținutul cu încredere.",
+  "ai": "Transformă ideile principale din transcriere în notițe la care poți reveni.",
   "exports": "Salvează notițe în HTML sau Markdown, fișiere PDF, PPTX și imagini.",
   "stepsTitle": "De la un videoclip la notițe utile",
   "step1Title": "Importă un videoclip",
@@ -23,7 +23,7 @@
   "day_pass": "Acces de 24 de ore",
   "freeDesc": "Pentru încercarea ocazională a videoclipurilor scurte.",
   "proDesc": "Pentru cursuri și întâlniri regulate și videoclipuri mai lungi.",
-  "lifetimeDesc": "O singură achiziție pentru utilizare continuă cât timp funcționează serviciul.",
+  "lifetimeDesc": "O singură achiziție pentru acces continuu.",
   "dayDesc": "Acces temporar: 20 de conversii, 300 de pagini OCR și 120 de minute de transcriere în 24 de ore. Videoclipuri de până la 10 minute; câte un fișier odată.",
   "monthly": "pe lună · abonament recurent",
   "oneOff": "achiziție unică · fără reînnoire automată",
@@ -36,7 +36,7 @@
   "transcription": "Transcriere: {value}",
   "batch": "Procesare în lot",
   "single": "Un fișier odată",
-  "unlimited": "Fără limită de plan; procesarea efectivă depinde de dispozitiv, browser și codificarea videoclipului.",
+  "unlimited": "Fără limite impuse de plan.",
   "choose": "Alege {plan}",
   "selected": "Selectat: {plan}",
   "buyEmail": "E-mail pentru achiziție",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Mărește cantitatea",
   "budgetPresets": "Alege un buget aproximativ",
   "presetPasses": "{count} permise de acces",
-  "accountTools": "Ai plătit deja? Verifică-ți accesul"
+  "accountTools": "Ai plătit deja? Verifică-ți accesul",
+  "privacyNote": "Conținutul tău, tratat cu grijă.",
+  "privacyDetails": "Cum îți protejăm confidențialitatea"
 }

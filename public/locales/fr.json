@@ -6,8 +6,8 @@
   "pricing": "Offres et tarifs",
   "language": "Langue",
   "back": "Retour à l’espace de travail",
-  "local": "Les vidéos locales sont traitées sur votre appareil.",
-  "ai": "La génération de points clés par IA nécessite une connexion et envoie au service d’IA le texte de transcription nécessaire.",
+  "local": "Conservez les images d’origine et les repères temporels pour vérifier les contenus en toute confiance.",
+  "ai": "Transformez les points clés de la transcription en notes à consulter à tout moment.",
   "exports": "Enregistrez des notes en HTML ou Markdown, des PDF, des PPTX et des images.",
   "stepsTitle": "D’une vidéo à des notes utiles",
   "step1Title": "Importez une vidéo",
@@ -23,7 +23,7 @@
   "day_pass": "Pass 24 heures",
   "freeDesc": "Pour essayer de courtes vidéos de temps en temps.",
   "proDesc": "Pour les cours, réunions et vidéos plus longues à usage régulier.",
-  "lifetimeDesc": "Un achat unique pour continuer à utiliser le service tant qu’il fonctionne.",
+  "lifetimeDesc": "Un achat unique pour un accès durable.",
   "dayDesc": "Accès temporaire : 20 conversions, 300 pages d’OCR et 120 minutes de transcription en 24 heures. Vidéos de 10 minutes maximum ; un fichier à la fois.",
   "monthly": "par mois · abonnement récurrent",
   "oneOff": "achat unique · sans renouvellement automatique",
@@ -36,7 +36,7 @@
   "transcription": "Transcription : {value}",
   "batch": "Traitement par lots",
   "single": "Un fichier à la fois",
-  "unlimited": "Aucune limite liée à l’offre ; le traitement réel dépend de votre appareil, de votre navigateur et de l’encodage vidéo.",
+  "unlimited": "Aucune limite liée à l’offre.",
   "choose": "Choisir {plan}",
   "selected": "Offre sélectionnée : {plan}",
   "buyEmail": "Adresse e-mail d’achat",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Augmenter la quantité",
   "budgetPresets": "Choisissez un budget approximatif",
   "presetPasses": "{count} pass",
-  "accountTools": "Déjà payé ? Vérifiez votre accès"
+  "accountTools": "Déjà payé ? Vérifiez votre accès",
+  "privacyNote": "Votre contenu, traité avec soin.",
+  "privacyDetails": "Comment nous protégeons votre vie privée"
 }

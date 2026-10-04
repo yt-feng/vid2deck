@@ -6,8 +6,8 @@
   "pricing": "Tarife und Preise",
   "language": "Sprache",
   "back": "Zurück zum Arbeitsbereich",
-  "local": "Lokale Videos werden auf deinem Gerät verarbeitet.",
-  "ai": "KI-Zusammenfassungen erfordern eine Anmeldung. Der benötigte Transkripttext wird an den KI-Dienst gesendet.",
+  "local": "Behalte Originalbilder und Zeitstempel für eine zuverlässige Nachprüfung.",
+  "ai": "Verwandle die wichtigsten Stellen im Transkript in Notizen, die du jederzeit nachlesen kannst.",
   "exports": "Speichere Notizen als HTML oder Markdown sowie PDF, PPTX und Bilder.",
   "stepsTitle": "Vom Video zu nützlichen Notizen",
   "step1Title": "Video importieren",
@@ -23,7 +23,7 @@
   "day_pass": "24-Stunden-Pass",
   "freeDesc": "Für gelegentliche Versuche mit kurzen Videos.",
   "proDesc": "Für regelmäßige Kurse, Besprechungen und längere Videos.",
-  "lifetimeDesc": "Einmal kaufen und weiter nutzen, solange der Dienst betrieben wird.",
+  "lifetimeDesc": "Einmal kaufen und dauerhaft Zugriff erhalten.",
   "dayDesc": "Zeitlich begrenzter Zugang: 20 Konvertierungen, 300 OCR-Seiten und 120 Transkriptionsminuten innerhalb von 24 Stunden. Videos bis zu 10 Minuten; jeweils eine Datei.",
   "monthly": "pro Monat · wiederkehrendes Abonnement",
   "oneOff": "einmaliger Kauf · keine automatische Verlängerung",
@@ -36,7 +36,7 @@
   "transcription": "Transkription: {value}",
   "batch": "Stapelverarbeitung",
   "single": "Jeweils eine Datei",
-  "unlimited": "Keine Tarifbegrenzung; die tatsächliche Verarbeitung hängt von deinem Gerät, Browser und der Videocodierung ab.",
+  "unlimited": "Keine tarifbedingte Begrenzung.",
   "choose": "{plan} wählen",
   "selected": "Ausgewählt: {plan}",
   "buyEmail": "E-Mail-Adresse für den Kauf",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Menge erhöhen",
   "budgetPresets": "Ungefähres Budget wählen",
   "presetPasses": "{count} Pässe",
-  "accountTools": "Schon bezahlt? Prüfe deinen Zugang"
+  "accountTools": "Schon bezahlt? Prüfe deinen Zugang",
+  "privacyNote": "Deine Inhalte, mit Sorgfalt behandelt.",
+  "privacyDetails": "Wie wir deine Privatsphäre schützen"
 }

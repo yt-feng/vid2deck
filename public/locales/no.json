@@ -6,8 +6,8 @@
   "pricing": "Planer og priser",
   "language": "Språk",
   "back": "Tilbake til arbeidsområdet",
-  "local": "Lokale videoer behandles på enheten din.",
-  "ai": "Hovedpunkter laget med AI krever innlogging og sender den nødvendige transkripsjonsteksten til AI-tjenesten.",
+  "local": "Ta vare på originale videobilder og tidsstempler for å gjennomgå innholdet med trygghet.",
+  "ai": "Gjør de viktigste delene av transkripsjonen om til notater du kan vende tilbake til.",
   "exports": "Lagre notater i HTML eller Markdown, PDF, PPTX og bilder.",
   "stepsTitle": "Fra en video til nyttige notater",
   "step1Title": "Importer en video",
@@ -23,7 +23,7 @@
   "day_pass": "24-timerspass",
   "freeDesc": "For å prøve korte videoer av og til.",
   "proDesc": "For regelmessige kurs, møter og lengre videoer.",
-  "lifetimeDesc": "Ett kjøp for fortsatt bruk så lenge tjenesten er i drift.",
+  "lifetimeDesc": "Ett kjøp for fortsatt tilgang.",
   "dayDesc": "Midlertidig tilgang: 20 konverteringer, 300 OCR-sider og 120 transkripsjonsminutter i løpet av 24 timer. Videoer på opptil 10 minutter; én fil om gangen.",
   "monthly": "per måned · løpende abonnement",
   "oneOff": "engangskjøp · ingen automatisk fornyelse",
@@ -36,7 +36,7 @@
   "transcription": "Transkripsjon: {value}",
   "batch": "Behandling av flere filer samlet",
   "single": "Én fil om gangen",
-  "unlimited": "Ingen grense i planen; den faktiske behandlingen avhenger av enheten din, nettleseren og videokodingen.",
+  "unlimited": "Ingen begrensning i abonnementet.",
   "choose": "Velg {plan}",
   "selected": "Valgt: {plan}",
   "buyEmail": "E-postadresse for kjøpet",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Øk antall",
   "budgetPresets": "Velg et omtrentlig budsjett",
   "presetPasses": "{count} pass",
-  "accountTools": "Har du allerede betalt? Sjekk tilgangen din"
+  "accountTools": "Har du allerede betalt? Sjekk tilgangen din",
+  "privacyNote": "Innholdet ditt, behandlet med omtanke.",
+  "privacyDetails": "Slik beskytter vi personvernet ditt"
 }

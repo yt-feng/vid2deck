@@ -1,3 +1,4 @@
+import { ui, initializeWorkspaceLanguage, workspaceLanguage, serviceMessage } from './workspaceI18n';
 import type { jsPDF as JsPdfDocument } from 'jspdf';
 import JSZip from 'jszip';
 import { cropTextBoxes } from './cropGeometry';
@@ -237,25 +238,25 @@ const FREE_PLAN_LIMITS: PlanLimits = {
   screen_recording: true
 };
 const USAGE_UNITS: Record<UsageEventType, string> = {
-  video_conversion: '次',
-  editable_slide: '张',
-  summary_generation: '次',
-  transcribe_minute: '分钟'
+  video_conversion: ui('次'),
+  editable_slide: ui('张'),
+  summary_generation: ui('次'),
+  transcribe_minute: ui('分钟')
 };
 const SUMMARY_API_URL = '/api/summarize-simple';
 const OUTPUT_LANGUAGE_LABELS: Record<OutputLanguage, string> = {
-  'zh-CN': '简体中文',
-  'zh-TW': '繁体中文',
+  'zh-CN': ui('简体中文'),
+  'zh-TW': ui('繁体中文'),
   en: 'English',
-  ja: '日本語',
+  ja: ui('日本語'),
   ko: '한국어'
 };
-const DEFAULT_USER_PREFERENCES: UserPreferences = { outputLanguage: 'zh-CN' };
+const DEFAULT_USER_PREFERENCES: UserPreferences = { outputLanguage: workspaceLanguage() === 'en' ? 'en' : 'zh-CN' };
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
 
-app.innerHTML = `
+app.innerHTML = ui`
   <main id="homeView">
     <section class="hero-shell" id="product">
       <div class="hero-copy">
@@ -297,7 +298,7 @@ app.innerHTML = `
             <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
             <span class="upload-mark" aria-hidden="true">＋</span>
             <span id="fileLabel">拖入视频，或点击选择文件</span>
-            <small>MP4、WebM、MOV 等 · 在你的设备上处理</small>
+            <small>MP4、WebM、MOV 等 · 隐私受到保护</small>
           </label>
 
         </div>
@@ -336,7 +337,7 @@ app.innerHTML = `
               </label>
             </div>
           </div>
-          <small id="urlDownloadStatus" class="url-download-status">在线链接会由服务端临时获取；完成导入后立即清理临时文件。</small>
+          <small id="urlDownloadStatus" class="url-download-status">粘贴支持的视频链接，快速开始整理。</small>
           <a class="source-guide-link" href="/guide/#link" target="_blank" rel="noopener">如何复制链接？获取失败怎么办？ ↗</a>
         </form>
 
@@ -413,7 +414,7 @@ app.innerHTML = `
           <label class="dropzone notebook-pdf-dropzone" id="notebookPdfDropzone" for="notebookPdfInput" role="button" tabindex="0">
             <input id="notebookPdfInput" type="file" accept="application/pdf,.pdf" />
             <span id="notebookPdfFileLabel">选择或拖入 NotebookLM PDF</span>
-            <small>在设备上识别并遮盖右下角标识，下载处理后的 PDF。</small>
+            <small>识别并清理页脚标识，下载处理后的 PDF。</small>
           </label>
           <div id="notebookPdfInfo" class="pdf-file-info" hidden></div>
           <div class="actions"><button id="notebookMaskPdfBtn" disabled>清理并下载 PDF</button></div>
@@ -603,7 +604,7 @@ app.innerHTML = `
 
         </details>
         <details class="notes-disclosure"><summary>逐字稿与笔记 <small>按需生成</small></summary>
-        <p id="notesAccessHint" class="hint">逐字稿在本机识别；摘要与图文笔记需登录，会发送必要文本。</p>
+        <p id="notesAccessHint" class="hint">按需生成逐字稿，登录后可提炼摘要与图文笔记。</p>
         <button id="notesLoginBtn" type="button" class="ghost-btn">登录后生成摘要与笔记</button>
         <div class="workspace-actions">
           <button id="transcribeBtn" disabled>生成逐字稿</button>
@@ -643,7 +644,7 @@ app.innerHTML = `
             </section>
             <div class="reading-section-title"><h3>原画面与时间位置</h3><span>画面按整理顺序展示，供回看原视频</span></div>
             <div id="readingFrames" class="reading-frames"></div>
-            <p class="reading-footnote">保存完整笔记包含原画面；Markdown 包含文字与时间索引。原画面笔记在此浏览器整理，AI 要点会发送必要文本。</p>
+            <p class="reading-footnote">保存完整笔记包含原画面；Markdown 包含文字与时间索引。<a href="/privacy/" target="_blank" rel="noopener">隐私保护说明</a></p>
           </article>
           <div id="workspaceEmptyState" class="workspace-empty-state">
             <p class="eyebrow">开始任务</p>
@@ -1048,7 +1049,7 @@ authLogoutBtn.addEventListener('click', () => {
   localStorage.removeItem(AUTH_STORAGE_KEY);
   if (wasAdminUser) localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
   syncAdminNav();
-  setAuthStatus('已退出登录。', '');
+  setAuthStatus(ui('已退出登录。'), '');
   updateAuthUi();
 });
 openAccountSettingsBtn.addEventListener('click', () => openSettingsDialog());
@@ -1091,7 +1092,7 @@ videoUrlInput.addEventListener('blur', () => {
 });
 mediaRightsConfirm.addEventListener('change', () => {
   if (mediaRightsConfirm.checked && currentMediaMetadata?.provider === 'bilibili') {
-    setUrlDownloadStatus('已确认，可下载这个 B 站视频到队列。', 'ok');
+    setUrlDownloadStatus(ui('已确认，可下载这个 B 站视频到队列。'), 'ok');
   }
   updateActionState();
 });
@@ -1132,10 +1133,10 @@ doneBtn.addEventListener('click', () => {
   if (closedDemo) restoreWorkspaceAfterDemo();
   renderFileList();
   setHomeStatus(closedDemo
-    ? '交互示例已关闭。现在可以用自己的视频开始转换。'
+    ? ui('交互示例已关闭。现在可以用自己的视频开始转换。')
     : workspaceMode === 'image'
-      ? '图片 PPT 工作台已关闭，可继续上传图片或视频。'
-      : selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+      ? ui('图片 PPT 工作台已关闭，可继续上传图片或视频。')
+      : selectedFile ? ui`当前视频：${selectedFile.name}` : ui('等待上传视频。'));
 });
 
 toggleSideBtn.addEventListener('click', () => {
@@ -1310,7 +1311,7 @@ workspaceProcessUrlBtn.addEventListener('click', () => {
 });
 workspaceVideoInput.addEventListener('change', () => addWorkspaceFiles(Array.from(workspaceVideoInput.files ?? [])));
 workspaceRecordScreenBtn.addEventListener('click', () => {
-  setWorkspaceUrlStatus('正在录制屏幕，停止后会自动生成页面。', 'warn');
+  setWorkspaceUrlStatus(ui('正在录制屏幕，停止后会自动生成页面。'), 'warn');
   void startScreenRecording('extract');
 });
 workspaceStopRecordBtn.addEventListener('click', () => stopScreenRecording());
@@ -1387,8 +1388,8 @@ function syncPreferencesUi(): void {
   outputLanguageSelect.value = userPreferences.outputLanguage;
   const languageLabel = OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage];
   settingsAccountHint.textContent = authSession
-    ? `已在此浏览器为 ${authSession.user.username} 保存，摘要和图文笔记使用${languageLabel}。`
-    : `当前使用${languageLabel}，偏好保存在此浏览器。`;
+    ? ui`已在此浏览器为 ${authSession.user.username} 保存，摘要和图文笔记使用${languageLabel}。`
+    : ui`当前使用${languageLabel}，偏好保存在此浏览器。`;
   notesLanguageLabel.textContent = languageLabel;
 }
 
@@ -1406,7 +1407,7 @@ function savePreferencesFromDialog(): void {
   localStorage.setItem(preferencesStorageKey(), JSON.stringify(userPreferences));
   syncPreferencesUi();
   settingsDialog.close();
-  const message = `输出语言已设置为${OUTPUT_LANGUAGE_LABELS[outputLanguage]}。`;
+  const message = ui`输出语言已设置为${OUTPUT_LANGUAGE_LABELS[outputLanguage]}。`;
   if (workspaceView.hidden) setHomeStatus(message);
   else setStatus(message);
 }
@@ -1449,8 +1450,8 @@ function setAuthStatus(message: string, tone: 'ok' | 'warn' | 'error' | '' = '')
 function setAuthMode(mode: AuthMode): void {
   authMode = mode;
   authPassword.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  authSubmitBtn.textContent = mode === 'register' ? '注册并登录' : '登录';
-  authModeToggleBtn.textContent = mode === 'register' ? '已有账号，去登录' : '注册新账号';
+  authSubmitBtn.textContent = mode === 'register' ? ui('注册并登录') : ui('登录');
+  authModeToggleBtn.textContent = mode === 'register' ? ui('已有账号，去登录') : ui('注册新账号');
   authEmailLabel.hidden = mode !== 'register';
   renderEntitlementSummary();
   authCaptchaAnswer.value = '';
@@ -1461,10 +1462,10 @@ function updateAuthUi(): void {
   const signedIn = !!authSession;
   authForm.hidden = signedIn;
   authSignedIn.hidden = !signedIn;
-  if (openLoginBtn) openLoginBtn.textContent = authSession ? `账号：${authSession.user.username}` : '登录';
+  if (openLoginBtn) openLoginBtn.textContent = authSession ? ui`账号：${authSession.user.username}` : ui('登录');
   if (authSession) {
     authSignedInName.textContent = authSession.user.username;
-    authSignedInEmail.textContent = authSession.user.email_is_generated ? '此账号未填写联系邮箱。购买前请在定价页核对权益绑定信息。' : authSession.user.email;
+    authSignedInEmail.textContent = authSession.user.email_is_generated ? ui('此账号未填写联系邮箱。购买前请在定价页核对权益绑定信息。') : authSession.user.email;
     renderEntitlementSummary();
   } else {
     setAuthMode(authMode);
@@ -1478,14 +1479,14 @@ async function loadAuthCaptcha(): Promise<void> {
   try {
     refreshAuthCaptchaBtn.disabled = true;
     const response = await fetch('/api/captcha', { cache: 'no-store' });
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('登录服务暂时无法使用，请稍后重试。你可以继续使用本地转换。');
+    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error(ui('登录服务暂时无法使用，请稍后重试。你可以继续整理画面笔记。'));
     const data = await response.json() as { image?: string; token?: string; detail?: string };
-    if (!response.ok || !data.image || !data.token) throw new Error(data.detail || '验证码加载失败。');
+    if (!response.ok || !data.image || !data.token) throw new Error(serviceMessage(data.detail) || ui('验证码加载失败。'));
     authCaptchaImage.src = data.image;
     authCaptchaToken = data.token;
   } catch (error) {
     authCaptchaToken = '';
-    setAuthStatus('验证码未能加载。请点击“换一张”重试；本地转换仍可使用。', 'error');
+    setAuthStatus(ui('验证码未能加载。请点击“换一张”重试；画面笔记仍可使用。'), 'error');
   } finally {
     refreshAuthCaptchaBtn.disabled = false;
   }
@@ -1496,17 +1497,17 @@ async function submitAuthForm(): Promise<void> {
   const password = authPassword.value;
   const captchaAnswer = authCaptchaAnswer.value.trim();
   if (!username || !password || !captchaAnswer) {
-    setAuthStatus('请填写用户名、密码和验证码。', 'error');
+    setAuthStatus(ui('请填写用户名、密码和验证码。'), 'error');
     return;
   }
   if (!authCaptchaToken) {
-    setAuthStatus('验证码加载中。可以点击“换一张”重试。', 'error');
+    setAuthStatus(ui('验证码加载中。可以点击“换一张”重试。'), 'error');
     return;
   }
 
   isAuthBusy = true;
   setAuthBusy(true);
-  setAuthStatus(authMode === 'register' ? '正在注册...' : '正在登录...', 'warn');
+  setAuthStatus(authMode === 'register' ? ui('正在注册...') : ui('正在登录...'), 'warn');
   try {
     const response = await fetch('/api/auth', {
       method: 'POST',
@@ -1521,13 +1522,13 @@ async function submitAuthForm(): Promise<void> {
       })
     });
     const data = await response.json() as AuthResponse;
-    if (!response.ok || !data.token || !data.user) throw new Error(data.detail || '账号请求失败。');
+    if (!response.ok || !data.token || !data.user) throw new Error(serviceMessage(data.detail) || ui('账号请求失败。'));
     saveAuthSession({ token: data.token, user: data.user }, data.admin_token || '');
     authPassword.value = '';
     authCaptchaAnswer.value = '';
     updateAuthUi();
   } catch (error) {
-    setAuthStatus(error instanceof Error ? error.message : '账号请求失败。', 'error');
+    setAuthStatus(error instanceof Error ? serviceMessage(error.message) : ui('账号请求失败。'), 'error');
     authCaptchaAnswer.value = '';
     void loadAuthCaptcha();
   } finally {
@@ -1638,8 +1639,8 @@ async function refreshEntitlement(): Promise<void> {
       fetch(`/api/entitlement?email=${encodeURIComponent(email)}`, { cache: 'no-store', headers: authHeaders() }),
       fetch(`/api/usage?email=${encodeURIComponent(email)}`, { cache: 'no-store', headers: authHeaders() })
     ]);
-    if (!entitlementResponse.ok) throw new Error('权益接口异常。');
-    if (!usageResponse.ok) throw new Error('用量接口异常。');
+    if (!entitlementResponse.ok) throw new Error(ui('权益接口异常。'));
+    if (!usageResponse.ok) throw new Error(ui('用量接口异常。'));
     entitlement = normalizeEntitlement(await entitlementResponse.json(), email);
     usageSummary = normalizeUsageSummary(await usageResponse.json(), email);
     entitlementFetchedAt = Date.now();
@@ -1648,7 +1649,7 @@ async function refreshEntitlement(): Promise<void> {
     console.warn(error);
     if (entitlement.email !== email) entitlement = freeEntitlement(email);
     if (usageSummary.email !== email) usageSummary = emptyUsageSummary(email);
-    setAuthStatus(`已登录，但权益刷新失败：${error instanceof Error ? error.message : '请稍后重试。'}`, 'warn');
+    setAuthStatus(ui`已登录，但权益刷新失败：${error instanceof Error ? serviceMessage(error.message) : ui('请稍后重试。')}`, 'warn');
   } finally {
     updateActionState();
   }
@@ -1719,25 +1720,25 @@ function currentLimits(): PlanLimits {
 }
 
 function planLabel(plan: PlanKey | string): string {
-  if (plan === 'day_pass') return '临时版';
-  if (plan === 'pro') return '专业版';
-  if (plan === 'lifetime') return '终身版';
-  return '免费版';
+  if (plan === 'day_pass') return ui('临时版');
+  if (plan === 'pro') return ui('专业版');
+  if (plan === 'lifetime') return ui('终身版');
+  return ui('免费版');
 }
 
 function periodText(value: string | null | undefined): string {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return `，有效期至 ${date.toLocaleString('zh-CN', { hour12: false })}`;
+  return ui`，有效期至 ${date.toLocaleString('zh-CN', { hour12: false })}`;
 }
 
 function renderEntitlementSummary(): void {
   const plan = currentPlan();
   const prefix = authSession
-    ? `已登录，当前权限：${entitlement.owner ? '所有者' : planLabel(plan)}${periodText(entitlement.current_period_end)}`
-    : `${authMode === 'register' ? '创建用户名账号，邮箱可留空。' : '登录后可同步付费权益。'} 当前按免费版额度使用`;
-  const message = `${prefix}。转换${quotaText('video_conversion')}，文字识别页${quotaText('editable_slide')}，摘要与笔记${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
+    ? ui`已登录，当前权限：${entitlement.owner ? ui('所有者') : planLabel(plan)}${periodText(entitlement.current_period_end)}`
+    : ui`${authMode === 'register' ? ui('创建用户名账号，邮箱可留空。') : ui('登录后可同步付费权益。')} 当前按免费版额度使用`;
+  const message = ui`${prefix}。转换${quotaText('video_conversion')}，文字识别页${quotaText('editable_slide')}，摘要与笔记${quotaText('summary_generation')}，转写${quotaText('transcribe_minute')}。`;
   const tone: 'ok' | 'warn' | '' = authSession ? (plan === 'free' ? 'warn' : 'ok') : '';
   setAuthStatus(message, tone);
 }
@@ -1746,8 +1747,8 @@ function quotaText(eventType: UsageEventType): string {
   const limit = monthlyLimitFor(eventType);
   const used = usageValue(eventType);
   const unit = USAGE_UNITS[eventType];
-  if (limit === null) return `已用 ${used}${unit}/无上限`;
-  return `剩余 ${Math.max(0, Math.floor(limit - used))}${unit}（${used}/${limit}${unit}）`;
+  if (limit === null) return ui`已用 ${used}${unit}/无上限`;
+  return ui`剩余 ${Math.max(0, Math.floor(limit - used))}${unit}（${used}/${limit}${unit}）`;
 }
 
 function monthlyLimitFor(eventType: UsageEventType): number | null {
@@ -1782,7 +1783,7 @@ async function ensureUsageCapacity(
   if (used + safeUnits <= limit) return true;
 
   const unit = USAGE_UNITS[eventType];
-  report(`${featureLabel}剩余额度低于本次所需：${planLabel(currentPlan())} 本月已用 ${used}${unit}/${limit}${unit}，本次需要 ${safeUnits}${unit}。开通或升级套餐可增加额度。`);
+  report(ui`${featureLabel}剩余额度低于本次所需：${planLabel(currentPlan())} 本月已用 ${used}${unit}/${limit}${unit}，本次需要 ${safeUnits}${unit}。开通或升级套餐可增加额度。`);
   return false;
 }
 
@@ -1803,7 +1804,7 @@ async function recordUsage(eventType: UsageEventType, units: number, metadata: R
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ email, event_type: eventType, units: safeUnits, metadata })
     });
-    if (!response.ok) throw new Error('用量记录失败。');
+    if (!response.ok) throw new Error(ui('用量记录失败。'));
     usageSummary = normalizeUsageSummary(await response.json(), email);
   } catch (error) {
     console.warn(error);
@@ -1826,13 +1827,13 @@ async function ensureVideoDurationAllowed(file: File, report: (message: string) 
   if (limitMinutes === null) return true;
 
   try {
-    report(`正在检查视频时长：${file.name}`);
+    report(ui`正在检查视频时长：${file.name}`);
     const meta = await readFileVideoMetadata(file);
     if (meta.duration <= limitMinutes * 60 + 0.5) return true;
-    report(`当前套餐 ${planLabel(currentPlan())} 单个视频限制 ${limitMinutes} 分钟；${file.name} 约 ${formatTime(meta.duration)}，请升级后处理。`);
+    report(ui`当前套餐 ${planLabel(currentPlan())} 单个视频限制 ${limitMinutes} 分钟；${file.name} 约 ${formatTime(meta.duration)}，请升级后处理。`);
     return false;
   } catch (error) {
-    report(error instanceof Error ? error.message : '无法读取视频时长。');
+    report(error instanceof Error ? serviceMessage(error.message) : ui('无法读取视频时长。'));
     return false;
   }
 }
@@ -1851,7 +1852,7 @@ function isBusy(): boolean {
 }
 
 function openTipDialog(): void {
-  tipStatus.textContent = '请选择赞赏金额。';
+  tipStatus.textContent = ui('请选择赞赏金额。');
   tipStatus.className = 'tip-status';
   customTipLabel.hidden = true;
   customTipPayBtn.hidden = true;
@@ -1863,7 +1864,7 @@ function openTipDialog(): void {
 function showCustomTipInput(): void {
   customTipLabel.hidden = false;
   customTipPayBtn.hidden = false;
-  tipStatus.textContent = '请输入任意金额，低于 ¥10 会自动按 ¥10 打开支付。';
+  tipStatus.textContent = ui('请输入任意金额，低于 ¥10 会自动按 ¥10 打开支付。');
   tipStatus.className = 'tip-status';
   customTipAmount.focus();
 }
@@ -1891,7 +1892,7 @@ async function fetchPaddleConfig(): Promise<PaddleConfig> {
   if (paddleConfigPromise) return paddleConfigPromise;
   paddleConfigPromise = fetch('/api/paddle-config')
     .then((response) => {
-      if (!response.ok) throw new Error('支付配置接口异常。');
+      if (!response.ok) throw new Error(ui('支付配置接口异常。'));
       return response.json() as Promise<{ config?: PaddleConfig; missing?: string[] }>;
     })
     .then((payload) => payload.config ?? {});
@@ -1904,14 +1905,14 @@ function loadPaddleScript(): Promise<void> {
     const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${PADDLE_SCRIPT_URL}"]`);
     if (existingScript) {
       existingScript.addEventListener('load', () => resolve(), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('支付组件加载失败，请稍后重试。')), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error(ui('支付组件加载失败，请稍后重试。'))), { once: true });
       return;
     }
     const script = document.createElement('script');
     script.src = PADDLE_SCRIPT_URL;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('支付组件加载失败，请稍后重试。'));
+    script.onerror = () => reject(new Error(ui('支付组件加载失败，请稍后重试。')));
     document.head.appendChild(script);
   });
 }
@@ -1920,18 +1921,18 @@ async function ensurePaddle(): Promise<PaddleConfig> {
   if (paddleLoadPromise) return paddleLoadPromise;
   paddleLoadPromise = Promise.all([fetchPaddleConfig(), loadPaddleScript()]).then(([config]) => {
     const paddle = windowPaddle();
-    if (!paddle) throw new Error('支付组件暂时无法使用，请稍后重试。');
+    if (!paddle) throw new Error(ui('支付组件暂时无法使用，请稍后重试。'));
     if (config.PADDLE_ENV === 'sandbox' && paddle.Environment?.set) {
       paddle.Environment.set('sandbox');
     }
     if (!paddleInitialized) {
       const token = config.PADDLE_CLIENT_TOKEN;
-      if (!token) throw new Error('支付功能暂时无法使用，请稍后重试或联系支持。');
+      if (!token) throw new Error(ui('支付功能暂时无法使用，请稍后重试或联系支持。'));
       paddle.Initialize({
         token,
         eventCallback: (event) => {
           const name = String(eventName(event));
-          if (name === 'checkout.completed') setTipStatus('谢谢支持，支付已完成。', 'ok');
+          if (name === 'checkout.completed') setTipStatus(ui('谢谢支持，支付已完成。'), 'ok');
         }
       });
       paddleInitialized = true;
@@ -1943,7 +1944,7 @@ async function ensurePaddle(): Promise<PaddleConfig> {
 
 async function openTipCheckout(amount: number): Promise<void> {
   if (!validTipAmount(amount)) {
-    setTipStatus('请输入 ¥1 或以上的金额。', 'error');
+    setTipStatus(ui('请输入 ¥1 或以上的金额。'), 'error');
     showCustomTipInput();
     return;
   }
@@ -1956,15 +1957,15 @@ async function openTipCheckout(amount: number): Promise<void> {
   isTipCheckoutOpening = true;
   setTipButtonsBusy(true);
   updateActionState();
-  setTipStatus('正在打开支付窗口...', 'warn');
+  setTipStatus(ui('正在打开支付窗口...'), 'warn');
   let tipDialogClosedForCheckout = false;
 
   try {
     const config = await ensurePaddle();
     const priceId = config.PADDLE_PRICE_AUTHOR_TIP_CNY_CENT;
-    if (!priceId) throw new Error('该支持项目暂时无法购买，请稍后重试。');
+    if (!priceId) throw new Error(ui('该支持项目暂时无法购买，请稍后重试。'));
     const paddle = windowPaddle();
-    if (!paddle) throw new Error('支付组件暂时无法使用，请稍后重试。');
+    if (!paddle) throw new Error(ui('支付组件暂时无法使用，请稍后重试。'));
     if (tipDialog.open) {
       tipDialog.close();
       tipDialogClosedForCheckout = true;
@@ -1988,8 +1989,8 @@ async function openTipCheckout(amount: number): Promise<void> {
     });
     setTipStatus(
       normalizedAmount === requestedAmount
-        ? `支付窗口已打开：¥${normalizedAmount.toFixed(2)}。`
-        : `支付窗口已打开：¥${normalizedAmount.toFixed(2)}（已从 ¥${requestedAmount.toFixed(2)} 自动调整）。`,
+        ? ui`支付窗口已打开：¥${normalizedAmount.toFixed(2)}。`
+        : ui`支付窗口已打开：¥${normalizedAmount.toFixed(2)}（已从 ¥${requestedAmount.toFixed(2)} 自动调整）。`,
       'ok'
     );
   } catch (error) {
@@ -1997,7 +1998,7 @@ async function openTipCheckout(amount: number): Promise<void> {
       if (typeof tipDialog.showModal === 'function') tipDialog.showModal();
       else tipDialog.setAttribute('open', '');
     }
-    setTipStatus(error instanceof Error ? error.message : '支付窗口打开失败。', 'error');
+    setTipStatus(error instanceof Error ? serviceMessage(error.message) : ui('支付窗口打开失败。'), 'error');
   } finally {
     isTipCheckoutOpening = false;
     setTipButtonsBusy(false);
@@ -2056,7 +2057,7 @@ function resetUrlDownloadProgress(): void {
   urlDownloadProgress.hidden = true;
   urlDownloadProgressFill.classList.remove('is-indeterminate');
   urlDownloadProgressFill.style.width = '0%';
-  urlDownloadProgressText.textContent = '准备下载';
+  urlDownloadProgressText.textContent = ui('准备下载');
   urlDownloadProgressPercent.textContent = '0%';
 }
 
@@ -2085,17 +2086,17 @@ async function refreshMediaMetadataPreview(): Promise<MediaMetadata | null> {
 
   const requestId = mediaMetadataRequestId + 1;
   mediaMetadataRequestId = requestId;
-  setUrlDownloadStatus('正在识别 B 站视频...', 'warn');
+  setUrlDownloadStatus(ui('正在识别 B 站视频...'), 'warn');
   try {
     const metadata = await fetchMediaMetadata(parsedUrl);
     if (requestId !== mediaMetadataRequestId) return null;
     renderMediaPreview(metadata, sourceUrl);
-    setUrlDownloadStatus('已识别 B 站视频，确认有权处理后即可下载。', 'warn');
+    setUrlDownloadStatus(ui('已识别 B 站视频，确认有权处理后即可下载。'), 'warn');
     return metadata;
   } catch (error) {
     if (requestId !== mediaMetadataRequestId) return null;
     const metadata = renderBilibiliAttemptPreview(parsedUrl, urlDownloadErrorMessage(error));
-    setUrlDownloadStatus('B 站预览加载失败。确认有权处理后，可以尝试下载。', 'warn');
+    setUrlDownloadStatus(ui('B 站预览加载失败。确认有权处理后，可以尝试下载。'), 'warn');
     return metadata;
   } finally {
     updateActionState();
@@ -2112,7 +2113,7 @@ async function fetchMediaMetadata(parsedUrl: URL): Promise<MediaMetadata> {
   });
   if (!response.ok) throw new Error(await readResponseError(response));
   const metadata = await response.json() as MediaMetadata;
-  if (!metadata || metadata.sourceType !== 'url') throw new Error('没有识别到可处理的视频信息。');
+  if (!metadata || metadata.sourceType !== 'url') throw new Error(ui('没有识别到可处理的视频信息。'));
   return metadata;
 }
 
@@ -2121,13 +2122,13 @@ function renderMediaPreview(metadata: MediaMetadata, sourceUrl: string): void {
   currentMediaMetadataUrl = sourceUrl;
   mediaRightsConfirm.checked = false;
   mediaPreviewProvider.textContent = metadataProviderLabel(metadata.provider);
-  mediaPreviewTitle.textContent = metadata.title || '已识别媒体';
+  mediaPreviewTitle.textContent = metadata.title || ui('已识别媒体');
   mediaPreviewMeta.textContent = mediaMetadataLine(metadata);
-  mediaPreviewPolicy.textContent = metadata.policy?.reason || '处理前请确认你有权保存、转换或分析该媒体。';
+  mediaPreviewPolicy.textContent = serviceMessage(metadata.policy?.reason, ui('处理前请确认你有权保存、转换或分析该媒体。')) || ui('处理前请确认你有权保存、转换或分析该媒体。');
   mediaRightsLabel.hidden = metadata.policy?.downloadAllowed === false;
   if (metadata.thumbnailUrl) {
     mediaPreviewImage.src = metadata.thumbnailUrl;
-    mediaPreviewImage.alt = metadata.title || '视频封面';
+    mediaPreviewImage.alt = metadata.title || ui('视频封面');
     mediaPreviewImage.hidden = false;
   } else {
     mediaPreviewImage.removeAttribute('src');
@@ -2142,12 +2143,12 @@ function renderBilibiliAttemptPreview(parsedUrl: URL, message: string): MediaMet
     sourceType: 'url',
     provider: 'bilibili',
     url: parsedUrl.toString(),
-    title: 'Bilibili 视频',
+    title: ui('Bilibili 视频'),
     downloadable: true,
     allowedActions: ['download', 'transcode', 'thumbnail'],
     policy: {
       downloadAllowed: true,
-      reason: `${message} 确认你有权处理后，仍可以继续尝试导入。`
+      reason: ui`${message} 确认你有权处理后，仍可以继续尝试导入。`
     }
   };
   renderMediaPreview(metadata, parsedUrl.toString());
@@ -2175,15 +2176,15 @@ async function ensureUrlDownloadAllowed(parsedUrl: URL, rightsConfirmed = mediaR
     ? currentMediaMetadata
     : await refreshMediaMetadataPreview();
   if (!metadata) {
-    metadata = renderBilibiliAttemptPreview(parsedUrl, 'B 站预览加载失败。');
+    metadata = renderBilibiliAttemptPreview(parsedUrl, ui('B 站预览加载失败。'));
   }
   if (metadata.policy?.downloadAllowed === false || metadata.downloadable === false) {
-    setUrlDownloadStatus(metadata.policy?.reason || '当前无法下载这个链接。', 'error');
+    setUrlDownloadStatus(serviceMessage(metadata.policy?.reason, ui('处理前请确认你有权保存、转换或分析该媒体。')) || ui('当前无法下载这个链接。'), 'error');
     return false;
   }
   if (!hasConfirmedRights && !mediaRightsConfirm.checked) {
     mediaPreview.hidden = false;
-    setUrlDownloadStatus('勾选“我确认有权保存、转换或分析这个媒体内容”后可继续。', 'warn');
+    setUrlDownloadStatus(ui('勾选“我确认有权保存、转换或分析这个媒体内容”后可继续。'), 'warn');
     updateActionState();
     return false;
   }
@@ -2199,8 +2200,8 @@ function isBilibiliDownloadUrl(url: URL): boolean {
 function metadataProviderLabel(provider: string): string {
   if (provider === 'bilibili') return 'Bilibili';
   if (provider === 'youtube-oembed') return 'YouTube';
-  if (provider === 'direct-media') return '视频直链';
-  return provider || '视频来源';
+  if (provider === 'direct-media') return ui('视频直链');
+  return provider || ui('视频来源');
 }
 
 function mediaMetadataLine(metadata: MediaMetadata): string {
@@ -2210,7 +2211,7 @@ function mediaMetadataLine(metadata: MediaMetadata): string {
     metadata.contentType,
     metadata.contentLength ? formatMediaBytes(Number(metadata.contentLength)) : ''
   ].filter(Boolean);
-  return parts.join(' / ') || '可加入视频队列';
+  return parts.join(' / ') || ui('可加入视频队列');
 }
 
 function formatDuration(seconds: number): string {
@@ -2240,7 +2241,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
   const sourceUrl = videoUrlInput.value.trim();
   const parsedUrl = parseDownloadUrl(sourceUrl);
   if (!parsedUrl) {
-    setUrlDownloadStatus('请输入有效的 http 或 https 视频网址。', 'error');
+    setUrlDownloadStatus(ui('请输入有效的 http 或 https 视频网址。'), 'error');
     videoUrlInput.focus();
     return;
   }
@@ -2251,8 +2252,8 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     updateActionState();
     return;
   }
-  setUrlDownloadStatus(mode === 'extract' ? '正在获取视频，完成后会自动生成页面。' : '正在获取视频，完成后会加入队列。', 'warn');
-  setUrlDownloadProgress('正在获取视频', null);
+  setUrlDownloadStatus(mode === 'extract' ? ui('正在获取视频，完成后会自动生成页面。') : ui('正在获取视频，完成后会加入队列。'), 'warn');
+  setUrlDownloadProgress(ui('正在获取视频'), null);
   let shouldExtract = false;
 
   try {
@@ -2277,12 +2278,12 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
       });
       if (!response.ok) primaryError = await readResponseError(response);
     } catch (error) {
-      primaryError = error instanceof Error ? error.message : String(error || '');
+      primaryError = error instanceof Error ? serviceMessage(error.message) : String(error || '');
     }
 
     if ((!response || !response.ok) && youtubeDownload) {
-      setUrlDownloadStatus('第一次获取没有成功，正在换一种方式重试。', 'warn');
-      setUrlDownloadProgress('正在重新尝试获取视频', null);
+      setUrlDownloadStatus(ui('第一次获取没有成功，正在换一种方式重试。'), 'warn');
+      setUrlDownloadProgress(ui('正在重新尝试获取视频'), null);
       response = await fetch(CLOUD_DOWNLOADER_URL, {
         method: 'POST',
         mode: 'cors',
@@ -2292,7 +2293,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
       });
     }
 
-    if (!response) throw new Error(primaryError || '无法连接视频下载服务。');
+    if (!response) throw new Error(primaryError || ui('无法连接视频下载服务。'));
     if (!response.ok) throw new Error(await readResponseError(response));
 
     const filename = sanitizeDownloadedFilename(
@@ -2301,23 +2302,23 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
       || `${parsedUrl.hostname || 'online-video'}.mp4`
     );
     const blob = await responseToBlobWithProgress(response, (percent) => {
-      setUrlDownloadProgress('正在导入视频', percent);
+      setUrlDownloadProgress(ui('正在导入视频'), percent);
     });
-    if (blob.size === 0) throw new Error('没有获取到可处理的视频文件。');
+    if (blob.size === 0) throw new Error(ui('没有获取到可处理的视频文件。'));
     const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
     addFiles([file], true);
     if (youtubeDownload) void importYoutubeTranscript(parsedUrl, file);
     videoUrlInput.value = '';
     clearMediaPreview();
-    setUrlDownloadProgress(mode === 'extract' ? '已获取视频，准备生成页面' : '已加入 Vid2PPT 队列', 100);
-    setUrlDownloadStatus(mode === 'extract' ? `已获取 ${filename}，正在进入处理工作台。` : `已获取 ${filename}，并加入视频队列。`, 'ok');
-    setHomeStatus(mode === 'extract' ? `已获取 ${filename}，正在准备生成页面。` : `已获取 ${filename}，点击“处理当前视频”开始生成页面。`);
+    setUrlDownloadProgress(mode === 'extract' ? ui('已获取视频，准备生成页面') : ui('已加入 Vid2PPT 队列'), 100);
+    setUrlDownloadStatus(mode === 'extract' ? ui`已获取 ${filename}，正在进入处理工作台。` : ui`已获取 ${filename}，并加入视频队列。`, 'ok');
+    setHomeStatus(mode === 'extract' ? ui`已获取 ${filename}，正在准备生成页面。` : ui`已获取 ${filename}，点击“处理当前视频”开始生成页面。`);
     shouldExtract = mode === 'extract';
   } catch (error) {
     console.error(error);
     const message = urlDownloadErrorMessage(error);
     setUrlDownloadStatus(message, 'error');
-    setUrlDownloadProgress('获取失败', 100);
+    setUrlDownloadProgress(ui('获取失败'), 100);
     if (shouldOfferRecordingFallback(message)) openUrlRecordingFallback(parsedUrl.toString(), mode, message);
   } finally {
     isUrlDownloading = false;
@@ -2325,13 +2326,13 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
   }
 
   if (shouldExtract) {
-    setUrlDownloadStatus('视频已获取，正在检查并生成页面。进度会显示在工作台左侧。', 'warn');
-    setUrlDownloadProgress('正在进入处理工作台', 100);
+    setUrlDownloadStatus(ui('视频已获取，正在检查并生成页面。进度会显示在工作台左侧。'), 'warn');
+    setUrlDownloadProgress(ui('正在进入处理工作台'), 100);
     const started = await processCurrentFile();
     if (started) {
-      setUrlDownloadStatus('页面生成完成，已在工作台展示。', 'ok');
+      setUrlDownloadStatus(ui('页面生成完成，已在工作台展示。'), 'ok');
     } else {
-      setUrlDownloadStatus('视频已加入队列，但这次没有开始生成页面。请查看工作台或主页状态提示。', 'warn');
+      setUrlDownloadStatus(ui('视频已加入队列，但这次没有开始生成页面。请查看工作台或主页状态提示。'), 'warn');
     }
   }
 }
@@ -2365,10 +2366,10 @@ async function importYoutubeTranscript(sourceUrl: URL, file: File): Promise<void
       transcriptEl.value = transcript;
       persistWorkspaceToState({ markProcessed: slides.length > 0 });
       updateActionState();
-      if (!isBusy()) setStatus('已自动导入 YouTube 字幕，可直接生成中文摘要或图文笔记。');
+      if (!isBusy()) setStatus(ui('已自动导入 YouTube 字幕，可按输出偏好生成摘要或图文笔记。'));
     }
   } catch (error) {
-    console.info('YouTube 字幕未导入，将保留本地转写方式。', error);
+    console.info(ui('YouTube 字幕未导入，将保留本地转写方式。'), error);
   }
 }
 
@@ -2414,35 +2415,35 @@ async function readResponseError(response: Response): Promise<string> {
   if (contentType.includes('application/json')) {
     const data = await response.json().catch(() => null) as { detail?: unknown; error?: unknown; message?: unknown } | null;
     const detail = data?.detail ?? data?.message ?? data?.error;
-    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (typeof detail === 'string' && detail.trim()) return serviceMessage(detail);
   }
   const text = await response.text().catch(() => '');
-  return text.trim() || `链接获取请求失败：HTTP ${response.status}`;
+  return serviceMessage(text.trim()) || ui`链接获取请求失败：HTTP ${response.status}`;
 }
 
 function urlDownloadErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error || '');
+  const message = error instanceof Error ? serviceMessage(error.message) : String(error || '');
   if (!message || /failed to fetch|load failed|networkerror/i.test(message)) {
-    return `无法获取链接，请稍后重试，也可上传已保存的视频文件。`;
+    return ui`无法获取链接，请稍后重试，也可上传已保存的视频文件。`;
   }
   if (/unable to connect to proxy|tunnel connection failed|proxyerror/i.test(message)) {
-    return 'YouTube 备用线路暂时无法使用。其他获取方式已保留，请稍后重试。';
+    return ui('YouTube 备用线路暂时无法使用。其他获取方式已保留，请稍后重试。');
   }
   if (/please report this issue|confirm you are on the latest version/i.test(message)) {
-    return '这个视频暂时没有返回可处理的视频流，请稍后重试。';
+    return ui('这个视频暂时没有返回可处理的视频流，请稍后重试。');
   }
   return message;
 }
 
 function shouldOfferRecordingFallback(message: string): boolean {
-  return /youtube|登录|验证|真人|cookie/i.test(message);
+  return /youtube|登录|验证|真人|cookie|sign.?in|login|verification|human/i.test(message);
 }
 
 function openUrlRecordingFallback(sourceUrl: string, mode: UrlDownloadMode, message: string): void {
   fallbackSourceUrl = sourceUrl;
   fallbackUrlMode = mode;
-  urlFallbackMessage.textContent = `${message} 可以打开原视频后，用录屏方式继续处理。`;
-  urlFallbackRecordBtn.textContent = mode === 'extract' ? '开始录制并直接生成' : '开始录制并加入队列';
+  urlFallbackMessage.textContent = ui`${message} 可以打开原视频后，用录屏方式继续处理。`;
+  urlFallbackRecordBtn.textContent = mode === 'extract' ? ui('开始录制并直接生成') : ui('开始录制并加入队列');
   if (typeof urlFallbackDialog.showModal === 'function') urlFallbackDialog.showModal();
   else urlFallbackDialog.setAttribute('open', '');
 }
@@ -2469,11 +2470,11 @@ function sanitizeDownloadedFilename(filename: string): string {
 }
 
 function addFiles(files: File[], selectAdded = false): void {
-  if (isBusy() && !(selectAdded && isUrlDownloading)) { setHomeStatus('当前任务运行中，完成后可添加文件。'); return; }
+  if (isBusy() && !(selectAdded && isUrlDownloading)) { setHomeStatus(ui('当前任务运行中，完成后可添加文件。')); return; }
   if (isDemoProject) restoreWorkspaceAfterDemo();
   const validFiles = files.filter((file) => isSupportedMediaFile(file) && file.size > 0);
   if (validFiles.length === 0) {
-    setHomeStatus('没有检测到可处理的视频/音频文件。');
+    setHomeStatus(ui('没有检测到可处理的视频/音频文件。'));
     return;
   }
 
@@ -2505,7 +2506,7 @@ function addFiles(files: File[], selectAdded = false): void {
 function addImageFiles(files: File[]): void {
   const validFiles = files.filter(isSupportedImageFile);
   if (validFiles.length === 0) {
-    setImageStatus('没有检测到可处理的图片文件。');
+    setImageStatus(ui('没有检测到可处理的图片文件。'));
     imageInput.value = '';
     return;
   }
@@ -2520,26 +2521,26 @@ function addImageFiles(files: File[]): void {
 
   selectedImageFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
   renderImageFileList();
-  setImageStatus(`已选择 ${selectedImageFiles.length} 张图片，可快速生成图片版 PPTX，或进入编辑模式添加真实文本框。`);
+  setImageStatus(ui`已选择 ${selectedImageFiles.length} 张图片，可快速生成图片版 PPTX，或进入编辑模式添加真实文本框。`);
   updateActionState();
   imageInput.value = '';
 }
 
 function removeImageFile(index: number): void {
   if (isBusy()) {
-    setImageStatus('当前任务运行中，完成后可移除图片。');
+    setImageStatus(ui('当前任务运行中，完成后可移除图片。'));
     return;
   }
   selectedImageFiles.splice(index, 1);
   renderImageFileList();
-  setImageStatus(selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片。` : '等待上传图片。');
+  setImageStatus(selectedImageFiles.length > 0 ? ui`已选择 ${selectedImageFiles.length} 张图片。` : ui('等待上传图片。'));
   updateActionState();
 }
 
 function chooseFile(index: number, allowBusySelection = false): void {
   if (index < 0 || index >= selectedFiles.length) return;
   if (isBusy() && !allowBusySelection) {
-    setHomeStatus('当前任务运行中，完成后可切换视频。');
+    setHomeStatus(ui('当前任务运行中，完成后可切换视频。'));
     return;
   }
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
@@ -2554,7 +2555,7 @@ function chooseFile(index: number, allowBusySelection = false): void {
 
 function removeFile(index: number): void {
   if (isBusy()) {
-    setHomeStatus('当前任务运行中，完成后可移除文件。');
+    setHomeStatus(ui('当前任务运行中，完成后可移除文件。'));
     return;
   }
   const file = selectedFiles[index];
@@ -2566,7 +2567,7 @@ function removeFile(index: number): void {
     selectedFile = null;
     resetCurrentFileState();
     renderFileList();
-    setHomeStatus('等待上传视频。');
+    setHomeStatus(ui('等待上传视频。'));
     updateActionState();
     return;
   }
@@ -2583,7 +2584,7 @@ async function processCurrentFile(): Promise<boolean> {
     toggleSideBtn.setAttribute('aria-expanded', 'true');
     $<HTMLElement>('#workspaceImport').hidden = true;
     $<HTMLElement>('#toggleImportBtn').setAttribute('aria-expanded', 'false');
-    setStatus('这是音频文件，没有可提取的画面。可在“逐字稿与笔记”中开始转写。');
+    setStatus(ui('这是音频文件，没有可提取的画面。可在“逐字稿与笔记”中开始转写。'));
     return false;
   }
   const previous = snapshotWorkspace();
@@ -2595,12 +2596,12 @@ async function processCurrentFile(): Promise<boolean> {
   setWorkspaceMode('video');
   showWorkspace();
   updateActionState();
-  setProgress('正在检查视频', undefined, true);
-  setStatus(`正在读取本地视频：${file.name}`);
+  setProgress(ui('正在检查视频'), undefined, true);
+  setStatus(ui`正在读取本地视频：${file.name}`);
   $<HTMLElement>('#workspaceImport').hidden = true;
   const reportGateStatus = (message: string) => { setStatus(message); setHomeStatus(message); };
   try {
-    if (!await ensureUsageCapacity('video_conversion', 1, '视频转换次数', reportGateStatus)) {
+    if (!await ensureUsageCapacity('video_conversion', 1, ui('视频转换次数'), reportGateStatus)) {
       hideProgress();
       return false;
     }
@@ -2615,7 +2616,7 @@ async function processCurrentFile(): Promise<boolean> {
     resetFrameOutputs();
     setStateStatus(file, 'processing');
     renderFileList();
-    setStatus(`正在提取 ${file.name}，页面会陆续出现。请保持此页面打开。`);
+    setStatus(ui`正在提取 ${file.name}，页面会陆续出现。请保持此页面打开。`);
     const result = await extractSlidesFromFile(file, settings, {
       signal,
       onMetadata: (meta) => { videoMeta = meta; setupTimeline(meta.duration); },
@@ -2626,7 +2627,7 @@ async function processCurrentFile(): Promise<boolean> {
         updateTimelineMarkers();
       },
       onProgress: ({ completed, total, time, duration, kept }) => {
-        setProgress(`扫描 ${formatTime(time)} / ${formatTime(duration)} · 找到 ${kept} 页`, Math.round(completed / Math.max(total, 1) * 100));
+        setProgress(ui`扫描 ${formatTime(time)} / ${formatTime(duration)} · 找到 ${kept} 页`, Math.round(completed / Math.max(total, 1) * 100));
         updateExtractionTimeline(time);
       }
     });
@@ -2637,12 +2638,12 @@ async function processCurrentFile(): Promise<boolean> {
     setStateForFile(file, { ...snapshotWorkspace(), status: 'done', processedAt: new Date().toISOString() });
     if (slides[0]) setPreview(slides[0]);
     resultView = 'notes';
-    setProgress('画面识别与去重完成', 100);
-    setStatus(`已整理 ${slides.length} 页原画面笔记。现在可以阅读和保存；需要文字重点时，继续提炼 AI 要点。`);
+    setProgress(ui('画面识别与去重完成'), 100);
+    setStatus(ui`已整理 ${slides.length} 页原画面笔记。现在可以阅读和保存；需要文字重点时，继续提炼 AI 要点。`);
     await recordUsage('video_conversion', 1, { name: file.name, duration_seconds: Math.round(videoMeta.duration), slides: slides.length });
   } catch (error) {
     const stopped = signal.aborted;
-    const message = stopped ? '已停止提取，本次未计入转换额度。' : error instanceof Error ? error.message : '提取没有完成，请换用可播放的 MP4 文件后重试。';
+    const message = stopped ? ui('已停止提取，本次未计入转换额度。') : error instanceof Error ? serviceMessage(error.message) : ui('提取没有完成，请换用可播放的 MP4 文件后重试。');
     if (started) {
       if (previous.slides.length) {
         setStateForFile(file, previous);
@@ -2652,7 +2653,7 @@ async function processCurrentFile(): Promise<boolean> {
       }
     }
     hideProgress();
-    setStatus(message + (previous.slides.length ? ' 之前的编辑结果已保留。' : slides.length ? ` 已提取的 ${slides.length} 页可检查并导出。` : ' 可以重新选择文件或重试。'));
+    setStatus(message + (previous.slides.length ? ui(' 之前的编辑结果已保留。') : slides.length ? ui` 已提取的 ${slides.length} 页可检查并导出。` : ui(' 可以重新选择文件或重试。')));
   } finally {
     extractionAbort = null;
     isExtracting = false;
@@ -2668,7 +2669,7 @@ async function processCurrentFile(): Promise<boolean> {
 async function batchExtractAndDownloadZip(): Promise<void> {
   if (selectedFiles.length === 0 || isBusy()) return;
   if (!currentLimits().batch_processing) {
-    setHomeStatus('批量处理面向专业版和终身版，可同时生成多个视频的页面并打包 ZIP。');
+    setHomeStatus(ui('批量处理面向专业版和终身版，可同时生成多个视频的页面并打包 ZIP。'));
     return;
   }
   const files = selectedFiles.slice();
@@ -2681,7 +2682,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
   renderFileList();
 
   try {
-    if (!await ensureUsageCapacity('video_conversion', files.length, '视频转换次数', setHomeStatus)) return;
+    if (!await ensureUsageCapacity('video_conversion', files.length, ui('视频转换次数'), setHomeStatus)) return;
     const settings = readSettings();
     const zip = new JSZip();
     persistWorkspaceToState();
@@ -2690,12 +2691,12 @@ async function batchExtractAndDownloadZip(): Promise<void> {
       selectedFile = file;
       setStateStatus(file, 'processing');
       renderFileList();
-      setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name}`);
+      setHomeStatus(ui`批量生成 ${index + 1}/${files.length}：${file.name}`);
 
       try {
         let durationMessage = '';
         if (!await ensureVideoDurationAllowed(file, (message) => { durationMessage = message; setHomeStatus(message); })) {
-          throw new Error(durationMessage || '无法读取这个视频的时长。');
+          throw new Error(durationMessage || ui('无法读取这个视频的时长。'));
         }
         const result = await extractSlidesFromFile(file, settings, {
           onMetadata: (meta) => {
@@ -2704,7 +2705,7 @@ async function batchExtractAndDownloadZip(): Promise<void> {
           },
           onProgress: ({ completed, total, time, duration, kept }) => {
             const filePercent = Math.round((completed / Math.max(total, 1)) * 100);
-            setHomeStatus(`批量生成 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 已生成 ${kept} 页`);
+            setHomeStatus(ui`批量生成 ${index + 1}/${files.length}：${file.name} · ${filePercent}% · ${formatTime(time)} / ${formatTime(duration)} · 已生成 ${kept} 页`);
           }
         });
 
@@ -2720,28 +2721,28 @@ async function batchExtractAndDownloadZip(): Promise<void> {
         addSlidesToZip(zip, file, result.slides);
         successfulFiles.push(file.name);
       } catch (error) {
-        const message = error instanceof Error ? error.message : '这个视频未能完成生成。';
+        const message = error instanceof Error ? serviceMessage(error.message) : ui('这个视频未能完成生成。');
         failedFiles.push(file.name);
         setStateStatus(file, 'error', message);
-        setHomeStatus(`${file.name} 未完成：${message}。继续处理其余视频。`);
+        setHomeStatus(ui`${file.name} 未完成：${message}。继续处理其余视频。`);
       }
       renderFileList();
       await yieldToBrowser();
     }
 
     if (successfulFiles.length === 0) {
-      setHomeStatus(`本次 ${files.length} 个视频均未完成。展开队列可查看原因，修正后可单独重试。`);
+      setHomeStatus(ui`本次 ${files.length} 个视频均未完成。展开队列可查看原因，修正后可单独重试。`);
       return;
     }
-    setHomeStatus('正在打包页面图片...');
+    setHomeStatus(ui('正在打包页面图片...'));
     const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-      setHomeStatus(`正在打包页面图片：${Math.round(metadata.percent)}%`);
+      setHomeStatus(ui`正在打包页面图片：${Math.round(metadata.percent)}%`);
     });
     downloadBlob(blob, `vid2deck-frames-${timestampForFilename()}.zip`);
-    setHomeStatus(`批量完成：${successfulFiles.length} 个视频的页面图片已打包下载。${failedFiles.length > 0 ? `另有 ${failedFiles.length} 个未完成，请在队列中查看原因并重试。` : ''}`);
+    setHomeStatus(ui`批量完成：${successfulFiles.length} 个视频的页面图片已打包下载。${failedFiles.length > 0 ? ui`另有 ${failedFiles.length} 个未完成，请在队列中查看原因并重试。` : ''}`);
   } catch (error) {
     console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : '批量生成失败。');
+    setHomeStatus(error instanceof Error ? serviceMessage(error.message) : ui('批量生成失败。'));
   } finally {
     try {
       if (successfulFiles.length > 0) {
@@ -2764,7 +2765,7 @@ async function downloadProcessedFramesZip(): Promise<void> {
   if (isBusy()) return;
   const processed = selectedFiles.filter((file) => getState(file).slides.length > 0);
   if (processed.length === 0) {
-    setHomeStatus('还没有已完成的页面图片可以打包。');
+    setHomeStatus(ui('还没有已完成的页面图片可以打包。'));
     return;
   }
   isBatchProcessing = true;
@@ -2773,13 +2774,13 @@ async function downloadProcessedFramesZip(): Promise<void> {
     const zip = new JSZip();
     processed.forEach((file) => addSlidesToZip(zip, file, getState(file).slides));
     const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-      setHomeStatus(`正在打包已完成页面：${Math.round(metadata.percent)}%`);
+      setHomeStatus(ui`正在打包已完成页面：${Math.round(metadata.percent)}%`);
     });
     downloadBlob(blob, `vid2deck-processed-frames-${timestampForFilename()}.zip`);
-    setHomeStatus(`已下载 ${processed.length} 个视频的页面图片压缩包。`);
+    setHomeStatus(ui`已下载 ${processed.length} 个视频的页面图片压缩包。`);
   } catch (error) {
     console.error(error);
-    setHomeStatus(error instanceof Error ? error.message : '页面图片打包失败，请重试。');
+    setHomeStatus(error instanceof Error ? serviceMessage(error.message) : ui('页面图片打包失败，请重试。'));
   } finally {
     isBatchProcessing = false;
     updateActionState();
@@ -2797,14 +2798,14 @@ async function transcribeCurrentFile(): Promise<boolean> {
   try {
     const meta = videoMeta ?? await readFileVideoMetadata(file);
     transcribeMinutes = Math.max(1, Math.ceil(meta.duration / 60));
-    if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, '视频转录时长', setStatus)) return false;
+    if (!await ensureUsageCapacity('transcribe_minute', transcribeMinutes, ui('视频转录时长'), setStatus)) return false;
     transcriptEl.value = '';
-    setProgress('准备转写音频', 0);
-    setStatus(`正在转写：${file.name}，结果会分段输出。`);
+    setProgress(ui('准备转写音频'), 0);
+    setStatus(ui`正在转写：${file.name}，结果会分段输出。`);
     const transcriptText = await transcribeLocally(file, setStatus);
     if (!transcriptText.trim() && previousTranscript.trim()) transcriptEl.value = previousTranscript;
-    setProgress('转写完成', 100);
-    setStatus(transcriptText ? '转写完成。' : previousTranscript.trim() ? '未识别到有效语音，已保留之前的逐字稿。' : '未识别到有效语音，你也可以手动粘贴逐字稿。');
+    setProgress(ui('转写完成'), 100);
+    setStatus(transcriptText ? ui('转写完成。') : previousTranscript.trim() ? ui('未识别到有效语音，已保留之前的逐字稿。') : ui('未识别到有效语音，你也可以手动粘贴逐字稿。'));
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     await recordUsage('transcribe_minute', transcribeMinutes, {
       name: file.name,
@@ -2815,9 +2816,9 @@ async function transcribeCurrentFile(): Promise<boolean> {
     console.error(error);
     if (previousTranscript.trim()) transcriptEl.value = previousTranscript;
     persistWorkspaceToState();
-    setProgress('转写失败', 100);
-    const message = error instanceof Error ? error.message : '逐字稿没有生成成功，请重试或换一个包含清晰语音的视频。';
-    setStatus(`${message}${previousTranscript.trim() ? ' 已保留之前的逐字稿。' : transcriptEl.value.trim() ? ' 已保留完成的部分，可以复制或下载。' : ''}`);
+    setProgress(ui('转写失败'), 100);
+    const message = error instanceof Error ? serviceMessage(error.message) : ui('逐字稿没有生成成功，请重试或换一个包含清晰语音的视频。');
+    setStatus(`${message}${previousTranscript.trim() ? ui(' 已保留之前的逐字稿。') : transcriptEl.value.trim() ? ui(' 已保留完成的部分，可以复制或下载。') : ''}`);
   } finally {
     isTranscribing = false;
     updateActionState();
@@ -2835,23 +2836,23 @@ summarizeBtn.addEventListener('click', () => {
 async function generateSummary(): Promise<void> {
   const transcriptForSummary = transcriptEl.value.trim();
   if (!transcriptForSummary || isBusy()) {
-    if (!transcriptForSummary) setStatus('没有逐字稿可总结。');
+    if (!transcriptForSummary) setStatus(ui('没有逐字稿可总结。'));
     return;
   }
   isSummarizing = true;
   updateActionState();
   try {
-    if (!await ensureUsageCapacity('summary_generation', 1, '摘要次数', setStatus)) return;
-    setProgress('正在生成摘要', 50, true);
-    setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成摘要...`);
+    if (!await ensureUsageCapacity('summary_generation', 1, ui('摘要次数'), setStatus)) return;
+    setProgress(ui('正在生成摘要'), 50, true);
+    setStatus(ui`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成摘要...`);
     summaryEl.value = await summarizeWithApi(transcriptForSummary, 'summary', selectedFile?.name ?? '');
-    setProgress('摘要完成', 100);
-    setStatus('摘要已生成。');
+    setProgress(ui('摘要完成'), 100);
+    setStatus(ui('摘要已生成。'));
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
   } catch (error) {
     console.error(error);
-    setProgress('摘要失败', 100);
-    setStatus(error instanceof Error ? error.message : '摘要生成失败。');
+    setProgress(ui('摘要失败'), 100);
+    setStatus(error instanceof Error ? serviceMessage(error.message) : ui('摘要生成失败。'));
   } finally {
     isSummarizing = false;
     updateActionState();
@@ -2861,11 +2862,11 @@ async function generateSummary(): Promise<void> {
 
 async function generateIllustratedNotes(forceRegenerate = false): Promise<void> {
   if (!selectedFile || workspaceMode !== 'video') {
-    setStatus('选择并处理视频后，可生成图文笔记。');
+    setStatus(ui('选择并处理视频后，可生成图文笔记。'));
     return;
   }
   if (!authSession) {
-    setStatus('登录后可生成图文笔记。');
+    setStatus(ui('登录后可生成图文笔记。'));
     return;
   }
   if (isBusy()) return;
@@ -2875,19 +2876,19 @@ async function generateIllustratedNotes(forceRegenerate = false): Promise<void> 
   }
 
   if (!transcriptEl.value.trim()) {
-    setStatus('正在识别语音，随后会根据逐字稿整理图文笔记。');
+    setStatus(ui('正在识别语音，随后会根据逐字稿整理图文笔记。'));
     const transcribed = await transcribeCurrentFile();
     if (!transcribed) {
-      setStatus('没有识别到可用于生成笔记的逐字稿。');
+      setStatus(ui('没有识别到可用于生成笔记的逐字稿。'));
       return;
     }
   }
   isGeneratingNotes = true;
   updateActionState();
   try {
-    if (!await ensureUsageCapacity('summary_generation', 1, '图文笔记次数', setStatus)) return;
-    setProgress('正在生成图文笔记', 56, true);
-    setStatus(`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成图文笔记...`);
+    if (!await ensureUsageCapacity('summary_generation', 1, ui('图文笔记次数'), setStatus)) return;
+    setProgress(ui('正在生成图文笔记'), 56, true);
+    setStatus(ui`正在用${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}生成图文笔记...`);
     illustratedNotesMarkdown = await summarizeWithApi(
       transcriptEl.value.trim(),
       'illustrated_notes',
@@ -2895,13 +2896,13 @@ async function generateIllustratedNotes(forceRegenerate = false): Promise<void> 
     );
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     renderIllustratedNotes();
-    setProgress('图文笔记完成', 100);
-    setStatus('AI 要点已整理，原画面与时间索引一起保留。可保存完整笔记或复制 Markdown。');
+    setProgress(ui('图文笔记完成'), 100);
+    setStatus(ui('AI 要点已整理，原画面与时间索引一起保留。可保存完整笔记或复制 Markdown。'));
     resultView = 'notes';
   } catch (error) {
     console.error(error);
-    setProgress('图文笔记生成失败', 100);
-    setStatus(error instanceof Error ? error.message : '图文笔记生成失败。');
+    setProgress(ui('图文笔记生成失败'), 100);
+    setStatus(error instanceof Error ? serviceMessage(error.message) : ui('图文笔记生成失败。'));
   } finally {
     isGeneratingNotes = false;
     updateActionState();
@@ -2946,13 +2947,13 @@ function renderFileList(): void {
     title.textContent = file.name;
     const meta = document.createElement('small');
     const statusText = state.status === 'processing'
-      ? ' · 处理中'
+      ? ui(' · 处理中')
       : state.status === 'error'
-        ? ` · 失败：${state.error ?? '未知错误'}`
+        ? ui` · 失败：${serviceMessage(state.error) || ui('未知错误')}`
         : totalSlides > 0
-          ? ` · 已处理 ${selectedSlides}/${totalSlides} 张`
-          : ' · 待处理';
-    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ' · 当前' : ''}${statusText}`;
+          ? ui` · 已处理 ${selectedSlides}/${totalSlides} 张`
+          : ui(' · 待处理');
+    meta.textContent = `${formatBytes(file.size)}${index === currentFileIndex ? ui(' · 当前') : ''}${statusText}`;
     main.append(title, meta);
 
     const actions = document.createElement('div');
@@ -2962,7 +2963,7 @@ function renderFileList(): void {
       const view = document.createElement('button');
       view.type = 'button';
       view.className = 'file-result-btn';
-      view.textContent = '查看结果';
+      view.textContent = ui('查看结果');
       view.disabled = isBusy();
       view.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -2972,7 +2973,7 @@ function renderFileList(): void {
       const download = document.createElement('button');
       download.type = 'button';
       download.className = 'file-result-btn primary';
-      download.textContent = '下载 PDF';
+      download.textContent = ui('下载 PDF');
       download.disabled = isBusy();
       download.addEventListener('click', async (event) => {
         event.stopPropagation();
@@ -2982,7 +2983,7 @@ function renderFileList(): void {
       const frames = document.createElement('button');
       frames.type = 'button';
       frames.className = 'file-result-btn';
-      frames.textContent = '下载页面图片';
+      frames.textContent = ui('下载页面图片');
       frames.disabled = isBusy();
       frames.addEventListener('click', async (event) => {
         event.stopPropagation();
@@ -2992,7 +2993,7 @@ function renderFileList(): void {
       const pptx = document.createElement('button');
       pptx.type = 'button';
       pptx.className = 'file-result-btn';
-      pptx.textContent = '下载 PPTX';
+      pptx.textContent = ui('下载 PPTX');
       pptx.disabled = isBusy();
       pptx.addEventListener('click', async (event) => {
         event.stopPropagation();
@@ -3005,7 +3006,7 @@ function renderFileList(): void {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'file-remove-btn';
-    remove.textContent = '移除';
+    remove.textContent = ui('移除');
     remove.disabled = isBusy();
     remove.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -3021,7 +3022,7 @@ function renderFileList(): void {
 function renderImageFileList(): void {
   imageFileList.innerHTML = '';
   imageFileList.hidden = selectedImageFiles.length === 0;
-  imageFileLabel.textContent = selectedImageFiles.length > 0 ? `已选择 ${selectedImageFiles.length} 张图片` : '选择或拖入一组图片';
+  imageFileLabel.textContent = selectedImageFiles.length > 0 ? ui`已选择 ${selectedImageFiles.length} 张图片` : ui('选择或拖入一组图片');
 
   selectedImageFiles.forEach((file, index) => {
     const item = document.createElement('div');
@@ -3033,7 +3034,7 @@ function renderImageFileList(): void {
     const title = document.createElement('strong');
     title.textContent = file.name;
     const meta = document.createElement('small');
-    meta.textContent = `${formatBytes(file.size)} · 第 ${index + 1} 页`;
+    meta.textContent = ui`${formatBytes(file.size)} · 第 ${index + 1} 页`;
     main.append(title, meta);
 
     const actions = document.createElement('div');
@@ -3041,7 +3042,7 @@ function renderImageFileList(): void {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'file-remove-btn';
-    remove.textContent = '移除';
+    remove.textContent = ui('移除');
     remove.disabled = isBusy();
     remove.addEventListener('click', () => removeImageFile(index));
     actions.append(remove);
@@ -3055,7 +3056,7 @@ function openProcessedFile(index: number): void {
   setWorkspaceMode('video');
   chooseFile(index);
   showWorkspace();
-  setStatus('已回到当前处理结果，可继续勾选、裁剪、删除或补抓页面。');
+  setStatus(ui('已回到当前处理结果，可继续勾选、裁剪、删除或补抓页面。'));
 }
 
 async function downloadProcessedPdf(index: number): Promise<void> { await exportProcessedFile(index, 'pdf'); }
@@ -3065,9 +3066,9 @@ async function downloadSingleFramesZip(index: number): Promise<void> { await exp
 async function exportProcessedFile(index: number, format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
   if (isBusy() || !selectedFiles[index]) return;
   chooseFile(index);
-  setHomeStatus(`正在生成 ${selectedFiles[index].name} 的导出文件…`);
+  setHomeStatus(ui`正在生成 ${selectedFiles[index].name} 的导出文件…`);
   await exportSelected(format);
-  setHomeStatus(statusEl.textContent ?? '导出完成，请查看浏览器下载列表。');
+  setHomeStatus(statusEl.textContent ?? ui('导出完成，请查看浏览器下载列表。'));
   renderFileList();
 }
 
@@ -3079,18 +3080,18 @@ async function downloadImagesAsPptx(): Promise<void> {
   updateActionState();
   renderImageFileList();
   try {
-    setImageStatus(`正在读取 ${files.length} 张本地图片...`);
+    setImageStatus(ui`正在读取 ${files.length} 张本地图片...`);
     await yieldToBrowser();
     const imageSlides = await buildSlidesFromImages(files, (index, total) => {
-      setImageStatus(`正在生成图片页：${index} / ${total}`);
+      setImageStatus(ui`正在生成图片页：${index} / ${total}`);
     });
-    setImageStatus('正在生成图片版 PPTX...');
+    setImageStatus(ui('正在生成图片版 PPTX...'));
     const pptxBlob = await makePptx(imageSlides);
     downloadBlob(pptxBlob, `vid2ppt-deck-images-${timestampForFilename()}.pptx`);
-    setImageStatus(`已生成 ${imageSlides.length} 页图片版 PPTX；如需文本框，请进入编辑模式。`);
+    setImageStatus(ui`已生成 ${imageSlides.length} 页图片版 PPTX；如需文本框，请进入编辑模式。`);
   } catch (error) {
     console.error(error);
-    setImageStatus(error instanceof Error ? error.message : '图片生成 PPTX 失败。');
+    setImageStatus(error instanceof Error ? serviceMessage(error.message) : ui('图片生成 PPTX 失败。'));
   } finally {
     isBatchProcessing = false;
     renderImageFileList();
@@ -3107,7 +3108,7 @@ async function openImagesInWorkspace(): Promise<void> {
   updateActionState();
   renderImageFileList();
   try {
-    if (!await ensureUsageCapacity('editable_slide', files.length, '文字识别页面', setImageStatus)) return;
+    if (!await ensureUsageCapacity('editable_slide', files.length, ui('文字识别页面'), setImageStatus)) return;
     persistWorkspaceToState();
     setWorkspaceMode('image');
     selectedFile = new File([], `image-deck-${timestampForFilename()}.images`, { type: 'application/x-vid2deck-image-deck' });
@@ -3115,16 +3116,16 @@ async function openImagesInWorkspace(): Promise<void> {
     resetCurrentFileState();
     workspaceOpened = true;
     showWorkspace();
-    setProgress('正在读取本地图片', 5, true);
-    setStatus(`正在读取 ${files.length} 张图片，文件仅在设备上处理。`);
+    setProgress(ui('正在读取本地图片'), 5, true);
+    setStatus(ui`正在整理 ${files.length} 张图片，准备识别文字。`);
     await yieldToBrowser();
 
-    setProgress('页面加载中', 10, true);
-    setStatus('正在生成图片页面，结果会陆续出现。');
+    setProgress(ui('页面加载中'), 10, true);
+    setStatus(ui('正在生成图片页面，结果会陆续出现。'));
     slides = [];
     slidesEl.innerHTML = '';
     const imageSlides = await buildSlidesFromImages(files, (index, total) => {
-      setProgress(`页面加载中：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 38), true);
+      setProgress(ui`页面加载中：${index} / ${total}`, 10 + Math.round((index / Math.max(total, 1)) * 38), true);
     }, (slide) => {
       slides.push(slide);
       appendSlideCard(slide);
@@ -3134,20 +3135,20 @@ async function openImagesInWorkspace(): Promise<void> {
     slides = imageSlides;
     videoMeta = null;
     if (slides[0]) setPreview(slides[0]);
-    setProgress('图片页已准备，正在识别文字', 50, true);
-    setStatus('正在识别图片文字，并生成可编辑文本框。');
+    setProgress(ui('图片页已准备，正在识别文字'), 50, true);
+    setStatus(ui('正在识别图片文字，并生成可编辑文本框。'));
     const textBoxCount = await recognizeSlidesToTextBoxes(slides, {
       replaceExisting: true,
       onProgress: (index, total, message) => {
         const base = 50;
         const span = 49;
-        setProgress(`识别文字：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
+        setProgress(ui`识别文字：${index} / ${total} · ${message}`, base + Math.round((index / Math.max(total, 1)) * span), true);
       }
     });
     renderSlides();
     if (slides[0]) setPreview(slides[0]);
-    setProgress('文字识别完成', 100);
-    setStatus(`已生成 ${slides.length} 张图片页，并自动识别出 ${textBoxCount} 个可编辑文本框。顶部导出 PPTX 后可直接编辑文字。`);
+    setProgress(ui('文字识别完成'), 100);
+    setStatus(ui`已生成 ${slides.length} 张图片页，并自动识别出 ${textBoxCount} 个可编辑文本框。顶部导出 PPTX 后可直接编辑文字。`);
     persistWorkspaceToState({ markProcessed: true });
     await recordUsage('editable_slide', slides.length, {
       source: 'image_workspace',
@@ -3156,13 +3157,13 @@ async function openImagesInWorkspace(): Promise<void> {
     });
   } catch (error) {
     console.error(error);
-    const message = error instanceof Error ? error.message : '图片进入编辑模式失败。';
+    const message = error instanceof Error ? serviceMessage(error.message) : ui('图片进入编辑模式失败。');
     if (workspaceOpened && slides.length > 0) {
       persistWorkspaceToState({ markProcessed: true });
       renderSlides();
       if (slides[0]) setPreview(slides[0]);
-      setProgress('已保留加载的图片页', 100);
-      setStatus(`${message} 已保留 ${slides.length} 页，可导出图片版 PPTX，也可重试文字识别。`);
+      setProgress(ui('已保留加载的图片页'), 100);
+      setStatus(ui`${message} 已保留 ${slides.length} 页，可导出图片版 PPTX，也可重试文字识别。`);
     } else {
       setImageStatus(message);
       setStatus(message);
@@ -3177,16 +3178,16 @@ async function openImagesInWorkspace(): Promise<void> {
 
 function selectNotebookPdfFile(file: File | null): void {
   if (isBusy()) {
-    setNotebookPdfStatus('当前任务运行中，完成后可选择 PDF。');
+    setNotebookPdfStatus(ui('当前任务运行中，完成后可选择 PDF。'));
     notebookPdfInput.value = '';
     return;
   }
   if (!file || !isSupportedPdfFile(file)) {
     selectedNotebookPdfFile = null;
-    notebookPdfFileLabel.textContent = '选择或拖入 NotebookLM 生成的 PDF';
+    notebookPdfFileLabel.textContent = ui('选择或拖入 NotebookLM 生成的 PDF');
     notebookPdfInfo.hidden = true;
     notebookPdfInfo.textContent = '';
-    setNotebookPdfStatus('请选择 PDF 文件。');
+    setNotebookPdfStatus(ui('请选择 PDF 文件。'));
     updateActionState();
     notebookPdfInput.value = '';
     return;
@@ -3195,7 +3196,7 @@ function selectNotebookPdfFile(file: File | null): void {
   notebookPdfFileLabel.textContent = file.name;
   notebookPdfInfo.hidden = false;
   notebookPdfInfo.textContent = `${file.name} · ${formatBytes(file.size)}`;
-  setNotebookPdfStatus('PDF 已选择，可以开始抹除右下角 Logo。');
+  setNotebookPdfStatus(ui('PDF 已选择，可以开始抹除右下角 Logo。'));
   updateActionState();
   notebookPdfInput.value = '';
 }
@@ -3206,15 +3207,15 @@ async function maskSelectedNotebookPdf(): Promise<void> {
   isPdfMasking = true;
   updateActionState();
   try {
-    setNotebookPdfStatus('正在加载 PDF 引擎...');
+    setNotebookPdfStatus(ui('正在加载 PDF 引擎...'));
     const result = await maskNotebookPdf(file, (page, total, detectedCount) => {
-      setNotebookPdfStatus(`正在处理 PDF：${page} / ${total} 页，已识别 ${detectedCount} 页 Logo。`);
+      setNotebookPdfStatus(ui`正在处理 PDF：${page} / ${total} 页，已识别 ${detectedCount} 页 Logo。`);
     });
     downloadBlob(result.blob, `${baseName(file.name)}-no-notebooklm.pdf`);
-    setNotebookPdfStatus(`已生成处理版 PDF：共 ${result.pageCount} 页，识别到 ${result.detectedPageCount} 页 Logo。`);
+    setNotebookPdfStatus(ui`已生成处理版 PDF：共 ${result.pageCount} 页，识别到 ${result.detectedPageCount} 页 Logo。`);
   } catch (error) {
     console.error(error);
-    setNotebookPdfStatus(error instanceof Error ? error.message : 'PDF 处理失败。');
+    setNotebookPdfStatus(error instanceof Error ? serviceMessage(error.message) : ui('PDF 处理失败。'));
   } finally {
     isPdfMasking = false;
     updateActionState();
@@ -3242,7 +3243,7 @@ async function maskNotebookPdf(
       canvas.width = Math.max(1, Math.ceil(viewport.width));
       canvas.height = Math.max(1, Math.ceil(viewport.height));
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) throw new Error('当前浏览器无法渲染 PDF，建议更新浏览器后重试。');
+      if (!ctx) throw new Error(ui('当前浏览器无法渲染 PDF，建议更新浏览器后重试。'));
 
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -3269,7 +3270,7 @@ async function maskNotebookPdf(
     await Promise.resolve(pdfDocument.destroy?.()).catch(() => undefined);
   }
 
-  if (!outputPdf) throw new Error('PDF 没有可处理的页面。');
+  if (!outputPdf) throw new Error(ui('PDF 没有可处理的页面。'));
   return {
     blob: outputPdf.output('blob'),
     pageCount: pdfDocument.numPages,
@@ -3296,12 +3297,12 @@ function loadPdfJs(): Promise<PdfJsApi> {
         resolve(api);
       } else {
         pdfJsLoadPromise = null;
-        reject(new Error('PDF 脚本已加载，但没有找到 PDF.js API。'));
+        reject(new Error(ui('PDF 脚本已加载，但没有找到 PDF.js API。')));
       }
     };
     script.onerror = () => {
       pdfJsLoadPromise = null;
-      reject(new Error('无法加载 PDF 引擎。请检查网络或稍后重试。'));
+      reject(new Error(ui('无法加载 PDF 引擎。请检查网络或稍后重试。')));
     };
     document.head.appendChild(script);
   });
@@ -3555,26 +3556,26 @@ function pixelLuminance(r: number, g: number, b: number): number {
 }
 
 function updateHomeFileStatus(): void {
-  fileLabel.textContent = selectedFiles.length > 0 ? `已选择 ${selectedFiles.length} 个文件` : '选择或拖入一个或多个视频文件';
-  setHomeStatus(selectedFile ? `当前视频：${selectedFile.name}` : '等待上传视频。');
+  fileLabel.textContent = selectedFiles.length > 0 ? ui`已选择 ${selectedFiles.length} 个文件` : ui('选择或拖入一个或多个视频文件');
+  setHomeStatus(selectedFile ? ui`当前视频：${selectedFile.name}` : ui('等待上传视频。'));
 }
 
 async function startWorkspaceUrlDownload(mode: UrlDownloadMode): Promise<void> {
   const value = workspaceVideoUrlInput.value.trim();
   const parsedUrl = parseDownloadUrl(value);
   if (!parsedUrl) {
-    setWorkspaceUrlStatus('请输入有效的视频链接。', 'error');
+    setWorkspaceUrlStatus(ui('请输入有效的视频链接。'), 'error');
     workspaceVideoUrlInput.focus();
     return;
   }
   if (isBilibiliDownloadUrl(parsedUrl) && !workspaceRightsConfirm.checked) {
-    setWorkspaceUrlStatus('勾选“我确认有权处理这个视频”后，可获取 B 站视频。', 'warn');
+    setWorkspaceUrlStatus(ui('勾选“我确认有权处理这个视频”后，可获取 B 站视频。'), 'warn');
     workspaceRightsConfirm.focus();
     return;
   }
   videoUrlInput.value = parsedUrl.toString();
   mediaRightsConfirm.checked = workspaceRightsConfirm.checked;
-  setWorkspaceUrlStatus(mode === 'extract' ? '正在获取视频并准备生成页面。' : '正在下载到队列。', 'warn');
+  setWorkspaceUrlStatus(mode === 'extract' ? ui('正在获取视频并准备生成页面。') : ui('正在下载到队列。'), 'warn');
   await downloadVideoFromUrl(mode);
   if (!videoUrlInput.value.trim()) {
     workspaceVideoUrlInput.value = '';
@@ -3588,8 +3589,8 @@ function addWorkspaceFiles(files: File[]): void {
   setWorkspaceMode('video');
   showWorkspace();
   if (selectedFile && slides.length === 0) {
-    setWorkspaceUrlStatus(`已加入：${selectedFile.name}。点击“开始当前任务”即可生成页面。`, 'ok');
-    setStatus(`已选择 ${selectedFile.name}，点击上方“开始当前任务”。`);
+    setWorkspaceUrlStatus(ui`已加入：${selectedFile.name}。点击“开始当前任务”即可生成页面。`, 'ok');
+    setStatus(ui`已选择 ${selectedFile.name}，点击上方“开始当前任务”。`);
     emptyWorkspaceStartBtn.focus();
   }
 }
@@ -3598,7 +3599,7 @@ function openWorkspaceFromNav(): void {
   setWorkspaceMode(workspaceMode);
   showWorkspace();
   if (!selectedFile && slides.length === 0) {
-    setStatus('选择本地视频或粘贴链接开始，也可以回首页体验示例。');
+    setStatus(ui('选择本地视频或粘贴链接开始，也可以回首页体验示例。'));
   }
   updateActionState();
 }
@@ -3631,8 +3632,8 @@ function returnHomeForVideoStart(): void {
     dropzone.focus({ preventScroll: true });
   });
   setHomeStatus(closedDemo
-    ? '交互示例已关闭。现在可以粘贴链接、上传文件或录制屏幕。'
-    : '在这里粘贴视频链接、上传文件或录制屏幕，处理后会自动进入工作台。');
+    ? ui('交互示例已关闭。现在可以粘贴链接、上传文件或录制屏幕。')
+    : ui('在这里粘贴视频链接、上传文件或录制屏幕，处理后会自动进入工作台。'));
 }
 
 function showWorkspace(): void {
@@ -3649,15 +3650,15 @@ function setWorkspaceMode(mode: WorkspaceMode): void {
   workspaceMode = mode;
   workspaceView.classList.toggle('image-mode', mode === 'image');
   workspaceSubtitle.textContent = mode === 'image'
-    ? '图片页会在这里勾选、编辑文本框并导出 PPTX。'
-    : '视频生成页面后，在这里勾选、预览、补抓和导出。';
+    ? ui('图片页会在这里勾选、编辑文本框并导出 PPTX。')
+    : ui('视频生成页面后，在这里勾选、预览、补抓和导出。');
   captureTimeline.hidden = mode !== 'video' || !selectedFile || isDemoProject || isAudioSource(selectedFile);
   updateWorkspaceEmptyState();
 }
 
 function openDemoProject(): void {
   if (isBusy()) {
-    setHomeStatus('当前任务运行中，完成后可打开交互示例。');
+    setHomeStatus(ui('当前任务运行中，完成后可打开交互示例。'));
     return;
   }
   if (isDemoProject) return;
@@ -3668,16 +3669,16 @@ function openDemoProject(): void {
   undoSnapshot = null;
   isDemoProject = true;
   currentFileIndex = -1;
-  selectedFile = new File([], 'Vid2PPT-交互示例.mp4', { type: 'video/mp4', lastModified: 0 });
+  selectedFile = new File([], ui('Vid2PPT-交互示例.mp4'), { type: 'video/mp4', lastModified: 0 });
   slides = createDemoSlides();
   videoMeta = null;
   activeSlideId = slides[0]?.id ?? null;
   activeTextBoxId = null;
   timelineTime = 0;
   extractionTimelineMax = 0;
-  transcriptEl.value = '[00:00 - 00:28] 从视频中提取页面。\n[00:28 - 00:55] 合并重复画面，并保留原始图表与顺序。\n[00:55 - 01:18] 导出前可以勾选、排序、裁剪或删除。';
-  summaryEl.value = '这是内置演示内容，用于体验页面检查与导出。导入自己的视频后，可生成对应的画面和笔记。';
-  illustratedNotesMarkdown = '# 一段视频，怎么变成可复习的笔记\n\n## 3 个要点\n- 原画面保留图表与版式，方便回看。\n- 重复画面合并，按时间位置找回内容。\n- 笔记可保存，页面也能导出为 PDF 或 PPTX。\n\n## 下一步\n选择带课件的课程或分享，浏览整理后的画面，按需生成 AI 要点。\n\n> 示例文字由作者编写，页面使用演示素材，供体验阅读、编辑和导出。';
+  transcriptEl.value = ui('[00:00 - 00:28] 从视频中提取页面。\n[00:28 - 00:55] 合并重复画面，并保留原始图表与顺序。\n[00:55 - 01:18] 导出前可以勾选、排序、裁剪或删除。');
+  summaryEl.value = ui('这是内置演示内容，用于体验页面检查与导出。导入自己的视频后，可生成对应的画面和笔记。');
+  illustratedNotesMarkdown = ui('# 一段视频，怎么变成可复习的笔记\n\n## 3 个要点\n- 原画面保留图表与版式，方便回看。\n- 重复画面合并，按时间位置找回内容。\n- 笔记可保存，页面也能导出为 PDF 或 PPTX。\n\n## 下一步\n选择带课件的课程或分享，浏览整理后的画面，按需生成 AI 要点。\n\n> 示例文字由作者编写，页面使用演示素材，供体验阅读、编辑和导出。');
   setWorkspaceMode('video');
   persistWorkspaceToState({ markProcessed: true });
   renderSlides();
@@ -3685,8 +3686,8 @@ function openDemoProject(): void {
   hideProgress();
   showWorkspace();
   $<HTMLElement>('#workspaceImport').hidden = true;
-  workspaceSubtitle.textContent = '免费交互示例：可勾选、拖动排序、裁剪和导出。';
-  setStatus('这是内置交互示例，页数由演示素材设定。你可以调整页面顺序或下载结果。');
+  workspaceSubtitle.textContent = ui('免费交互示例：可勾选、拖动排序、裁剪和导出。');
+  setStatus(ui('这是内置交互示例，页数由演示素材设定。你可以调整页面顺序或下载结果。'));
   updateActionState();
 }
 
@@ -3707,9 +3708,9 @@ function restoreWorkspaceAfterDemo(): void {
 
 function createDemoSlides(): Slide[] {
   const specs = [
-    { title: '从视频到页面', subtitle: '保留原画面和原始内容', accent: '#5d78e8', variant: 0 },
-    { title: '自动去掉重复画面', subtitle: '同一页连续出现，只保留清晰的一张', accent: '#f47a45', variant: 1 },
-    { title: '导出前由你决定', subtitle: '勾选 · 排序 · 裁剪 · 补抓', accent: '#178a61', variant: 2 }
+    { title: ui('从视频到页面'), subtitle: ui('保留原画面和原始内容'), accent: '#5d78e8', variant: 0 },
+    { title: ui('自动去掉重复画面'), subtitle: ui('同一页连续出现，只保留清晰的一张'), accent: '#f47a45', variant: 1 },
+    { title: ui('导出前由你决定'), subtitle: ui('勾选 · 排序 · 裁剪 · 补抓'), accent: '#178a61', variant: 2 }
   ];
   return specs.map((spec, index) => ({
     id: 9001 + index,
@@ -3741,7 +3742,7 @@ function createDemoSlideImage(title: string, subtitle: string, accent: string, v
   ctx.fillText(subtitle, 100, 280);
 
   if (variant === 0) {
-    ['视频画面', '页面去重', '检查导出'].forEach((label, index) => {
+    [ui('视频画面'), ui('页面去重'), ui('检查导出')].forEach((label, index) => {
       const x = 100 + index * 470;
       ctx.fillStyle = index === 1 ? accent : '#1d2a45';
       roundedRect(ctx, x, 390, 410, 260, 28);
@@ -3761,10 +3762,10 @@ function createDemoSlideImage(title: string, subtitle: string, accent: string, v
       ctx.fill();
       ctx.fillStyle = '#101828';
       ctx.font = '700 25px Inter, system-ui, sans-serif';
-      ctx.fillText(index === 2 ? '保留' : index === 3 ? '重复' : `帧 ${index + 1}`, x + 32, 755);
+      ctx.fillText(index === 2 ? ui('保留') : index === 3 ? ui('重复') : ui`帧 ${index + 1}`, x + 32, 755);
     });
   } else {
-    ['勾选需要的页面', '拖动调整顺序', '下载 PPTX / PDF'].forEach((label, index) => {
+    [ui('勾选需要的页面'), ui('拖动调整顺序'), ui('下载 PPTX / PDF')].forEach((label, index) => {
       const y = 370 + index * 140;
       ctx.fillStyle = '#ffffff';
       roundedRect(ctx, 100, y, 1120, 94, 20);
@@ -3780,7 +3781,7 @@ function createDemoSlideImage(title: string, subtitle: string, accent: string, v
   }
   ctx.fillStyle = variant === 0 ? '#718096' : '#7a8494';
   ctx.font = '700 24px Inter, system-ui, sans-serif';
-  ctx.fillText(`Vid2PPT 交互示例 · ${variant + 1}/3`, 100, 830);
+  ctx.fillText(ui`Vid2PPT 交互示例 · ${variant + 1}/3`, 100, 830);
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
@@ -3987,7 +3988,7 @@ async function readVideoMetadata(url: string): Promise<VideoMeta> {
   await waitForEvent(video, 'loadedmetadata', 5000);
   const duration = await resolveVideoDuration(video);
   if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error('无法读取视频时长。录屏 WebM 可能缺少时长信息；请完成录制并保存文件，或转为 H.264 MP4 / WebM 后上传。');
+    throw new Error(ui('无法读取视频时长。录屏 WebM 可能缺少时长信息；请完成录制并保存文件，或转为 H.264 MP4 / WebM 后上传。'));
   }
   return { duration, width: video.videoWidth || 1280, height: video.videoHeight || 720 };
 }
@@ -4043,7 +4044,7 @@ async function createFrameExtractor(url: string, width: number, height: number):
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('当前浏览器无法绘制画面，建议更新浏览器后重试。');
+  if (!ctx) throw new Error(ui('当前浏览器无法绘制画面，建议更新浏览器后重试。'));
 
   return {
     capture: async (index: number, time: number) => {
@@ -4069,7 +4070,7 @@ async function captureManualFrameAt(time: number): Promise<void> {
   let extractor: FrameExtractor | null = null;
   try {
     const requestedTime = Math.min(Math.max(time, 0), Math.max(videoMeta.duration - 0.05, 0));
-    setProgress(`正在补抓 ${formatClock(requestedTime)} 的页面`, 50, true);
+    setProgress(ui`正在补抓 ${formatClock(requestedTime)} 的页面`, 50, true);
     extractor = await createFrameExtractor(url, videoMeta.width, videoMeta.height);
     const frame = await extractor.capture(slides.length, requestedTime);
     const slide: Slide = { id: Math.max(0, ...slides.map((item) => item.id)) + 1, time: frame.time, hash: frame.hash, dataUrl: frame.dataUrl, width: frame.width, height: frame.height, selected: getDefaultNewSlideSelected(), textBoxes: [] };
@@ -4079,13 +4080,13 @@ async function captureManualFrameAt(time: number): Promise<void> {
     updateTimelinePosition();
     renderSlides();
     setPreview(slide);
-    setStatus(`已补抓 ${formatClock(frame.time)} 的页面并加入末尾，可拖动调整位置。`);
-    setProgress('补抓完成', 100);
+    setStatus(ui`已补抓 ${formatClock(frame.time)} 的页面并加入末尾，可拖动调整位置。`);
+    setProgress(ui('补抓完成'), 100);
     persistWorkspaceToState({ markProcessed: true });
     renderFileList();
   } catch (error) {
     console.error(error);
-    setStatus(error instanceof Error ? error.message : '补抓页面失败，请换一个时间点重试。');
+    setStatus(error instanceof Error ? serviceMessage(error.message) : ui('补抓页面失败，请换一个时间点重试。'));
   } finally {
     extractor?.dispose();
     URL.revokeObjectURL(url);
@@ -4150,7 +4151,7 @@ function hammingDistance(a: bigint, b: bigint): number {
 }
 
 async function makePdf(items: Slide[]): Promise<Blob> {
-  if (items.length === 0) throw new Error('没有可导出的页面。');
+  if (items.length === 0) throw new Error(ui('没有可导出的页面。'));
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -4170,7 +4171,7 @@ async function makePdf(items: Slide[]): Promise<Blob> {
       canvas.width = slide.width;
       canvas.height = slide.height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('当前浏览器无法渲染 PDF 文字，请改用 PPTX 导出。');
+      if (!ctx) throw new Error(ui('当前浏览器无法渲染 PDF 文字，请改用 PPTX 导出。'));
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       paintPdfTextBoxes(ctx, canvas.width, canvas.height, slide.textBoxes);
       imageData = canvas.toDataURL('image/jpeg', 0.95);
@@ -4208,7 +4209,7 @@ async function imageFileToSlide(file: File, index: number): Promise<Slide> {
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('当前浏览器无法绘制画面，建议更新浏览器后重试。');
+    if (!ctx) throw new Error(ui('当前浏览器无法绘制画面，建议更新浏览器后重试。'));
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
@@ -4233,26 +4234,26 @@ async function runOcrForSelectedSlides(): Promise<void> {
   const fallback = getActiveSlide();
   const targetSlides = targets.length > 0 ? targets : fallback ? [fallback] : [];
   if (targetSlides.length === 0) {
-    setStatus('勾选至少一页，即可识别文字。');
+    setStatus(ui('勾选至少一页，即可识别文字。'));
     return;
   }
   const previousTextBoxes = targetSlides.map((slide) => ({ slide, boxes: slide.textBoxes.map((box) => ({ ...box })) }));
   isBatchProcessing = true;
   updateActionState();
   try {
-    if (!await ensureUsageCapacity('editable_slide', targetSlides.length, '文字识别页面', setStatus)) return;
-    setProgress('正在准备文字识别', 5, true);
-    setStatus('正在识别勾选页面的文字；新结果会替换这些页面现有文本框。');
+    if (!await ensureUsageCapacity('editable_slide', targetSlides.length, ui('文字识别页面'), setStatus)) return;
+    setProgress(ui('正在准备文字识别'), 5, true);
+    setStatus(ui('正在识别勾选页面的文字；新结果会替换这些页面现有文本框。'));
     const textBoxCount = await recognizeSlidesToTextBoxes(targetSlides, {
       replaceExisting: true,
       onProgress: (index, total, message) => {
-        setProgress(`文字识别：${index} / ${total} · ${message}`, 5 + Math.round((index / Math.max(total, 1)) * 90), true);
+        setProgress(ui`文字识别：${index} / ${total} · ${message}`, 5 + Math.round((index / Math.max(total, 1)) * 90), true);
       }
     });
     renderSlides();
     if (targetSlides[0]) setPreview(targetSlides[0]);
-    setProgress('文字识别完成', 100);
-    setStatus(`文字识别完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
+    setProgress(ui('文字识别完成'), 100);
+    setStatus(ui`文字识别完成：已为 ${targetSlides.length} 页生成 ${textBoxCount} 个可编辑文本框。`);
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     await recordUsage('editable_slide', targetSlides.length, {
       source: 'workspace_ocr',
@@ -4264,9 +4265,9 @@ async function runOcrForSelectedSlides(): Promise<void> {
     previousTextBoxes.forEach(({ slide, boxes }) => { slide.textBoxes = boxes; });
     renderSlides();
     persistWorkspaceToState();
-    const message = error instanceof Error ? error.message : '文字识别失败，请稍后重试。';
-    setProgress('文字识别未完成', 100);
-    setStatus(`${message} 已保留原有文本框，可以重试。`);
+    const message = error instanceof Error ? serviceMessage(error.message) : ui('文字识别失败，请稍后重试。');
+    setProgress(ui('文字识别未完成'), 100);
+    setStatus(ui`${message} 已保留原有文本框，可以重试。`);
   } finally {
     isBatchProcessing = false;
     updateActionState();
@@ -4288,7 +4289,7 @@ async function recognizeSlidesToTextBoxes(
   let totalTextBoxes = 0;
   let worker: OcrWorker | null = null;
   try {
-    options.onProgress?.(0, targetSlides.length, '加载 OCR 引擎');
+    options.onProgress?.(0, targetSlides.length, ui('加载 OCR 引擎'));
     const tesseract = await loadTesseract();
     worker = await tesseract.createWorker(OCR_LANGUAGES, 1, {
       logger: (message: { status?: string; progress?: number }) => {
@@ -4303,7 +4304,7 @@ async function recognizeSlidesToTextBoxes(
 
     for (const [index, slide] of targetSlides.entries()) {
       currentIndex = index + 1;
-      options.onProgress?.(currentIndex, targetSlides.length, `识别第 ${slide.id} 页`);
+      options.onProgress?.(currentIndex, targetSlides.length, ui`识别第 ${slide.id} 页`);
       const prepared = await prepareSlideForOcr(slide);
       const result = await worker.recognize(prepared.canvas, undefined, { text: true, blocks: true });
       const boxes = ocrPageToTextBoxes(result.data, prepared.canvas, slide.id);
@@ -4312,14 +4313,14 @@ async function recognizeSlidesToTextBoxes(
       totalTextBoxes += boxes.length;
       activeSlideId = slide.id;
       activeTextBoxId = slide.textBoxes[0]?.id ?? null;
-      options.onProgress?.(currentIndex, targetSlides.length, `第 ${slide.id} 页识别出 ${boxes.length} 个文本框`);
+      options.onProgress?.(currentIndex, targetSlides.length, ui`第 ${slide.id} 页识别出 ${boxes.length} 个文本框`);
       await yieldToBrowser();
     }
     return totalTextBoxes;
   } catch (error) {
     throw new Error(error instanceof Error
-      ? `OCR 失败：${error.message}`
-      : 'OCR 失败：无法加载或运行 OCR 引擎。');
+      ? ui`OCR 失败：${serviceMessage(error.message)}`
+      : ui('OCR 失败：无法加载或运行 OCR 引擎。'));
   } finally {
     if (worker) await worker.terminate().catch(() => undefined);
     isOcrRunning = false;
@@ -4341,12 +4342,12 @@ function loadTesseract(): Promise<TesseractApi> {
       if (api) resolve(api);
       else {
         tesseractLoadPromise = null;
-        reject(new Error('OCR 脚本已加载，但没有找到 Tesseract API。'));
+        reject(new Error(ui('OCR 脚本已加载，但没有找到 Tesseract API。')));
       }
     };
     script.onerror = () => {
       tesseractLoadPromise = null;
-      reject(new Error('无法加载 OCR 引擎。请检查网络或稍后重试。'));
+      reject(new Error(ui('无法加载 OCR 引擎。请检查网络或稍后重试。')));
     };
     document.head.appendChild(script);
   });
@@ -4362,7 +4363,7 @@ async function prepareSlideForOcr(slide: Slide): Promise<{ canvas: HTMLCanvasEle
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('当前浏览器无法处理文字识别所需的画面，建议更新浏览器后重试。');
+  if (!ctx) throw new Error(ui('当前浏览器无法处理文字识别所需的画面，建议更新浏览器后重试。'));
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
@@ -4508,11 +4509,11 @@ async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
   if (isBusy()) return;
   const items = cloneSlides(slides.filter((slide) => slide.selected));
   const file = selectedFile;
-  if (!file || !items.length) { setStatus('请至少勾选 1 页后导出。'); return; }
+  if (!file || !items.length) { setStatus(ui('请至少勾选 1 页后导出。')); return; }
   isExporting = true;
   updateActionState();
-  const label = format === 'zip' ? '页面图片 ZIP' : format.toUpperCase();
-  setProgress(`正在生成 ${label} · ${items.length} 页`, undefined, true);
+  const label = format === 'zip' ? ui('页面图片 ZIP') : format.toUpperCase();
+  setProgress(ui`正在生成 ${label} · ${items.length} 页`, undefined, true);
   try {
     let blob: Blob;
     if (format === 'pdf') blob = await makePdf(items);
@@ -4523,11 +4524,11 @@ async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
       blob = await zip.generateAsync({ type: 'blob' });
     }
     downloadBlob(blob, `${baseName(file.name)}.${format}`);
-    setProgress(`${label} 已生成`, 100);
-    setStatus(`已生成 ${items.length} 页 ${label}，请在浏览器下载列表中查看。可以继续导出其他格式。`);
+    setProgress(ui`${label} 已生成`, 100);
+    setStatus(ui`已生成 ${items.length} 页 ${label}，请在浏览器下载列表中查看。可以继续导出其他格式。`);
   } catch (error) {
     hideProgress();
-    setStatus(error instanceof Error ? error.message : `${label} 生成失败，页面已保留，请重试。`);
+    setStatus(error instanceof Error ? serviceMessage(error.message) : ui`${label} 生成失败，页面已保留，请重试。`);
   } finally {
     isExporting = false;
     updateActionState();
@@ -4535,7 +4536,7 @@ async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
 }
 
 async function makePptx(items: Slide[]): Promise<Blob> {
-  if (items.length === 0) throw new Error('没有可导出的页面。');
+  if (items.length === 0) throw new Error(ui('没有可导出的页面。'));
   const zip = new JSZip();
   const media = items.map((slide, index) => {
     const image = dataUrlToPptImage(slide.dataUrl);
@@ -4816,8 +4817,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
     const contextSize = TRANSCRIBE_CONTEXT_SECONDS * sampleRate;
     const totalChunks = Math.ceil(audio.length / chunkSize);
     let lastText = '';
-    onProgress('准备转写引擎...');
-    setProgress('准备转写引擎', 5, true);
+    onProgress(ui('准备转写引擎...'));
+    setProgress(ui('准备转写引擎'), 5, true);
     await loadTranscriptionWorker(worker);
 
     for (let index = 0; index < totalChunks; index += 1) {
@@ -4827,8 +4828,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
       const chunk = audio.slice(decodeStart, Math.min(audio.length, logicalEnd + contextSize));
       const startSec = logicalStart / sampleRate;
       const endSec = logicalEnd / sampleRate;
-      setProgress(`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`, 10 + Math.round((index / Math.max(totalChunks, 1)) * 85), true);
-      onProgress(`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`);
+      setProgress(ui`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`, 10 + Math.round((index / Math.max(totalChunks, 1)) * 85), true);
+      onProgress(ui`转写中：第 ${index + 1} / ${totalChunks} 段，${formatClock(startSec)} - ${formatClock(endSec)}`);
       if (index > 0 && rms(chunk) < 0.0025) { await yieldToBrowser(); continue; }
       const rawText = await transcribeChunkWithRetry(worker, index, chunk, index === 0 ? 2 : 1);
       const cleanedText = cleanTranscriptText(rawText);
@@ -4848,8 +4849,8 @@ async function transcribeLocally(file: File, onProgress: (message: string) => vo
 }
 
 async function decodeToMono16k(file: File, onProgress: (message: string) => void): Promise<Float32Array> {
-  onProgress('正在解码音频...');
-  setProgress('正在解码音频', 2, true);
+  onProgress(ui('正在解码音频...'));
+  setProgress(ui('正在解码音频'), 2, true);
   const audioContext = new AudioContext();
   const audioBuffer = await audioContext.decodeAudioData(await file.arrayBuffer());
   await audioContext.close().catch(() => undefined);
@@ -4859,8 +4860,8 @@ async function decodeToMono16k(file: File, onProgress: (message: string) => void
     for (let i = 0; i < data.length; i += 1) mono[i] += data[i] / audioBuffer.numberOfChannels;
   }
   if (audioBuffer.sampleRate === 16000) return mono;
-  onProgress('正在重采样音频到 16kHz...');
-  setProgress('正在重采样音频到 16kHz', 4, true);
+  onProgress(ui('正在重采样音频到 16kHz...'));
+  setProgress(ui('正在重采样音频到 16kHz'), 4, true);
   const targetLength = Math.ceil(mono.length * 16000 / audioBuffer.sampleRate);
   const offline = new OfflineAudioContext(1, targetLength, 16000);
   const sourceBuffer = offline.createBuffer(1, mono.length, audioBuffer.sampleRate);
@@ -4877,14 +4878,14 @@ function loadTranscriptionWorker(worker: Worker): Promise<void> {
   return new Promise((resolve, reject) => {
     const onMessage = (event: MessageEvent<WorkerResult>) => {
       if (event.data.type === 'ready') { cleanup(); resolve(); }
-      else if (event.data.type === 'error') { cleanup(); reject(new Error(event.data.error)); }
+      else if (event.data.type === 'error') { cleanup(); reject(new Error(serviceMessage(event.data.error))); }
       else if (event.data.type === 'model-progress') {
         const pct = typeof event.data.progress === 'number' ? Math.round(event.data.progress) : undefined;
         const overall = typeof pct === 'number' ? 5 + Math.round(pct * 0.05) : undefined;
-        setProgress(`加载转写模型：${event.data.status}`, overall, typeof overall !== 'number');
+        setProgress(ui`加载转写模型：${serviceMessage(event.data.status)}`, overall, typeof overall !== 'number');
       }
     };
-    const onError = () => { cleanup(); reject(new Error('转写 Worker 加载失败。')); };
+    const onError = () => { cleanup(); reject(new Error(ui('转写 Worker 加载失败。'))); };
     const cleanup = () => {
       worker.removeEventListener('message', onMessage as EventListener);
       worker.removeEventListener('error', onError);
@@ -4901,16 +4902,16 @@ async function transcribeChunkWithRetry(worker: Worker, id: number, audio: Float
     try { return await transcribeChunk(worker, id * 10 + attempt, audio.slice()); }
     catch (error) { lastError = error instanceof Error ? error : new Error(String(error)); await yieldToBrowser(); }
   }
-  throw lastError ?? new Error('转写失败。');
+  throw lastError ?? new Error(ui('转写失败。'));
 }
 
 function transcribeChunk(worker: Worker, id: number, audio: Float32Array): Promise<string> {
   return new Promise((resolve, reject) => {
     const onMessage = (event: MessageEvent<WorkerResult>) => {
       if (event.data.type === 'result' && event.data.id === id) { cleanup(); resolve(event.data.text); }
-      else if (event.data.type === 'error' && event.data.id === id) { cleanup(); reject(new Error(event.data.error)); }
+      else if (event.data.type === 'error' && event.data.id === id) { cleanup(); reject(new Error(serviceMessage(event.data.error))); }
     };
-    const onError = () => { cleanup(); reject(new Error('转写 Worker 运行失败。')); };
+    const onError = () => { cleanup(); reject(new Error(ui('转写 Worker 运行失败。'))); };
     const cleanup = () => {
       worker.removeEventListener('message', onMessage as EventListener);
       worker.removeEventListener('error', onError);
@@ -4933,12 +4934,12 @@ function finishSlideReorder(slideId: number, previousIndex: number): void {
   if (nextIndex < 0 || nextIndex === previousIndex) return;
   persistWorkspaceToState({ markProcessed: true });
   renderSlides();
-  setStatus(`已将第 ${previousIndex + 1} 页移到第 ${nextIndex + 1} 页，已保留勾选状态和当前预览。`);
+  setStatus(ui`已将第 ${previousIndex + 1} 页移到第 ${nextIndex + 1} 页，已保留勾选状态和当前预览。`);
 }
 
 function moveSlideByStep(slideId: number, direction: -1 | 1): void {
   if (isBusy()) {
-    setStatus('当前任务运行中，完成后可调整页面顺序。');
+    setStatus(ui('当前任务运行中，完成后可调整页面顺序。'));
     return;
   }
   const previousIndex = slides.findIndex((slide) => slide.id === slideId);
@@ -4953,7 +4954,7 @@ function moveSlideByStep(slideId: number, direction: -1 | 1): void {
 
 function moveSlideAroundTarget(slideId: number, targetSlideId: number, placeAfter: boolean): void {
   if (isBusy()) {
-    setStatus('当前任务运行中，完成后可调整页面顺序。');
+    setStatus(ui('当前任务运行中，完成后可调整页面顺序。'));
     return;
   }
   const previousIndex = slides.findIndex((slide) => slide.id === slideId);
@@ -5003,9 +5004,9 @@ function appendSlideCard(slide: Slide): void {
   card.draggable = slides.length > 1;
   const slideIndex = slides.findIndex((item) => item.id === slide.id);
   const pageNumber = slideIndex + 1;
-  const caption = workspaceMode === 'image' ? `第 ${pageNumber} 页 · 图片页` : `第 ${pageNumber} 页 · ${formatTime(slide.time)}`;
-  card.setAttribute('aria-label', `${caption}，可拖动排序`);
-  card.innerHTML = `
+  const caption = workspaceMode === 'image' ? ui`第 ${pageNumber} 页 · 图片页` : ui`第 ${pageNumber} 页 · ${formatTime(slide.time)}`;
+  card.setAttribute('aria-label', ui`${caption}，可拖动排序`);
+  card.innerHTML = ui`
     <label class="slide-select"><input class="frame-checkbox" type="checkbox" /><span>选入导出</span></label>
     <div class="frame-tools">
       <button class="add-text-box" title="添加可编辑文本框" aria-label="为第 ${pageNumber} 页添加文本框" type="button">T</button>
@@ -5028,7 +5029,7 @@ function appendSlideCard(slide: Slide): void {
     const target = event.target instanceof Element ? event.target : null;
     if (slides.length < 2 || isBusy() || target?.closest('button, input, label, .slide-text-box')) {
       event.preventDefault();
-      if (isBusy()) setStatus('当前任务运行中，完成后可调整页面顺序。');
+      if (isBusy()) setStatus(ui('当前任务运行中，完成后可调整页面顺序。'));
       return;
     }
     draggedSlideId = slide.id;
@@ -5130,7 +5131,7 @@ function addTextBoxToActiveSlide(): void {
   activeSlideId = slide.id;
   const box: SlideTextBox = {
     id: `tb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    text: '在这里输入文字',
+    text: ui('在这里输入文字'),
     x: 12,
     y: 14,
     width: 46,
@@ -5146,7 +5147,7 @@ function addTextBoxToActiveSlide(): void {
   syncActiveSlideSelection();
   updateTextBoxPanel();
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
-  setStatus('已添加可编辑文本框。导出 PPTX 后可在 PowerPoint 里继续修改。');
+  setStatus(ui('已添加可编辑文本框。导出 PPTX 后可在 PowerPoint 里继续修改。'));
 }
 
 function deleteActiveTextBox(): void {
@@ -5159,7 +5160,7 @@ function deleteActiveTextBox(): void {
   refreshSlideTextLayer(slide);
   updateTextBoxPanel();
   persistWorkspaceToState({ markProcessed: slides.length > 0 });
-  setStatus('已删除文本框。');
+  setStatus(ui('已删除文本框。'));
 }
 
 function updateActiveTextBoxFromControls(): void {
@@ -5200,7 +5201,7 @@ function refreshSlideTextLayer(slide: Slide): void {
     node.style.fontSize = `max(10px, ${(box.fontSize / 960) * 100}cqw)`;
     node.style.fontWeight = box.bold ? '900' : '700';
     node.style.textAlign = box.align;
-    node.textContent = box.text || '空文本框';
+    node.textContent = box.text || ui('空文本框');
     node.addEventListener('click', (event) => {
       event.stopPropagation();
       activeSlideId = slide.id;
@@ -5277,10 +5278,10 @@ function updateTextBoxPanel(syncValues = true): void {
     control.disabled = !hasBox || isBusy();
   });
   textLayerHint.textContent = hasBox
-    ? `正在编辑第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
+    ? ui`正在编辑第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页的文本框。可拖动缩略图上的文本框调整位置。`
     : hasSlide
-      ? `当前选中第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页；可识别勾选页文字，也可手动补文本框。`
-      : '选择页面后，可识别文字或手动添加文本框。';
+      ? ui`当前选中第 ${slide ? slides.indexOf(slide) + 1 : '-'} 页；可识别勾选页文字，也可手动补文本框。`
+      : ui('选择页面后，可识别文字或手动添加文本框。');
 
   if (!syncValues) return;
   if (!box) {
@@ -5342,7 +5343,7 @@ function deleteSlide(id: number): void {
   const active = getActiveSlide();
   if (active) setPreview(active);
   else { previewImage.removeAttribute('src'); previewEmpty.hidden = false; }
-  setStatus(`已删除第 ${index + 1} 页，已保留其余页面顺序。可点击“撤销上一步”恢复。`);
+  setStatus(ui`已删除第 ${index + 1} 页，已保留其余页面顺序。可点击“撤销上一步”恢复。`);
   persistWorkspaceToState();
   renderFileList();
 }
@@ -5378,7 +5379,7 @@ async function applyCrop(): Promise<void> {
     canvas.width = sw;
     canvas.height = sh;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('当前浏览器无法创建裁剪画布，请重试。');
+    if (!ctx) throw new Error(ui('当前浏览器无法创建裁剪画布，请重试。'));
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
     rememberSlideEdit();
     slide.textBoxes = cropTextBoxes(slide.textBoxes, {
@@ -5395,11 +5396,11 @@ async function applyCrop(): Promise<void> {
     cropDialog.close();
     renderSlides();
     setPreview(slide);
-    setStatus('已裁剪页面，文本框已同步到新画面。');
+    setStatus(ui('已裁剪页面，文本框已同步到新画面。'));
     persistWorkspaceToState({ markProcessed: slides.length > 0 });
     renderFileList();
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : '裁剪未能完成，请重试。');
+    setStatus(error instanceof Error ? serviceMessage(error.message) : ui('裁剪未能完成，请重试。'));
   } finally {
     isBatchProcessing = false;
     cropApplyBtn.disabled = false;
@@ -5495,18 +5496,18 @@ function updateActionState(): void {
   $<HTMLElement>('#cancelExtractionBtn').hidden = !isExtracting;
   slidesEl.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.frame-checkbox, .frame-tools button').forEach((control) => { control.disabled = busy; });
   $<HTMLElement>('#notesLoginBtn').hidden = !!authSession || isDemoProject;
-  $<HTMLElement>('#notesAccessHint').textContent = isDemoProject ? '这是示例逐字稿与摘要；导入自己的视频后可生成实际内容。' : authSession ? '逐字稿在本机识别；摘要与笔记会发送必要文本。勾选页面后可生成笔记。' : '逐字稿在本机识别；摘要与图文笔记需登录，会发送必要文本。';
+  $<HTMLElement>('#notesAccessHint').textContent = isDemoProject ? ui('这是示例逐字稿与摘要；导入自己的视频后可生成实际内容。') : authSession ? ui('勾选要保留的画面，按需提炼摘要与图文笔记。') : ui('按需生成逐字稿，登录后可提炼摘要与图文笔记。');
   const limit = limits.video_max_minutes;
   $<HTMLButtonElement>('#toggleImportBtn').disabled = busy;
-  $<HTMLElement>('#sourceQuota').textContent = `${planLabel(currentPlan())} · ${limit === null ? '时长无上限' : `${limit} 分钟以内`} · 本月${quotaText('video_conversion')}`;
+  $<HTMLElement>('#sourceQuota').textContent = ui`${planLabel(currentPlan())} · ${limit === null ? ui('时长无上限') : ui`${limit} 分钟以内`} · 本月${quotaText('video_conversion')}`;
   const waitingForMediaRights = !mediaPreview.hidden && !mediaRightsConfirm.checked && currentMediaMetadata?.provider === 'bilibili';
   extractBtn.disabled = !hasVideoFile || busy;
-  extractBtn.textContent = !busy && isAudioSource(selectedFile) ? '打开音频转写' : busy ? '正在处理…' : !hasVideoFile ? '选择文件后整理笔记' : slides.length && !isDemoProject ? '继续阅读与整理' : '开始整理笔记';
+  extractBtn.textContent = !busy && isAudioSource(selectedFile) ? ui('打开音频转写') : busy ? ui('正在处理…') : !hasVideoFile ? ui('选择文件后整理笔记') : slides.length && !isDemoProject ? ui('继续阅读与整理') : ui('开始整理笔记');
   batchZipBtn.hidden = selectedFiles.length < 2;
   $<HTMLElement>('#batchPlanHint').hidden = selectedFiles.length < 2 || limits.batch_processing;
   downloadFramesZipBtn.hidden = selectedFiles.every((file) => !getState(file).slides.length);
   batchZipBtn.disabled = selectedFiles.length === 0 || busy || !limits.batch_processing;
-  batchZipBtn.title = limits.batch_processing ? '' : '批量处理属于专业版和终身版权益';
+  batchZipBtn.title = limits.batch_processing ? '' : ui('批量处理属于专业版和终身版权益');
   downloadFramesZipBtn.disabled = busy || selectedFiles.every((file) => getState(file).slides.length === 0);
   imagePptBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
   imageWorkspaceBtn.disabled = selectedImageFiles.length === 0 || busy || !limits.image_pptx;
@@ -5519,7 +5520,7 @@ function updateActionState(): void {
   dockDownloadFramesBtn.disabled = selectedCount === 0 || busy;
   dockNotesBtn.hidden = imageMode || slides.length === 0;
   dockNotesBtn.disabled = selectedCount === 0 || busy;
-  dockNotesBtn.textContent = illustratedNotesMarkdown.trim() ? '阅读笔记' : authSession ? '提炼 AI 要点' : '登录提炼 AI 要点';
+  dockNotesBtn.textContent = illustratedNotesMarkdown.trim() ? ui('阅读笔记') : authSession ? ui('提炼 AI 要点') : ui('登录提炼 AI 要点');
   sideDownloadPdfBtn.disabled = selectedCount === 0 || busy;
   sideDownloadPptxBtn.disabled = selectedCount === 0 || busy;
   sideDownloadFramesBtn.disabled = selectedCount === 0 || busy;
@@ -5527,7 +5528,7 @@ function updateActionState(): void {
   summarizeBtn.disabled = !transcriptEl.value.trim() || busy || imageMode || !authSession;
   downloadSummaryBtn.disabled = !summaryEl.value.trim() || isSummarizing || imageMode;
   generateNotesBtn.disabled = (!hasVideoFile && !isDemoProject) || selectedCount === 0 || busy;
-  generateNotesBtn.textContent = illustratedNotesMarkdown.trim() ? '查看图文笔记' : '生成图文笔记';
+  generateNotesBtn.textContent = illustratedNotesMarkdown.trim() ? ui('查看图文笔记') : ui('生成图文笔记');
   videoInput.disabled = busy;
   videoUrlInput.disabled = busy;
   downloadUrlBtn.disabled = busy || waitingForMediaRights;
@@ -5543,7 +5544,7 @@ function updateActionState(): void {
   notebookPdfInput.disabled = busy;
   recordScreenBtn.disabled = busy || !limits.screen_recording;
   stopRecordBtn.hidden = !isRecording;
-  stopRecordBtn.textContent = recordingCompletionMode === 'extract' ? '停止录制并直接生成' : '停止录制并加入队列';
+  stopRecordBtn.textContent = recordingCompletionMode === 'extract' ? ui('停止录制并直接生成') : ui('停止录制并加入队列');
   updateSelectionUI();
 }
 
@@ -5563,66 +5564,66 @@ function updateWorkspaceEmptyState(): void {
     else step.removeAttribute('aria-current');
   });
   workspaceView.classList.toggle('has-timeline', !captureTimeline.hidden);
-  workspaceSubtitle.textContent = selectedFile ? selectedFile.name : '选择来源开始转换';
+  workspaceSubtitle.textContent = selectedFile ? selectedFile.name : ui('选择来源开始转换');
   slidesEl.hidden = !hasSlides;
   workspaceEmptyState.classList.toggle('is-busy', busy);
   emptyWorkspaceStartBtn.disabled = isBusy();
 
   if (hasSlides) {
-    emptyWorkspaceStartBtn.textContent = '继续导入';
+    emptyWorkspaceStartBtn.textContent = ui('继续导入');
     return;
   }
 
   if (isUrlDownloading) {
-    workspaceEmptyTitle.textContent = '正在获取视频';
-    workspaceEmptyBody.textContent = '下载完成后会自动进入页面生成，左侧会显示处理进度；完成后页面会出现在这里。';
-    emptyWorkspaceStartBtn.textContent = '正在获取视频';
+    workspaceEmptyTitle.textContent = ui('正在获取视频');
+    workspaceEmptyBody.textContent = ui('下载完成后会自动进入页面生成，左侧会显示处理进度；完成后页面会出现在这里。');
+    emptyWorkspaceStartBtn.textContent = ui('正在获取视频');
     emptyWorkspaceStartBtn.disabled = true;
     return;
   }
 
   if (isExtracting || isBatchProcessing) {
-    workspaceEmptyTitle.textContent = '正在生成页面';
-    workspaceEmptyBody.textContent = '关键页面会陆续加载出来，完成后可直接勾选、预览和导出。';
-    emptyWorkspaceStartBtn.textContent = '生成中';
+    workspaceEmptyTitle.textContent = ui('正在生成页面');
+    workspaceEmptyBody.textContent = ui('关键页面会陆续加载出来，完成后可直接勾选、预览和导出。');
+    emptyWorkspaceStartBtn.textContent = ui('生成中');
     emptyWorkspaceStartBtn.disabled = true;
     return;
   }
 
   if (isRecording) {
-    workspaceEmptyTitle.textContent = '正在录制屏幕';
-    workspaceEmptyBody.textContent = '录制完成后会自动进入页面生成流程，页面会显示在这里。';
-    emptyWorkspaceStartBtn.textContent = '录制中';
+    workspaceEmptyTitle.textContent = ui('正在录制屏幕');
+    workspaceEmptyBody.textContent = ui('录制完成后会自动进入页面生成流程，页面会显示在这里。');
+    emptyWorkspaceStartBtn.textContent = ui('录制中');
     emptyWorkspaceStartBtn.disabled = true;
     return;
   }
 
   if (audioSource) {
-    workspaceEmptyTitle.textContent = '把音频整理成文字';
-    workspaceEmptyBody.textContent = '音频没有视频页面。点击“编辑与笔记”，展开“逐字稿与笔记”开始转写；完成后可下载逐字稿。';
-    emptyWorkspaceStartBtn.textContent = '打开音频转写';
+    workspaceEmptyTitle.textContent = ui('把音频整理成文字');
+    workspaceEmptyBody.textContent = ui('音频没有视频页面。点击“编辑与笔记”，展开“逐字稿与笔记”开始转写；完成后可下载逐字稿。');
+    emptyWorkspaceStartBtn.textContent = ui('打开音频转写');
     return;
   }
 
   if (selectedFile && workspaceMode === 'video') {
-    workspaceEmptyTitle.textContent = '当前视频还没有生成页面';
-    workspaceEmptyBody.textContent = `已选择 ${selectedFile.name}。点击上方“开始当前任务”，即可自动提取页面，完成后可检查与导出。`;
-    emptyWorkspaceStartBtn.textContent = '开始当前任务';
+    workspaceEmptyTitle.textContent = ui('当前视频还没有生成页面');
+    workspaceEmptyBody.textContent = ui`已选择 ${selectedFile.name}。点击上方“开始当前任务”，即可自动提取页面，完成后可检查与导出。`;
+    emptyWorkspaceStartBtn.textContent = ui('开始当前任务');
     emptyWorkspaceStartBtn.disabled = false;
     return;
   }
 
   if (workspaceMode === 'image' && selectedImageFiles.length > 0) {
-    workspaceEmptyTitle.textContent = '图片工作台还没有页面';
-    workspaceEmptyBody.textContent = '选择图片后进入编辑模式，图片页和可编辑文本框会显示在这里。';
-    emptyWorkspaceStartBtn.textContent = '返回图片上传';
+    workspaceEmptyTitle.textContent = ui('图片工作台还没有页面');
+    workspaceEmptyBody.textContent = ui('选择图片后进入编辑模式，图片页和可编辑文本框会显示在这里。');
+    emptyWorkspaceStartBtn.textContent = ui('返回图片上传');
     emptyWorkspaceStartBtn.disabled = false;
     return;
   }
 
-  workspaceEmptyTitle.textContent = '工作台还没有任务';
-  workspaceEmptyBody.textContent = '在顶部横向输入框粘贴 B 站或 YouTube 链接，也可以上传视频或录制屏幕。处理后生成进度和可导出的页面会出现在这里。';
-  emptyWorkspaceStartBtn.textContent = '选择本地视频';
+  workspaceEmptyTitle.textContent = ui('工作台还没有任务');
+  workspaceEmptyBody.textContent = ui('在顶部横向输入框粘贴 B 站或 YouTube 链接，也可以上传视频或录制屏幕。处理后生成进度和可导出的页面会出现在这里。');
+  emptyWorkspaceStartBtn.textContent = ui('选择本地视频');
   emptyWorkspaceStartBtn.disabled = false;
 }
 
@@ -5630,8 +5631,8 @@ function updateSelectionUI(): void {
   const selectedCount = slides.filter((slide) => slide.selected).length;
   selectCount.textContent = `${selectedCount}/${slides.length}`;
   exportHint.textContent = slides.length > 0
-    ? `已选 ${selectedCount} / ${slides.length} 张。默认全选；取消勾选可排除页面。`
-    : '生成完成后，也可以从这里下载选中页面。';
+    ? ui`已选 ${selectedCount} / ${slides.length} 张。默认全选；取消勾选可排除页面。`
+    : ui('生成完成后，也可以从这里下载选中页面。');
   selectAllBox.checked = slides.length > 0 && selectedCount === slides.length;
   selectAllBox.indeterminate = selectedCount > 0 && selectedCount < slides.length;
   updateResultDock(selectedCount);
@@ -5642,7 +5643,7 @@ function updateSelectionUI(): void {
 
 function videoNoteInput(): VideoNoteInput {
   return {
-    title: selectedFile?.name ?? '视频笔记',
+    title: selectedFile?.name ?? ui('视频笔记'),
     duration: videoMeta?.duration ?? 0,
     frames: slides,
     summary: summaryEl.value,
@@ -5677,19 +5678,19 @@ function renderVideoNoteReader(): void {
   if (!reading) return;
   const input = videoNoteInput();
   $<HTMLElement>('#readingTitle').textContent = input.title;
-  $<HTMLElement>('#readingKind').textContent = isDemoProject ? '内置示例 · 免费体验' : '你的原画面笔记';
-  $<HTMLElement>('#readingMeta').textContent = `${videoMeta ? `原视频 ${formatNoteTime(videoMeta.duration)} · ` : ''}${selected.length} 页已选画面 · 保留时间位置`;
+  $<HTMLElement>('#readingKind').textContent = isDemoProject ? ui('内置示例 · 免费体验') : ui('你的原画面笔记');
+  $<HTMLElement>('#readingMeta').textContent = ui`${videoMeta ? ui`原视频 ${formatNoteTime(videoMeta.duration)} · ` : ''}${selected.length} 页已选画面 · 保留时间位置`;
   const hasText = Boolean(illustratedNotesMarkdown.trim() || summaryEl.value.trim());
-  $<HTMLElement>('#readingOverviewTitle').textContent = hasText ? isDemoProject ? '示例要点' : '文字要点' : '画面已就绪，文字要点按需生成';
+  $<HTMLElement>('#readingOverviewTitle').textContent = hasText ? isDemoProject ? ui('示例要点') : ui('文字要点') : ui('画面已就绪，文字要点按需生成');
   $<HTMLElement>('#readingHelp').textContent = isDemoProject
-    ? '这份笔记使用演示素材和作者编写的文字，供体验阅读和导出。'
+    ? ui('这份笔记使用演示素材和作者编写的文字，供体验阅读和导出。')
     : hasText
-      ? '文字来自已有摘要或笔记。下方画面按整理顺序展示，供对照原视频回看。'
-      : '下方画面可直接翻阅。提炼 AI 要点需识别语音并整理逐字稿；首次使用会加载语音模型，请保持页面打开。';
+      ? ui('文字来自已有摘要或笔记。下方画面按整理顺序展示，供对照原视频回看。')
+      : ui('下方画面可直接翻阅。提炼 AI 要点需识别语音并整理逐字稿；首次使用会加载语音模型，请保持页面打开。');
   const generate = $<HTMLButtonElement>('#readerGenerateNotesBtn');
   generate.hidden = isDemoProject;
   generate.disabled = selected.length === 0;
-  generate.textContent = illustratedNotesMarkdown.trim() ? '查看图文排版' : authSession ? '提炼 AI 要点' : '登录提炼 AI 要点';
+  generate.textContent = illustratedNotesMarkdown.trim() ? ui('查看图文排版') : authSession ? ui('提炼 AI 要点') : ui('登录提炼 AI 要点');
   const summary = $<HTMLElement>('#readingSummary');
   summary.replaceChildren();
   const noteText = illustratedNotesMarkdown.trim() || summaryEl.value.trim();
@@ -5705,25 +5706,25 @@ function renderVideoNoteReader(): void {
   frames.replaceChildren();
   if (!selected.length) {
     const empty = document.createElement('p');
-    empty.textContent = '还没有选中页面。切换到“页面编辑”勾选要保留的内容。';
+    empty.textContent = ui('还没有选中页面。切换到“页面编辑”勾选要保留的内容。');
     frames.appendChild(empty);
   }
   selected.forEach((slide, index) => {
     const figure = document.createElement('figure');
     const image = document.createElement('img');
     image.src = slide.dataUrl;
-    image.alt = `原画面 ${index + 1}，视频位置 ${formatNoteTime(slide.time)}`;
+    image.alt = ui`原画面 ${index + 1}，视频位置 ${formatNoteTime(slide.time)}`;
     image.loading = 'lazy';
     image.width = slide.width;
     image.height = slide.height;
     const caption = document.createElement('figcaption');
     const label = document.createElement('span');
-    label.textContent = `原画面 ${index + 1} · ${formatNoteTime(slide.time)}`;
+    label.textContent = ui`原画面 ${index + 1} · ${formatNoteTime(slide.time)}`;
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'ghost-btn';
-    edit.textContent = '定位与编辑';
-    edit.setAttribute('aria-label', `定位与编辑原画面 ${index + 1}`);
+    edit.textContent = ui('定位与编辑');
+    edit.setAttribute('aria-label', ui`定位与编辑原画面 ${index + 1}`);
     edit.addEventListener('click', () => {
       setResultView('pages');
       setPreview(slide);
@@ -5745,7 +5746,7 @@ async function requestVideoNotes(): Promise<void> {
   if (!authSession) {
     pendingNotesFile = selectedFile;
     focusLoginPanel();
-    setAuthStatus('登录后继续为当前视频提炼 AI 要点。画面笔记已保留；生成时会发送必要文本。', '');
+    setAuthStatus(ui('登录后继续为当前视频提炼 AI 要点。画面笔记已保留。'), '');
     return;
   }
   setResultView('notes');
@@ -5757,16 +5758,16 @@ function exportVideoNote(format: 'html' | 'markdown'): void {
   const input = videoNoteInput();
   const body = format === 'html' ? buildVideoNoteHtml(input) : buildVideoNoteMarkdown(input);
   downloadBlob(new Blob([body], { type: format === 'html' ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8' }), `${selectedFile ? baseName(selectedFile.name) : 'video'}-notes.${format === 'html' ? 'html' : 'md'}`);
-  setStatus(format === 'html' ? '完整笔记已保存，含原画面；可以离线打开、阅读和打印。' : 'Markdown 已下载，含文字与时间索引；需要原画面时请保存完整笔记。');
+  setStatus(format === 'html' ? ui('完整笔记已保存，含原画面；可以离线打开、阅读和打印。') : ui('Markdown 已下载，含文字与时间索引；需要原画面时请保存完整笔记。'));
 }
 
 async function copyVideoNote(): Promise<void> {
   if (isBusy() || !slides.some((slide) => slide.selected)) return;
   try {
     await navigator.clipboard.writeText(buildVideoNoteMarkdown(videoNoteInput()));
-    setStatus('Markdown 已复制，可粘贴到你的笔记工具。原画面请通过“保存完整笔记”带走。');
+    setStatus(ui('Markdown 已复制，可粘贴到你的笔记工具。原画面请通过“保存完整笔记”带走。'));
   } catch {
-    setStatus('浏览器未允许复制，请点击“下载 Markdown”保存文字与时间索引。');
+    setStatus(ui('浏览器未允许复制，请点击“下载 Markdown”保存文字与时间索引。'));
   }
 }
 
@@ -5778,39 +5779,39 @@ function updateResultDock(selectedCount: number): void {
   resultDock.classList.toggle('is-busy', busy);
 
   if (busy) {
-    resultBadge.textContent = '正在处理';
-    resultTitle.textContent = isExporting ? '正在生成导出文件' : isGeneratingNotes
-      ? '正在生成图文笔记'
+    resultBadge.textContent = ui('正在处理');
+    resultTitle.textContent = isExporting ? ui('正在生成导出文件') : isGeneratingNotes
+      ? ui('正在生成图文笔记')
       : isSummarizing
-        ? '正在生成摘要'
+        ? ui('正在生成摘要')
         : isTranscribing
-          ? '正在生成逐字稿'
-          : hasSlides ? `已生成 ${slides.length} 页，继续处理中` : '正在生成页面';
+          ? ui('正在生成逐字稿')
+          : hasSlides ? ui`已生成 ${slides.length} 页，继续处理中` : ui('正在生成页面');
     resultSubtitle.textContent = isGeneratingNotes
-      ? `正在生成${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}要点，原画面会保留为回看参考。`
-      : '处理完成后可检查页面，并选择格式导出。';
+      ? ui`正在生成${OUTPUT_LANGUAGE_LABELS[userPreferences.outputLanguage]}要点，原画面会保留为回看参考。`
+      : ui('处理完成后可检查页面，并选择格式导出。');
     return;
   }
 
   if (!hasSlides) {
-    resultBadge.textContent = selectedFile ? '等待处理' : '工作台';
-    resultTitle.textContent = selectedFile ? '等待生成页面' : '还没有任务';
+    resultBadge.textContent = selectedFile ? ui('等待处理') : ui('工作台');
+    resultTitle.textContent = selectedFile ? ui('等待生成页面') : ui('还没有任务');
     resultSubtitle.textContent = selectedFile
-      ? '点击开始生成后，进度和下载入口会固定显示在这里。'
-      : '粘贴链接、上传视频或录制屏幕，处理完成后可在这里查看页面和导出。';
+      ? ui('点击开始生成后，进度和下载入口会固定显示在这里。')
+      : ui('粘贴链接、上传视频或录制屏幕，处理完成后可在这里查看页面和导出。');
     return;
   }
 
   if (selectedCount === 0) {
-    resultBadge.textContent = '需要选择';
-    resultTitle.textContent = `已生成 ${slides.length} 页`;
-    resultSubtitle.textContent = '请至少勾选 1 页，之后即可下载 PDF、PPTX 或页面图片。';
+    resultBadge.textContent = ui('需要选择');
+    resultTitle.textContent = ui`已生成 ${slides.length} 页`;
+    resultSubtitle.textContent = ui('请至少勾选 1 页，之后即可下载 PDF、PPTX 或页面图片。');
     return;
   }
 
-  resultBadge.textContent = workspaceMode === 'video' ? '可以阅读' : '可以导出';
-  resultTitle.textContent = workspaceMode === 'video' ? `${selectedCount} 页原画面${illustratedNotesMarkdown.trim() ? ' + 文字要点' : '笔记'}已就绪` : `已生成 ${slides.length} 页，已选 ${selectedCount} 页`;
-  resultSubtitle.textContent = isDemoProject ? '内置示例 · 免费体验 · 可阅读、编辑和保存' : '浏览画面、提炼 AI 要点，或保留原格式导出 PDF / PPTX。';
+  resultBadge.textContent = workspaceMode === 'video' ? ui('可以阅读') : ui('可以导出');
+  resultTitle.textContent = workspaceMode === 'video' ? ui`${selectedCount} 页原画面${illustratedNotesMarkdown.trim() ? ui(' + 文字要点') : ui('笔记')}已就绪` : ui`已生成 ${slides.length} 页，已选 ${selectedCount} 页`;
+  resultSubtitle.textContent = isDemoProject ? ui('内置示例 · 免费体验 · 可阅读、编辑和保存') : ui('浏览画面、提炼 AI 要点，或保留原格式导出 PDF / PPTX。');
 }
 
 function setAllSlidesSelected(selected: boolean): void {
@@ -5830,13 +5831,13 @@ function getDefaultNewSlideSelected(): boolean { return true; }
 async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<void> {
   if (isBusy()) return;
   if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
-    setStatus('当前浏览器无法录制屏幕，请上传本地视频。');
-    setHomeStatus('当前浏览器无法录制屏幕，请更新 Chrome / Edge / Safari 后重试。');
+    setStatus(ui('当前浏览器无法录制屏幕，请上传本地视频。'));
+    setHomeStatus(ui('当前浏览器无法录制屏幕，请更新 Chrome / Edge / Safari 后重试。'));
     return;
   }
   isPreparingRecording = true;
   updateActionState();
-  setStatus('请选择要录制的标签页、窗口或屏幕。');
+  setStatus(ui('请选择要录制的标签页、窗口或屏幕。'));
   try {
     recordedChunks = [];
     recordingCompletionMode = mode;
@@ -5850,12 +5851,12 @@ async function startScreenRecording(mode: UrlDownloadMode = 'queue'): Promise<vo
     });
     mediaRecorder.start(1000);
     isRecording = true;
-    setStatus('正在录制屏幕，停止后会继续处理。');
-    setHomeStatus(mode === 'extract' ? '正在录制屏幕。完成后点击“停止录制并直接生成”。' : '正在录制屏幕。完成后点击“停止录制并加入队列”。');
+    setStatus(ui('正在录制屏幕，停止后会继续处理。'));
+    setHomeStatus(mode === 'extract' ? ui('正在录制屏幕。完成后点击“停止录制并直接生成”。') : ui('正在录制屏幕。完成后点击“停止录制并加入队列”。'));
   } catch (error) {
     console.error(error);
     cleanupRecording();
-    const message = error instanceof DOMException && error.name === 'NotAllowedError' ? '已取消录屏。可以重新选择屏幕，或改用本地视频。' : '录屏未能开始，请重试或选择本地视频。';
+    const message = error instanceof DOMException && error.name === 'NotAllowedError' ? ui('已取消录屏。可以重新选择屏幕，或改用本地视频。') : ui('录屏未能开始，请重试或选择本地视频。');
     setHomeStatus(message);
     setStatus(message);
   } finally {
@@ -5878,7 +5879,7 @@ function finishScreenRecording(): void {
   const completionMode = recordingCompletionMode;
   cleanupRecording();
   if (chunks.length === 0) {
-    setHomeStatus('录制结束，但没有生成有效视频。');
+    setHomeStatus(ui('录制结束，但没有生成有效视频。'));
     updateActionState();
     return;
   }
@@ -5887,7 +5888,7 @@ function finishScreenRecording(): void {
   const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const file = new File([blob], `screen-recording-${timestampForFilename()}.${extension}`, { type: mimeType });
   addFiles([file], true);
-  setHomeStatus(completionMode === 'extract' ? `录制完成，正在处理：${file.name}` : `录制完成，已加入队列并切换到：${file.name}`);
+  setHomeStatus(completionMode === 'extract' ? ui`录制完成，正在处理：${file.name}` : ui`录制完成，已加入队列并切换到：${file.name}`);
   updateActionState();
   if (completionMode === 'extract') void processCurrentFile();
 }
@@ -5929,7 +5930,7 @@ async function summarizeWithApi(
   sourceTitle = ''
 ): Promise<string> {
   const token = authSession?.token;
-  if (!token) throw new Error('注册或登录后可生成内容。');
+  if (!token) throw new Error(ui('注册或登录后可生成内容。'));
   const response = await fetch(SUMMARY_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -5941,7 +5942,7 @@ async function summarizeWithApi(
     })
   });
   const data = await response.json().catch(() => ({})) as { detail?: string; summary?: string; usage?: UsageSummary };
-  if (!response.ok) throw new Error(data.detail || `内容生成失败：${response.status}`);
+  if (!response.ok) throw new Error(serviceMessage(data.detail) || ui`内容生成失败：${response.status}`);
   if (data.usage && authSession) {
     usageSummary = normalizeUsageSummary(data.usage, authSession.user.email);
     renderEntitlementSummary();
@@ -5951,7 +5952,7 @@ async function summarizeWithApi(
 
 function openIllustratedNotes(): void {
   if (!illustratedNotesMarkdown.trim()) {
-    setStatus('还没有图文笔记，点击“生成图文笔记”开始。');
+    setStatus(ui('还没有图文笔记，点击“生成图文笔记”开始。'));
     return;
   }
   renderIllustratedNotes();
@@ -6021,7 +6022,7 @@ function renderIllustratedNotes(): void {
 
   if (!sawTitle) {
     const title = document.createElement('h1');
-    title.textContent = selectedFile ? `${baseName(selectedFile.name)} · 图文笔记` : '图文笔记';
+    title.textContent = selectedFile ? ui`${baseName(selectedFile.name)} · 图文笔记` : ui('图文笔记');
     illustratedNotesPreview.prepend(title);
     if (illustrationIndex === 0 && illustrations[0]) title.after(createNoteFigure(illustrations[0], 1));
   }
@@ -6060,16 +6061,16 @@ function createNoteFigure(slide: Slide, index: number): HTMLElement {
   figure.className = 'note-figure';
   const image = document.createElement('img');
   image.src = slide.dataUrl;
-  image.alt = `视频关键页面 ${index}`;
+  image.alt = ui`视频关键页面 ${index}`;
   const caption = document.createElement('figcaption');
-  caption.textContent = `视频关键页面 ${index} · ${formatTime(slide.time)}`;
+  caption.textContent = ui`视频关键页面 ${index} · ${formatTime(slide.time)}`;
   figure.append(image, caption);
   return figure;
 }
 
 function illustratedNotesDocument(): string {
   const title = illustratedNotesMarkdown.match(/^#\s+(.+)$/m)?.[1]?.trim()
-    || (selectedFile ? `${baseName(selectedFile.name)} · 图文笔记` : '图文笔记');
+    || (selectedFile ? ui`${baseName(selectedFile.name)} · 图文笔记` : ui('图文笔记'));
   return `<!doctype html>
 <html lang="${escapeXml(userPreferences.outputLanguage)}">
 <head>
@@ -6106,7 +6107,7 @@ function printIllustratedNotes(): void {
   const documentRef = frame.contentDocument;
   if (!documentRef) {
     frame.remove();
-    setStatus('无法打开打印视图，请下载 HTML 后打印。');
+    setStatus(ui('无法打开打印视图，请下载 HTML 后打印。'));
     return;
   }
   documentRef.open();
@@ -6135,14 +6136,14 @@ function setProgress(label: string, percent?: number, indeterminate = false): vo
   if (typeof percent === 'number' && Number.isFinite(percent)) {
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
     progressFill.style.width = `${clamped}%`;
-    progressPercent.textContent = indeterminate ? `${clamped}% · 处理中` : `${clamped}%`;
+    progressPercent.textContent = indeterminate ? ui`${clamped}% · 处理中` : `${clamped}%`;
     progressTrack.setAttribute('aria-valuenow', String(clamped));
     progressTrack.setAttribute('aria-valuetext', `${label}，${clamped}%`);
   } else {
     progressFill.style.width = '100%';
-    progressPercent.textContent = '处理中';
+    progressPercent.textContent = ui('处理中');
     progressTrack.removeAttribute('aria-valuenow');
-    progressTrack.setAttribute('aria-valuetext', `${label}，处理中`);
+    progressTrack.setAttribute('aria-valuetext', ui`${label}，处理中`);
   }
 }
 
@@ -6150,7 +6151,7 @@ function hideProgress(): void {
   progressPanel.hidden = true;
   progressFill.classList.remove('is-indeterminate');
   progressFill.style.width = '0%';
-  progressText.textContent = '准备开始';
+  progressText.textContent = ui('准备开始');
   progressPercent.textContent = '0%';
 }
 
@@ -6161,10 +6162,10 @@ function setNotebookPdfStatus(message: string): void { notebookPdfStatus.textCon
 
 function waitForEvent(target: EventTarget, eventName: string, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => { cleanup(); reject(new Error(`等待 ${eventName} 超时。`)); }, timeoutMs);
+    const timer = window.setTimeout(() => { cleanup(); reject(new Error(ui`等待 ${eventName} 超时。`)); }, timeoutMs);
     const cleanup = () => { clearTimeout(timer); target.removeEventListener(eventName, onSuccess); target.removeEventListener('error', onError); };
     const onSuccess = () => { cleanup(); resolve(); };
-    const onError = () => { cleanup(); reject(new Error('视频读取失败，当前浏览器可能无法解码。可转为 H.264 MP4 后重试。')); };
+    const onError = () => { cleanup(); reject(new Error(ui('视频读取失败，当前浏览器可能无法解码。可转为 H.264 MP4 后重试。'))); };
     target.addEventListener(eventName, onSuccess, { once: true });
     target.addEventListener('error', onError, { once: true });
   });
@@ -6180,7 +6181,7 @@ function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
     const cleanup = () => { clearTimeout(timer); video.removeEventListener('seeked', onSeeked); video.removeEventListener('error', onError); };
     const finish = () => { if (settled) return; settled = true; cleanup(); resolve(); };
     const onSeeked = () => finish();
-    const onError = () => { if (settled) return; settled = true; cleanup(); reject(new Error('视频 seek 失败。')); };
+    const onError = () => { if (settled) return; settled = true; cleanup(); reject(new Error(ui('视频 seek 失败。'))); };
     const timer = window.setTimeout(() => finish(), 2200);
     video.addEventListener('seeked', onSeeked, { once: true });
     video.addEventListener('error', onError, { once: true });
@@ -6204,7 +6205,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('图片加载失败。'));
+    img.onerror = () => reject(new Error(ui('图片加载失败。')));
     img.src = src;
   });
 }
@@ -6267,14 +6268,14 @@ function scheduleDraftSave(): void {
   draftRevision += 1;
   const revision = draftRevision;
   const draft: WorkspaceDraft = { version: 1, file: selectedFile, state: snapshotWorkspace(), mode: workspaceMode, savedAt: new Date().toISOString() };
-  $<HTMLElement>('#draftStatus').textContent = '正在保存当前任务到本机…';
+  $<HTMLElement>('#draftStatus').textContent = ui('正在保存当前任务到本机…');
   window.clearTimeout(draftTimer);
   draftTimer = window.setTimeout(() => {
     draftWrites = draftWrites.catch(() => {}).then(() => writeDraft(draft)).then(() => {
       savedDraftRevision = revision;
-      if (revision === draftRevision) $<HTMLElement>('#draftStatus').textContent = '当前任务已保存到此浏览器 · 关闭后可继续';
+      if (revision === draftRevision) $<HTMLElement>('#draftStatus').textContent = ui('当前任务已保存到此浏览器 · 关闭后可继续');
     }).catch(() => {
-      $<HTMLElement>('#draftStatus').textContent = '本机保存暂时无法使用，请在离开前导出结果。';
+      $<HTMLElement>('#draftStatus').textContent = ui('本机保存暂时无法使用，请在离开前导出结果。');
     });
   }, 650);
 }
@@ -6284,7 +6285,7 @@ async function discoverDraft(): Promise<void> {
     const draft = await readDraft<WorkspaceDraft>();
     if (!draft || draft.version !== 1 || !(draft.file instanceof File) || !Array.isArray(draft.state?.slides)) return;
     savedDraft = draft;
-    $<HTMLElement>('#resumeDraftText').textContent = `继续上次：${draft.file.name} · ${draft.state.slides.length} 页`;
+    $<HTMLElement>('#resumeDraftText').textContent = ui`继续上次：${draft.file.name} · ${draft.state.slides.length} 页`;
     $<HTMLElement>('#resumeDraftBanner').hidden = false;
   } catch { /* Local conversion remains usable when storage is unavailable. */ }
 }
@@ -6299,7 +6300,7 @@ function setSourceTab(source: string, focus = false): void {
   });
   Object.entries(panels).forEach(([key, selector]) => { $<HTMLElement>(selector).hidden = key !== source; });
   extractBtn.hidden = source !== 'local' && !selectedFiles.length;
-  setHomeStatus(source === 'local' ? '文件留在本机。选择后即可开始提取。' : source === 'url' ? '在线链接由服务端临时获取。导入失败时可改用本地文件或录屏。' : '录屏在本机处理，停止后自动提取页面。');
+  setHomeStatus(source === 'local' ? ui('选择视频，即可开始整理画面与笔记。') : source === 'url' ? ui('粘贴支持的视频链接。导入失败时可改用文件或录屏。') : ui('停止录制后，自动整理画面与笔记。'));
 }
 
 document.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((button, index, buttons) => {
@@ -6323,7 +6324,7 @@ $<HTMLButtonElement>('#toggleImportBtn').addEventListener('click', () => {
 });
 $<HTMLButtonElement>('#cancelExtractionBtn').addEventListener('click', () => {
   extractionAbort?.abort();
-  setStatus('正在停止，已完成的页面会保留。');
+  setStatus(ui('正在停止，已完成的页面会保留。'));
 });
 $<HTMLButtonElement>('#notesLoginBtn').addEventListener('click', focusLoginPanel);
 $<HTMLButtonElement>('#selectAllReviewBtn').addEventListener('click', () => setAllSlidesSelected(true));
@@ -6343,7 +6344,7 @@ $<HTMLButtonElement>('#undoEditBtn').addEventListener('click', () => {
   const active = getActiveSlide();
   if (active) setPreview(active);
   persistWorkspaceToState();
-  setStatus('已撤销上一次页面操作，页面与顺序已恢复。');
+  setStatus(ui('已撤销上一次页面操作，页面与顺序已恢复。'));
 });
 $<HTMLButtonElement>('#dismissDraftBtn').addEventListener('click', () => { $<HTMLElement>('#resumeDraftBanner').hidden = true; });
 $<HTMLButtonElement>('#resumeDraftBtn').addEventListener('click', () => {
@@ -6365,8 +6366,8 @@ $<HTMLButtonElement>('#resumeDraftBtn').addEventListener('click', () => {
   showWorkspace();
   renderFileList();
   updateActionState();
-  setStatus('已恢复上次的页面、排序与文字，可继续编辑或导出。');
-  $<HTMLElement>('#draftStatus').textContent = '已恢复此浏览器保存的任务';
+  setStatus(ui('已恢复上次的页面、排序与文字，可继续编辑或导出。'));
+  $<HTMLElement>('#draftStatus').textContent = ui('已恢复此浏览器保存的任务');
   scheduleDraftSave();
 });
 window.addEventListener('beforeunload', (event) => {
@@ -6380,3 +6381,5 @@ window.addEventListener('dragover', (event) => { if (event.dataTransfer?.types.i
 window.addEventListener('drop', (event) => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
 workspaceView.classList.add('side-collapsed');
 void discoverDraft();
+
+initializeWorkspaceLanguage();

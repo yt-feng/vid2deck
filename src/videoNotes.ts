@@ -1,3 +1,5 @@
+import { ui, workspaceLanguage } from './workspaceI18n';
+
 export type VideoNoteFrame = {
   id: number;
   time: number;
@@ -16,8 +18,8 @@ export type VideoNoteInput = {
 };
 
 const PRODUCT_URL = 'https://vid2ppt.com/';
-const DEMO_NOTICE = '内置示例 · 使用专门编写的演示内容，供体验阅读与导出。';
-const VISUAL_ONLY_NOTICE = '这份笔记收录了你选中的关键画面，尚未包含语音摘要。生成逐字稿后，可以继续补充内容要点。';
+const DEMO_NOTICE = ui('内置示例 · 使用专门编写的演示内容，供体验阅读与导出。');
+const VISUAL_ONLY_NOTICE = ui('这份笔记收录了你选中的关键画面，尚未包含语音摘要。生成逐字稿后，可以继续补充内容要点。');
 
 export function formatNoteTime(seconds: number): string {
   const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
@@ -29,11 +31,11 @@ export function formatNoteTime(seconds: number): string {
 }
 
 function sourceName(input: VideoNoteInput): string {
-  return input.title.trim() || '未命名视频';
+  return input.title.trim() || ui('未命名视频');
 }
 
 function noteTitle(input: VideoNoteInput): string {
-  return `${sourceName(input).replace(/\.(mp4|mov|m4v|webm|mkv|avi|mp3|m4a|wav|aac|ogg)$/i, '')} · 视频笔记`;
+  return ui`${sourceName(input).replace(/\.(mp4|mov|m4v|webm|mkv|avi|mp3|m4a|wav|aac|ogg)$/i, '')} · 视频笔记`;
 }
 
 function selectedFrames(input: VideoNoteInput): VideoNoteFrame[] {
@@ -46,8 +48,8 @@ function frameText(frame: VideoNoteFrame): string {
 }
 
 function contentNote(input: VideoNoteInput): { label: string; text: string } | null {
-  if (input.notes.trim()) return { label: '内容笔记', text: input.notes.trim() };
-  if (input.summary.trim()) return { label: '内容摘要', text: input.summary.trim() };
+  if (input.notes.trim()) return { label: ui('内容笔记'), text: input.notes.trim() };
+  if (input.summary.trim()) return { label: ui('内容摘要'), text: input.summary.trim() };
   return null;
 }
 
@@ -114,22 +116,22 @@ export function buildVideoNoteMarkdown(input: VideoNoteInput): string {
   const lines = [
     `# ${escapeMarkdown(noteTitle(input)).replace(/\r?\n/g, ' ')}`,
     '',
-    `来源：${escapeMarkdown(sourceName(input)).replace(/\r?\n/g, ' ')}`,
-    ...(Number.isFinite(input.duration) && input.duration > 0 ? [`原视频时长：${formatNoteTime(input.duration)}`] : []),
-    `选中画面：${frames.length} 页`,
+    ui`来源：${escapeMarkdown(sourceName(input)).replace(/\r?\n/g, ' ')}`,
+    ...(Number.isFinite(input.duration) && input.duration > 0 ? [ui`原视频时长：${formatNoteTime(input.duration)}`] : []),
+    ui`选中画面：${frames.length} 页`,
     '',
   ];
   if (input.isDemo) lines.push(`> ${DEMO_NOTICE}`, '');
   if (content) lines.push(`## ${content.label}`, '', safeMarkdownContent(content.text), '');
   else lines.push(VISUAL_ONLY_NOTICE, '');
-  lines.push('## 关键画面索引', '', '时间对应原视频；画面按你整理的顺序排列。完整画面保存在 HTML 图文笔记中。', '');
-  if (!frames.length) lines.push('未选择关键画面。', '');
+  lines.push(ui('## 关键画面索引'), '', ui('时间对应原视频；画面按你整理的顺序排列。完整画面保存在 HTML 图文笔记中。'), '');
+  if (!frames.length) lines.push(ui('未选择关键画面。'), '');
   frames.forEach((frame, index) => {
     lines.push(`### ${index + 1}. ${formatNoteTime(frame.time)}`, '');
     const text = frameText(frame);
-    if (text) lines.push('画面文字（识别 / 编辑）：', '', escapeMarkdown(text), '');
+    if (text) lines.push(ui('画面文字（识别 / 编辑）：'), '', escapeMarkdown(text), '');
   });
-  lines.push('---', '', `由 [Vid2PPT](${PRODUCT_URL}) 整理 · 把视频里的重点，变成可回看的笔记。`, '');
+  lines.push('---', '', ui`由 [Vid2PPT](${PRODUCT_URL}) 整理 · 把视频里的重点，变成可回看的笔记。`, '');
   return lines.join('\n');
 }
 
@@ -137,18 +139,18 @@ export function buildVideoNoteHtml(input: VideoNoteInput): string {
   const frames = selectedFrames(input);
   const content = contentNote(input);
   const title = escapeHtml(noteTitle(input));
-  const duration = Number.isFinite(input.duration) && input.duration > 0 ? `<span>原视频 ${formatNoteTime(input.duration)}</span>` : '';
+  const duration = Number.isFinite(input.duration) && input.duration > 0 ? ui`<span>原视频 ${formatNoteTime(input.duration)}</span>` : '';
   const figures = frames.map((frame, index) => {
     const image = safeFrameImage(frame.dataUrl);
     const text = frameText(frame);
-    return `<figure>
+    return ui`<figure>
       <figcaption><span class="frame-number">${String(index + 1).padStart(2, '0')}</span><span>原视频 ${formatNoteTime(frame.time)}</span></figcaption>
-      ${image ? `<img src="${image}" alt="选中画面 ${index + 1}，原视频 ${formatNoteTime(frame.time)}" />` : '<p class="muted">此画面未包含可导出的图片。</p>'}
-      ${text ? `<div class="frame-text"><small>画面文字（识别 / 编辑）</small><p>${escapeHtml(text).replace(/\n/g, '<br />')}</p></div>` : ''}
+      ${image ? ui`<img src="${image}" alt="选中画面 ${index + 1}，原视频 ${formatNoteTime(frame.time)}" />` : ui('<p class="muted">此画面未包含可导出的图片。</p>')}
+      ${text ? ui`<div class="frame-text"><small>画面文字（识别 / 编辑）</small><p>${escapeHtml(text).replace(/\n/g, '<br />')}</p></div>` : ''}
     </figure>`;
   }).join('\n');
-  return `<!doctype html>
-<html lang="zh-CN">
+  return ui`<!doctype html>
+<html lang="${workspaceLanguage()}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -170,7 +172,7 @@ export function buildVideoNoteHtml(input: VideoNoteInput): string {
 <body><main>
   <header><div class="eyebrow">VID2PPT · VIDEO NOTES</div><h1>${title}</h1><p class="source">来源：${escapeHtml(sourceName(input))}</p><div class="metadata">${duration}<span>选中画面 ${frames.length} 页</span></div>${input.isDemo ? `<p class="notice">${DEMO_NOTICE}</p>` : ''}</header>
   ${content ? `<section class="content-note" aria-label="${content.label}">${renderNoteContent(content.text)}</section>` : `<p class="notice">${VISUAL_ONLY_NOTICE}</p>`}
-  <section aria-label="关键画面"><div class="section-heading"><h2>关键画面</h2><span class="muted">保留原视频时间，方便回看</span></div><p class="muted">画面按你整理的顺序排列，供对照原视频；未自动匹配到上文段落。</p>${frames.length ? figures : '<p class="muted">未选择关键画面。</p>'}</section>
+  <section aria-label="关键画面"><div class="section-heading"><h2>关键画面</h2><span class="muted">保留原视频时间，方便回看</span></div><p class="muted">画面按你整理的顺序排列，供对照原视频；未自动匹配到上文段落。</p>${frames.length ? figures : ui('<p class="muted">未选择关键画面。</p>')}</section>
   <footer>由 <a href="${PRODUCT_URL}" target="_blank" rel="noopener noreferrer">Vid2PPT</a> 整理<br />把视频里的重点，变成可回看的笔记。</footer>
 </main></body>
 </html>`;

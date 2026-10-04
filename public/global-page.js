@@ -138,24 +138,21 @@
     node.textContent = message; node.setAttribute('data-tone', tone || '');
   }
   function nav() {
-    return '<nav class="global-nav"><a class="global-brand" href="' + url(locale.current === 'zh-CN' ? '/' : '/welcome/') + '"><img src="/brand/vid2ppt-mark.svg" alt="" />Vid2PPT</a><div class="global-links"><a href="' + url('/pricing/') + '">' + e('pricing') + '</a><a href="' + url('/#account') + '">' + e('login') + '</a>' + regionControl() + '</div></nav>';
+    return '<nav class="global-nav"><a class="global-brand" href="' + url('/welcome/') + '"><img src="/brand/vid2ppt-mark.svg" alt="" />Vid2PPT</a><div class="global-links"><a href="' + url('/pricing/') + '">' + e('pricing') + '</a><a href="' + url('/#account') + '">' + e('login') + '</a>' + regionControl() + '</div></nav>';
   }
   function footer() {
     return '<footer class="global-footer"><span>© 2026 Vid2PPT</span><a href="mailto:info@vid2ppt.com">' + e('contact') + '</a><a href="' + url('/terms-and-conditions/') + '">' + e('terms') + '</a><a href="' + url('/privacy/') + '">' + e('privacy') + '</a><a href="' + url('/refund/') + '">' + e('refund') + '</a></footer>';
   }
-  function faq() {
-    return '<section class="global-section global-faq"><h2>' + e('faqTitle') + '</h2>' + ['Local', 'Account', 'Renew', 'Lifetime'].map(function (topic) {
-      return '<details><summary>' + e('faq' + topic + 'Q') + '</summary><p>' + e('faq' + topic + 'A') + '</p></details>';
-    }).join('') + '</section>';
+  function privacyNote() {
+    return '<p class="privacy-note"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 4 6v6c0 4 5 7 8 9 3-2 8-5 8-9V6Z"/><path d="m8 12 3 3 5-6"/></svg><span>' + e('privacyNote') + '</span><a href="' + url('/privacy/') + '">' + e('privacyDetails') + '</a></p>';
   }
-  function workspaceNotice() { return locale.current.indexOf('zh-') === 0 ? '' : '<p class="global-notice">' + e('workspaceLanguage') + '</p>'; }
   function productPreview() {
     return '<div class="product-preview" aria-hidden="true"><div class="preview-toolbar"><img src="/brand/vid2ppt-mark.svg" alt="" /><span>Vid2PPT</span><span class="preview-formats">HTML · PDF · PPTX</span></div><div class="preview-stage"><div class="preview-source"><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i></div><div class="preview-play">▶</div><div class="preview-timeline"><span></span><small>02:36 / 10:00</small></div></div><div class="preview-pages"><div class="preview-page"><span class="preview-timestamp">02:36</span><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i></div><div class="preview-lines"><i></i><i></i><i></i></div></div><div class="preview-page"><span class="preview-timestamp">04:18</span><div class="preview-lines"><i></i><i></i><i></i></div><div class="preview-mini-grid"><span></span><span></span></div></div></div></div><div class="preview-caption"><span class="preview-dot"></span>' + e('step2Title') + '</div></div>';
   }
   function welcome() {
     return '<section class="global-hero welcome-hero"><div class="hero-copy"><div class="global-tag"><span class="tag-dot"></span>' + e('tag') + '</div><h1>' + e('title') + '</h1><p>' + e('lead') + '</p><div class="global-actions"><a class="global-action" href="' + url('/#start') + '">' + e('start') + '<span aria-hidden="true">↗</span></a><a class="global-action secondary" href="' + url('/pricing/') + '">' + e('pricing') + '</a></div><p class="global-note">' + e('freeIntro') + '</p></div>' + productPreview() + '</section>' +
       '<div class="global-grid feature-grid">' + ['local', 'ai', 'exports'].map(function (key, n) { return '<article class="global-card feature-card"><span class="feature-icon" aria-hidden="true">' + ['⌂','✦','↗'][n] + '</span><p>' + e(key) + '</p></article>'; }).join('') + '</div>' +
-      '<section class="global-section"><div class="section-heading"><span class="global-tag">01 — 03</span><h2>' + e('stepsTitle') + '</h2></div><div class="global-grid steps-grid">' + [1, 2, 3].map(function (n) { return '<article class="global-card step-card"><div class="step-number">0' + n + '</div><h2>' + e('step' + n + 'Title') + '</h2><p>' + e('step' + n) + '</p></article>'; }).join('') + '</div></section>' + workspaceNotice() + faq();
+      '<section class="global-section"><div class="section-heading"><span class="global-tag">01 — 03</span><h2>' + e('stepsTitle') + '</h2></div><div class="global-grid steps-grid">' + [1, 2, 3].map(function (n) { return '<article class="global-card step-card"><div class="step-number">0' + n + '</div><h2>' + e('step' + n + 'Title') + '</h2><p>' + e('step' + n) + '</p></article>'; }).join('') + '</div></section>' + privacyNote();
   }
   function card(plan) {
     var free = plan === 'free';
@@ -216,10 +213,10 @@
   }
   function pricing() {
     return '<section class="global-hero pricing-hero"><div class="global-tag">Vid2PPT</div><h1>' + e('pricing') + '</h1><p>' + e('freeIntro') + '</p></section><div class="global-grid pricing-grid">' + ['free', 'pro', 'lifetime'].map(card).join('') + '</div>' +
-      '<section class="global-section pass-entry"><div><span class="global-tag">24h</span><h2>' + e('day_pass') + '</h2><p>' + e('dayDesc') + '</p></div><div class="pass-entry-action"><p class="price" data-price-plan="day_pass">—</p><p class="global-note">' + e('oneOff') + '</p><a class="global-action secondary" href="' + url('/one-time-pass/') + '">' + e('passEntry') + ' <span aria-hidden="true">↗</span></a></div></section>' + checkout() + workspaceNotice() + faq();
+      '<section class="global-section pass-entry"><div><span class="global-tag">24h</span><h2>' + e('day_pass') + '</h2><p>' + e('dayDesc') + '</p></div><div class="pass-entry-action"><p class="price" data-price-plan="day_pass">—</p><p class="global-note">' + e('oneOff') + '</p><a class="global-action secondary" href="' + url('/one-time-pass/') + '">' + e('passEntry') + ' <span aria-hidden="true">↗</span></a></div></section>' + checkout();
   }
   function pass() {
-    return '<section class="global-hero pass-hero"><div class="global-tag"><span class="tag-dot"></span>' + e('oneOff') + '</div><h1>' + e('day_pass') + '</h1></section>' + checkout() + '<div class="pass-back"><a href="' + url('/pricing/') + '">← ' + e('pricing') + '</a></div>' + workspaceNotice();
+    return '<section class="global-hero pass-hero"><div class="global-tag"><span class="tag-dot"></span>' + e('oneOff') + '</div><h1>' + e('day_pass') + '</h1></section>' + checkout() + '<div class="pass-back"><a href="' + url('/pricing/') + '">← ' + e('pricing') + '</a></div>';
   }
   function setBusy(value) {
     busy = value;

@@ -6,8 +6,8 @@
   "pricing": "Planer och priser",
   "language": "Språk",
   "back": "Tillbaka till arbetsytan",
-  "local": "Lokala videor bearbetas på din enhet.",
-  "ai": "AI-genererade huvudpunkter kräver inloggning och skickar den transkriptionstext som behövs till AI-tjänsten.",
+  "local": "Behåll originalbilder och tidsstämplar för att kunna granska innehållet med tillförsikt.",
+  "ai": "Gör de viktigaste delarna av transkriptionen till anteckningar som du kan återvända till.",
   "exports": "Spara anteckningar i HTML eller Markdown, PDF, PPTX och bilder.",
   "stepsTitle": "Från en video till användbara anteckningar",
   "step1Title": "Importera en video",
@@ -23,7 +23,7 @@
   "day_pass": "24-timmarspass",
   "freeDesc": "För att prova korta videor ibland.",
   "proDesc": "För återkommande kurser, möten och längre videor.",
-  "lifetimeDesc": "Ett köp för fortsatt användning så länge tjänsten är i drift.",
+  "lifetimeDesc": "Ett enda köp för fortsatt tillgång.",
   "dayDesc": "Tillfällig åtkomst: 20 konverteringar, 300 OCR-sidor och 120 transkriptionsminuter under 24 timmar. Videor på upp till 10 minuter; en fil i taget.",
   "monthly": "per månad · löpande prenumeration",
   "oneOff": "engångsköp · ingen automatisk förnyelse",
@@ -36,7 +36,7 @@
   "transcription": "Transkription: {value}",
   "batch": "Bearbetning av flera filer samtidigt",
   "single": "En fil i taget",
-  "unlimited": "Ingen gräns i planen; den faktiska bearbetningen beror på din enhet, webbläsare och videokodning.",
+  "unlimited": "Ingen begränsning i planen.",
   "choose": "Välj {plan}",
   "selected": "Vald: {plan}",
   "buyEmail": "E-postadress för köpet",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Öka antal",
   "budgetPresets": "Välj en ungefärlig budget",
   "presetPasses": "{count} pass",
-  "accountTools": "Har du redan betalat? Kontrollera din åtkomst"
+  "accountTools": "Har du redan betalat? Kontrollera din åtkomst",
+  "privacyNote": "Ditt innehåll, hanterat med omsorg.",
+  "privacyDetails": "Så skyddar vi din integritet"
 }

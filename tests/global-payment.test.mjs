@@ -311,17 +311,30 @@ test('Paddle transaction landing links initialize with page language', async () 
   assert.match(page.initializations[0].checkout.settings.successUrl, /lang=fr/);
 });
 
-test('homepage localization redirects marketing anchors while preserving application deep links', () => {
+test('English and Chinese root pages redirect to the shared marketing page without losing region or workspace deep links', () => {
   const script = readFileSync(new URL('../public/global-home.js', import.meta.url), 'utf8');
-  for (const [hash, expected] of [['', '/welcome/?lang=en'], ['#product', '/welcome/?lang=en'], ['#faq', '/welcome/?lang=en'], ['#start', null], ['#workspace', null], ['#account', null]]) {
-    const location = new URL('https://vid2ppt.com/?lang=en' + hash);
-    let redirected = null;
-    location.replace = value => { redirected = value; };
-    const document = { querySelector: () => null, querySelectorAll: () => [] };
-    const window = { location, document, navigator: { languages: ['en'] }, localStorage: { getItem: () => '', setItem() {} } };
-    const context = vm.createContext({ window, document, location, URL, URLSearchParams });
-    vm.runInContext(languageScript, context); vm.runInContext(script, context);
-    assert.equal(redirected, expected, hash);
+  for (const lang of ['en', 'zh-CN']) {
+    for (const hash of ['', '#product', '#faq', '#start', '#workspace', '#account']) {
+      const location = new URL(`https://vid2ppt.com/?lang=${lang}&country=CN&currency=USD${hash}`);
+      let redirected = null;
+      location.replace = value => { redirected = value; };
+      const document = { querySelector: () => null, querySelectorAll: () => [] };
+      const window = { location, document, navigator: { languages: [lang] }, localStorage: { getItem: () => '', setItem() {} } };
+      const context = vm.createContext({ window, document, location, URL, URLSearchParams });
+      vm.runInContext(languageScript, context); vm.runInContext(script, context);
+      const workspace = ['#start', '#workspace', '#account'].includes(hash);
+      if (workspace) {
+        assert.equal(redirected, null, `${lang}${hash}`);
+        assert.equal(location.hash, hash);
+      } else {
+        const target = new URL(redirected, location.origin);
+        assert.equal(target.pathname, '/welcome/', `${lang}${hash}`);
+        assert.equal(target.hash, '');
+        assert.equal(target.searchParams.get('lang'), lang);
+        assert.equal(target.searchParams.get('country'), 'CN');
+        assert.equal(target.searchParams.get('currency'), 'USD');
+      }
+    }
   }
 });
 
@@ -651,6 +664,80 @@ test('the welcome page offers one flag region menu with country and language cho
   assert.equal(target.searchParams.get('country'), 'JP');
   assert.equal(page.previews.length, 0);
   assert.ok(page.requests.every(request => request.url.startsWith('/locales/')));
+});
+
+test('Chinese and English welcome pages share the complete marketing layout with localized content and privacy links', async () => {
+  const pages = [];
+  const structure = element => [element.tagName, element.id, element.getAttribute('class') || '', element.children.map(structure)];
+  for (const lang of ['en', 'zh-CN']) {
+    const dictionary = JSON.parse(readFileSync(new URL(`../public/locales/${lang}.json`, import.meta.url), 'utf8'));
+    const page = harness({ lang, path: '/welcome/', query: 'country=CN&currency=USD' }); await page.flush();
+    assert.equal(page.document.documentElement.lang, lang);
+    assert.equal(page.document.querySelector('h1').textContent, dictionary.title);
+    assert.equal(page.document.querySelectorAll('.welcome-hero').length, 1);
+    assert.equal(page.document.querySelectorAll('.product-preview').length, 1);
+    assert.equal(page.document.querySelectorAll('.preview-page').length, 2);
+    const features = page.document.querySelectorAll('.feature-card p');
+    assert.deepEqual(features.map(feature => feature.textContent), ['local', 'ai', 'exports'].map(key => dictionary[key]));
+    assert.deepEqual(page.document.querySelectorAll('.step-card h2').map(heading => heading.textContent), [1, 2, 3].map(number => dictionary[`step${number}Title`]));
+    const privacyNote = page.document.querySelector('.privacy-note');
+    assert.ok(privacyNote);
+    assert.equal(privacyNote.querySelector('span').textContent, dictionary.privacyNote);
+    assert.equal(privacyNote.querySelector('a').textContent, dictionary.privacyDetails);
+    const privacyUrl = new URL(privacyNote.querySelector('a').href);
+    assert.equal(privacyUrl.pathname, '/privacy/');
+    assert.equal(privacyUrl.searchParams.get('lang'), lang);
+    const startLink = page.document.querySelectorAll('.global-action').find(link => new URL(link.href).hash === '#start');
+    assert.ok(startLink);
+    const workspaceUrl = new URL(startLink.href);
+    assert.equal(workspaceUrl.pathname, '/');
+    assert.equal(workspaceUrl.searchParams.get('lang'), lang);
+    assert.equal(workspaceUrl.searchParams.get('country'), 'CN');
+    assert.equal(workspaceUrl.searchParams.get('currency'), 'USD');
+    assert.equal(page.previews.length, 0);
+    pages.push(page);
+  }
+  assert.notEqual(pages[0].document.querySelector('h1').textContent, pages[1].document.querySelector('h1').textContent);
+  assert.deepEqual(structure(pages[1].document.body), structure(pages[0].document.body));
+});
+
+test('welcome and pricing show product benefits without the old technical FAQs or Chinese-workspace warning', async () => {
+  for (const lang of ['en', 'zh-CN']) {
+    const dictionary = JSON.parse(readFileSync(new URL(`../public/locales/${lang}.json`, import.meta.url), 'utf8'));
+    for (const path of ['/welcome/', '/pricing/']) {
+      const page = harness({ lang, path }); await page.flush();
+      assert.equal(page.document.querySelector('.global-faq'), null, `${lang} ${path}`);
+      assert.equal(page.document.querySelector('.global-notice'), null, `${lang} ${path}`);
+      const text = page.document.body.textContent;
+      for (const key of ['faqTitle', 'faqLocalQ', 'faqLocalA', 'faqAccountQ', 'faqRenewQ', 'faqLifetimeQ', 'workspaceLanguage']) {
+        assert.ok(!text.includes(dictionary[key]), `${lang} ${path} must not display ${key}`);
+      }
+      assert.doesNotMatch(text, /on your device|processed locally|在您的设备上|本地处理/i, `${lang} ${path}`);
+      const privacyLinks = page.document.querySelectorAll('a[href]').filter(link => new URL(link.href).pathname === '/privacy/');
+      assert.ok(privacyLinks.length);
+      assert.ok(privacyLinks.every(link => new URL(link.href).searchParams.get('lang') === lang));
+    }
+  }
+});
+
+test('switching English and Chinese keeps welcome as marketing and workspace deep links in the shared application', async () => {
+  for (const [lang, nextLang] of [['en', 'zh-CN'], ['zh-CN', 'en']]) {
+    for (const [path, hash, expectedPath] of [
+      ['/welcome/', '', '/welcome/'], ['/', '', '/welcome/'],
+      ['/', '#start', '/'], ['/', '#account', '/'], ['/', '#workspace', '/']
+    ]) {
+      const page = harness({ lang, path, query: `country=CN&currency=USD${hash}` }); await page.flush();
+      const select = page.elements.get('siteLanguage');
+      select.value = nextLang; select.fire('change');
+      const target = new URL(page.navigations.at(-1));
+      assert.equal(target.pathname, expectedPath, `${lang} ${path}${hash}`);
+      assert.equal(target.hash, hash);
+      assert.equal(target.searchParams.get('lang'), nextLang);
+      assert.equal(target.searchParams.get('country'), 'CN');
+      assert.equal(target.searchParams.get('currency'), 'USD');
+      assert.equal(page.storage.get('vid2ppt.language'), nextLang);
+    }
+  }
 });
 
 test('the region menu closes on Escape and outside click while retaining clicks inside', async () => {

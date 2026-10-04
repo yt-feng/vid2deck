@@ -6,8 +6,8 @@
   "pricing": "Planes y precios",
   "language": "Idioma",
   "back": "Volver al espacio de trabajo",
-  "local": "Los videos locales se procesan en tu dispositivo.",
-  "ai": "Para generar puntos destacados con IA, debes iniciar sesión. El texto de la transcripción necesario se envía al servicio de IA.",
+  "local": "Conserva los fotogramas originales y las marcas de tiempo para revisar el contenido con confianza.",
+  "ai": "Convierte los puntos destacados de la transcripción en notas que puedes volver a consultar.",
   "exports": "Guarda notas en HTML o Markdown, PDF, PPTX e imágenes.",
   "stepsTitle": "De un video a notas útiles",
   "step1Title": "Importa un video",
@@ -23,7 +23,7 @@
   "day_pass": "Pase de 24 horas",
   "freeDesc": "Para probar videos cortos de vez en cuando.",
   "proDesc": "Para cursos, reuniones y videos más largos de forma habitual.",
-  "lifetimeDesc": "Una sola compra para seguir usándolo mientras el servicio esté en funcionamiento.",
+  "lifetimeDesc": "Una sola compra para acceso continuo.",
   "dayDesc": "Acceso temporal: 20 conversiones, 300 páginas de OCR y 120 minutos de transcripción en 24 horas. Videos de hasta 10 minutos; un archivo a la vez.",
   "monthly": "al mes · suscripción recurrente",
   "oneOff": "compra única · sin renovación automática",
@@ -36,7 +36,7 @@
   "transcription": "Transcripción: {value}",
   "batch": "Procesamiento por lotes",
   "single": "Un archivo a la vez",
-  "unlimited": "Sin límite del plan; el procesamiento real depende de tu dispositivo, navegador y la codificación del video.",
+  "unlimited": "Sin límites del plan.",
   "choose": "Elegir {plan}",
   "selected": "Seleccionado: {plan}",
   "buyEmail": "Correo electrónico de compra",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Aumentar cantidad",
   "budgetPresets": "Elige un presupuesto aproximado",
   "presetPasses": "{count} pases",
-  "accountTools": "¿Ya has pagado? Comprueba tu acceso"
+  "accountTools": "¿Ya has pagado? Comprueba tu acceso",
+  "privacyNote": "Tu contenido, tratado con cuidado.",
+  "privacyDetails": "Cómo protegemos tu privacidad"
 }

@@ -6,8 +6,8 @@
   "pricing": "方案与价格",
   "language": "语言",
   "back": "返回工作区",
-  "local": "本地视频在您的设备上处理。",
-  "ai": "AI 重点摘要需要登录，并将必要的转写文本发送至 AI 服务。",
+  "local": "保留原始画面和时间戳，方便核对与回顾。",
+  "ai": "将转录重点整理成随时可回顾的笔记。",
   "exports": "可保存为 HTML 或 Markdown 笔记、PDF、PPTX 及图片。",
   "stepsTitle": "从一段视频到实用笔记",
   "step1Title": "导入视频",
@@ -23,7 +23,7 @@
   "day_pass": "24 小时通行证",
   "freeDesc": "适合偶尔处理短视频。",
   "proDesc": "适合经常处理课程、会议及较长的视频。",
-  "lifetimeDesc": "一次购买，在服务运营期间持续使用。",
+  "lifetimeDesc": "一次购买，持续使用。",
   "dayDesc": "临时使用：24 小时内可转换 20 次、进行 300 页 OCR 文字识别，并转写 120 分钟。视频最长 10 分钟，每次处理一个文件。",
   "monthly": "每月 · 自动续费订阅",
   "oneOff": "一次性购买 · 不自动续费",
@@ -36,7 +36,7 @@
   "transcription": "转写：{value}",
   "batch": "批量处理",
   "single": "每次处理一个文件",
-  "unlimited": "方案不设上限；实际处理能力取决于您的设备、浏览器及视频编码。",
+  "unlimited": "无套餐限制。",
   "choose": "选择{plan}",
   "selected": "已选择：{plan}",
   "buyEmail": "购买邮箱",
@@ -105,5 +105,7 @@
   "increaseQuantity": "增加数量",
   "budgetPresets": "选择大致预算",
   "presetPasses": "{count} 张通行证",
-  "accountTools": "已付款？查看使用权益"
+  "accountTools": "已付款？查看使用权益",
+  "privacyNote": "用心保护您的内容。",
+  "privacyDetails": "了解我们如何保护隐私"
 }

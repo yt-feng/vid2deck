@@ -35,3 +35,4 @@
 @media(max-width:1000px) and (min-width:781px){.global-quantity-presets{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.global-quantity-presets{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
 @media(max-width:480px){.quantity-preset{min-height:133px;padding:13px 8px 11px}.preset-code,.quantity-preset[aria-pressed=true] .preset-code{width:34px;height:34px;font-size:23px}}
+.privacy-note{display:flex;align-items:center;justify-content:center;gap:8px 12px;flex-wrap:wrap;margin:44px 0 0;color:var(--muted);font-size:12px;line-height:1.6;text-align:center}.privacy-note svg{flex-shrink:0}.privacy-note a{color:inherit;text-underline-offset:3px}

@@ -6,8 +6,8 @@
   "pricing": "Paketit ja hinnat",
   "language": "Kieli",
   "back": "Takaisin työtilaan",
-  "local": "Paikalliset videot käsitellään laitteellasi.",
-  "ai": "Tekoälyn poimimat pääkohdat edellyttävät kirjautumista, ja tarvittava litterointiteksti lähetetään tekoälypalveluun.",
+  "local": "Säilytä alkuperäiset videoruudut ja aikaleimat, jotta voit tarkistaa sisällön luotettavasti.",
+  "ai": "Muunna litteroinnin kohokohdat muistiinpanoiksi, joihin voit palata myöhemmin.",
   "exports": "Tallenna muistiinpanot HTML- tai Markdown-muodossa sekä PDF- ja PPTX-tiedostot ja kuvat.",
   "stepsTitle": "Yhdestä videosta hyödyllisiä muistiinpanoja",
   "step1Title": "Tuo video",
@@ -23,7 +23,7 @@
   "day_pass": "24 tunnin käyttöoikeus",
   "freeDesc": "Lyhyiden videoiden satunnaiseen kokeiluun.",
   "proDesc": "Säännöllisiin kursseihin, kokouksiin ja pidempiin videoihin.",
-  "lifetimeDesc": "Yksi ostos jatkuvaan käyttöön palvelun toiminnan ajan.",
+  "lifetimeDesc": "Yksi ostos jatkuvaa käyttöoikeutta varten.",
   "dayDesc": "Tilapäinen käyttöoikeus: 20 muunnosta, 300 OCR-sivua ja 120 minuuttia litterointia 24 tunnin aikana. Enintään 10 minuutin videot; yksi tiedosto kerrallaan.",
   "monthly": "kuukaudessa · uusiutuva tilaus",
   "oneOff": "kertamaksu · ei automaattista uusimista",
@@ -36,7 +36,7 @@
   "transcription": "Litterointi: {value}",
   "batch": "Eräkäsittely",
   "single": "Yksi tiedosto kerrallaan",
-  "unlimited": "Ei pakettikohtaista rajaa; todellinen käsittely riippuu laitteestasi, selaimestasi ja videon koodauksesta.",
+  "unlimited": "Ei käyttöpaketin asettamaa rajaa.",
   "choose": "Valitse {plan}",
   "selected": "Valittu: {plan}",
   "buyEmail": "Oston sähköpostiosoite",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Lisää määrää",
   "budgetPresets": "Valitse likimääräinen budjetti",
   "presetPasses": "Käyttöoikeuksia: {count}",
-  "accountTools": "Oletko jo maksanut? Tarkista käyttöoikeutesi"
+  "accountTools": "Oletko jo maksanut? Tarkista käyttöoikeutesi",
+  "privacyNote": "Sisältöäsi käsitellään huolellisesti.",
+  "privacyDetails": "Näin suojaamme yksityisyyttäsi"
 }

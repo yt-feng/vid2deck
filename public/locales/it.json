@@ -6,8 +6,8 @@
   "pricing": "Piani e prezzi",
   "language": "Lingua",
   "back": "Torna all’area di lavoro",
-  "local": "I video locali vengono elaborati sul tuo dispositivo.",
-  "ai": "I punti chiave generati dall’IA richiedono l’accesso e inviano al servizio di IA il testo della trascrizione necessario.",
+  "local": "Conserva i fotogrammi originali e i riferimenti temporali per verificare i contenuti con sicurezza.",
+  "ai": "Trasforma i punti salienti della trascrizione in appunti da consultare quando vuoi.",
   "exports": "Salva appunti in HTML o Markdown, PDF, PPTX e immagini.",
   "stepsTitle": "Da un video ad appunti utili",
   "step1Title": "Importa un video",
@@ -23,7 +23,7 @@
   "day_pass": "Pass di 24 ore",
   "freeDesc": "Per provare occasionalmente video brevi.",
   "proDesc": "Per corsi, riunioni e video più lunghi usati regolarmente.",
-  "lifetimeDesc": "Un solo acquisto per continuare a usare il servizio finché resta operativo.",
+  "lifetimeDesc": "Un solo acquisto per un accesso continuativo.",
   "dayDesc": "Accesso temporaneo: 20 conversioni, 300 pagine OCR e 120 minuti di trascrizione in 24 ore. Video fino a 10 minuti; un file alla volta.",
   "monthly": "al mese · abbonamento ricorrente",
   "oneOff": "acquisto una tantum · senza rinnovo automatico",
@@ -36,7 +36,7 @@
   "transcription": "Trascrizione: {value}",
   "batch": "Elaborazione in blocco",
   "single": "Un file alla volta",
-  "unlimited": "Nessun limite imposto dal piano; l’elaborazione effettiva dipende dal dispositivo, dal browser e dalla codifica del video.",
+  "unlimited": "Nessun limite del piano.",
   "choose": "Scegli {plan}",
   "selected": "Selezionato: {plan}",
   "buyEmail": "E-mail di acquisto",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Aumenta la quantità",
   "budgetPresets": "Scegli un budget indicativo",
   "presetPasses": "{count} pass",
-  "accountTools": "Hai già pagato? Verifica il tuo accesso"
+  "accountTools": "Hai già pagato? Verifica il tuo accesso",
+  "privacyNote": "I tuoi contenuti, trattati con cura.",
+  "privacyDetails": "Come proteggiamo la tua privacy"
 }

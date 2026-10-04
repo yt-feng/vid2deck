@@ -6,8 +6,8 @@
   "pricing": "Gói dịch vụ và giá",
   "language": "Ngôn ngữ",
   "back": "Quay lại không gian làm việc",
-  "local": "Video trên máy được xử lý ngay trên thiết bị của bạn.",
-  "ai": "Tính năng tóm tắt ý chính bằng AI yêu cầu đăng nhập và gửi phần văn bản phiên âm cần thiết đến dịch vụ AI.",
+  "local": "Giữ nguyên khung hình gốc và dấu thời gian để tự tin xem lại.",
+  "ai": "Biến những điểm chính trong bản chép lời thành ghi chú có thể đọc lại.",
   "exports": "Lưu ghi chú HTML hoặc Markdown, PDF, PPTX và hình ảnh.",
   "stepsTitle": "Từ một video thành ghi chú hữu ích",
   "step1Title": "Nhập video",
@@ -23,7 +23,7 @@
   "day_pass": "Vé 24 giờ",
   "freeDesc": "Dành cho nhu cầu thỉnh thoảng dùng video ngắn.",
   "proDesc": "Dành cho việc thường xuyên xử lý khóa học, cuộc họp và video dài.",
-  "lifetimeDesc": "Mua một lần để tiếp tục sử dụng trong thời gian dịch vụ hoạt động.",
+  "lifetimeDesc": "Mua một lần để tiếp tục sử dụng.",
   "dayDesc": "Quyền truy cập tạm thời: 20 lượt chuyển đổi, 300 trang OCR và 120 phút phiên âm trong 24 giờ. Video dài tối đa 10 phút; xử lý từng tệp một.",
   "monthly": "mỗi tháng · đăng ký định kỳ",
   "oneOff": "mua một lần · không tự động gia hạn",
@@ -36,7 +36,7 @@
   "transcription": "Phiên âm: {value}",
   "batch": "Xử lý hàng loạt",
   "single": "Từng tệp một",
-  "unlimited": "Gói không giới hạn; khả năng xử lý thực tế phụ thuộc vào thiết bị, trình duyệt và cách mã hóa video của bạn.",
+  "unlimited": "Không có giới hạn từ gói dịch vụ.",
   "choose": "Chọn {plan}",
   "selected": "Đã chọn: {plan}",
   "buyEmail": "Email mua hàng",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Tăng số lượng",
   "budgetPresets": "Chọn ngân sách dự kiến",
   "presetPasses": "{count} vé",
-  "accountTools": "Đã thanh toán? Kiểm tra quyền truy cập"
+  "accountTools": "Đã thanh toán? Kiểm tra quyền truy cập",
+  "privacyNote": "Nội dung của bạn được xử lý cẩn trọng.",
+  "privacyDetails": "Cách chúng tôi bảo vệ quyền riêng tư của bạn"
 }

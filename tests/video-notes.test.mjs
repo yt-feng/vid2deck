@@ -1,17 +1,56 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { createContext, runInContext } from 'node:vm';
 import ts from 'typescript';
 
 const source = readFileSync(new URL('../src/videoNotes.ts', import.meta.url), 'utf8');
-const javascript = ts.transpileModule(source, {
-  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext }
-}).outputText;
-const { buildVideoNoteHtml, buildVideoNoteMarkdown, formatNoteTime } = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`);
+function loadNotes(language) {
+  const dictionary = JSON.parse(readFileSync(new URL('../src/workspaceEnglish.json', import.meta.url), 'utf8'));
+  const locale = createContext({ exports: {}, console, window: { Vid2PPTLocale: { current: language } },
+    require: (name) => { assert.equal(name, './workspaceEnglish.json'); return dictionary; } });
+  runInContext(ts.transpileModule(readFileSync(new URL('../src/workspaceI18n.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true }
+  }).outputText, locale);
+  const context = createContext({ exports: {}, require: (name) => {
+    assert.equal(name, './workspaceI18n'); return locale.exports;
+  } });
+  runInContext(ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
+  }).outputText, context);
+  return context.exports;
+}
+const { buildVideoNoteHtml, buildVideoNoteMarkdown, formatNoteTime } = loadNotes('zh-CN');
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 const frame = (id, time, selected = true) => ({ id, time, selected, dataUrl: png, textBoxes: [{ text: `frame ${id} text` }] });
 const input = (overrides = {}) => ({ title: 'source-lecture.mp4', duration: 3720, frames: [frame(1, 10), frame(2, 80)], summary: '', notes: '', isDemo: false, ...overrides });
+
+test('English export chrome and language preserve Chinese source, authored notes, OCR and frame order', () => {
+  const en = loadNotes('en');
+  const value = input({ title: '原始课程.mp4', isDemo: true, notes: '# 用户写的标题\n- 登录\n- 本地文件',
+    frames: [{ ...frame(3, 120), textBoxes: [{ text: '编辑与笔记 用户原文 {{0}}' }] }, frame(1, 10)] });
+  const before = JSON.stringify(value);
+  const html = en.buildVideoNoteHtml(value);
+  const markdown = en.buildVideoNoteMarkdown(value);
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /Key frames/);
+  assert.match(html, /Built-in sample/);
+  assert.match(markdown, /## Key frame index/);
+  assert.match(markdown, /Source: 原始课程(?:\\)?\.mp4/);
+  for (const result of [html, markdown]) {
+    assert.match(result, /用户写的标题/);
+    assert.match(result, /登录/);
+    assert.match(result, /本地文件/);
+    assert.match(result, /编辑与笔记 用户原文/);
+    assert.ok(result.indexOf('02:00') < result.indexOf('00:10'));
+    assert.ok(result.includes(png) || result === markdown);
+    assert.doesNotMatch(result, /原视频时长|关键画面索引|画面文字（识别/);
+  }
+  assert.equal(JSON.stringify(value), before);
+  assert.match(en.buildVideoNoteHtml(input({ title: '', frames: [] })), /Untitled video/);
+  assert.match(en.buildVideoNoteMarkdown(input({ frames: [] })), /No key frames selected/);
+});
 
 test('both exports retain only selected frames in the user-arranged order without changing inputs', () => {
   const value = input({ frames: [frame(3, 120), frame(2, 80, false), frame(1, 10)] });

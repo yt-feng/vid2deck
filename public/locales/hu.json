@@ -6,8 +6,8 @@
   "pricing": "Csomagok és árak",
   "language": "Nyelv",
   "back": "Vissza a munkaterületre",
-  "local": "A helyi videók feldolgozása az Ön eszközén történik.",
-  "ai": "Az MI-vel készített kiemelésekhez bejelentkezés szükséges, és az átirat szükséges szövege az MI-szolgáltatáshoz kerül.",
+  "local": "Őrizd meg az eredeti képkockákat és időbélyegeket, hogy magabiztosan ellenőrizhesd a tartalmat.",
+  "ai": "Alakítsd az átirat kiemelt részeit jegyzetekké, amelyekhez később is visszatérhetsz.",
   "exports": "Mentse a jegyzeteket HTML- vagy Markdown-formátumban, illetve a PDF-, PPTX-fájlokat és képeket.",
   "stepsTitle": "Egy videóból hasznos jegyzetek",
   "step1Title": "Importáljon videót",
@@ -23,7 +23,7 @@
   "day_pass": "24 órás hozzáférés",
   "freeDesc": "Rövid videók alkalmi kipróbálásához.",
   "proDesc": "Rendszeres kurzusokhoz, megbeszélésekhez és hosszabb videókhoz.",
-  "lifetimeDesc": "Egyszeri vásárlás folyamatos használatra, amíg a szolgáltatás működik.",
+  "lifetimeDesc": "Egyszeri vásárlás a folyamatos hozzáférésért.",
   "dayDesc": "Ideiglenes hozzáférés: 24 órán belül 20 átalakítás, 300 OCR-oldal és 120 perc átiratkészítés. Legfeljebb 10 perces videók; egyszerre egy fájl.",
   "monthly": "havonta · megújuló előfizetés",
   "oneOff": "egyszeri vásárlás · nincs automatikus megújulás",
@@ -36,7 +36,7 @@
   "transcription": "Átiratkészítés: {value}",
   "batch": "Kötegelt feldolgozás",
   "single": "Egyszerre egy fájl",
-  "unlimited": "Nincs csomagkorlát; a tényleges feldolgozás az eszköztől, a böngészőtől és a videó kódolásától függ.",
+  "unlimited": "Nincs a csomagból adódó korlátozás.",
   "choose": "{plan} csomag választása",
   "selected": "Kiválasztva: {plan}",
   "buyEmail": "A vásárláshoz használt e-mail-cím",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Mennyiség növelése",
   "budgetPresets": "Válasszon hozzávetőleges keretet",
   "presetPasses": "Hozzáférések száma: {count}",
-  "accountTools": "Már fizetett? Ellenőrizze a hozzáférését"
+  "accountTools": "Már fizetett? Ellenőrizze a hozzáférését",
+  "privacyNote": "Tartalmad gondos kezekben.",
+  "privacyDetails": "Hogyan védjük a magánszférádat"
 }

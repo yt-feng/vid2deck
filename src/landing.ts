@@ -1,9 +1,10 @@
+import { ui, initializeWorkspaceLanguage } from './workspaceI18n';
 import './landing.css';
 
 const details = document.querySelector<HTMLDivElement>('#landingDetails');
 
 if (details) {
-  details.innerHTML = `
+  details.innerHTML = ui`
     <section class="result-story" id="how-it-works" aria-labelledby="workflowTitle">
       <div class="section-heading">
         <div><p class="section-kicker">视频笔记效果</p><h2 id="workflowTitle">课程重点，<br />翻开笔记就能看。</h2></div>
@@ -53,20 +54,14 @@ if (details) {
 
     <section class="pricing-preview" aria-labelledby="pricingPreviewTitle">
       <div><p class="section-kicker">免费试用</p><h2 id="pricingPreviewTitle">用一段短视频，做一份笔记。</h2><p>免费版支持 10 分钟以内的视频，每月 3 次转换。原画面笔记无需注册即可查看和导出；AI 要点需登录，按套餐额度生成。</p><a class="inline-link" href="/pricing/">查看完整套餐与额度 <span aria-hidden="true">→</span></a></div>
-      <div class="pricing-start"><strong>¥0<span>开始使用</span></strong><a class="primary-link" href="#start">整理我的第一份笔记 <span aria-hidden="true">→</span></a><small>更长视频、更多次数与批量处理可按需升级。</small></div>
+      <div class="pricing-start"><strong>${ui('免费')}<span>开始使用</span></strong><a class="primary-link" href="#start">整理我的第一份笔记 <span aria-hidden="true">→</span></a><small>更长视频、更多次数与批量处理可按需升级。</small></div>
     </section>
 
     <section class="faq-section" id="faq" aria-labelledby="faqTitle">
-      <div class="section-heading compact"><div><p class="section-kicker">常见问题</p><h2 id="faqTitle">使用中常见的问题。</h2></div><a class="inline-link" href="/guide/">查看完整使用指南 →</a></div>
+      <div class="section-heading compact"><div><p class="section-kicker">了解你的成果</p><h2 id="faqTitle">让视频变成可以继续使用的资料。</h2></div><a class="inline-link" href="/guide/">查看使用指南 →</a></div>
       <div class="faq-grid">
-        <details><summary>没有视频文件，从哪里开始？</summary><p>已有课程或会议文件可以直接导入；公开视频可以尝试链接导入；手机或云盘中的视频可下载为文件后导入。只有课程观看入口时，可向提供方索取原始 MP4，或在获得允许后录制。<a href="/guide/#get-video">按你的来源，查看一步步教程</a>。</p></details>
         <details><summary>导出的 PPTX 可以编辑吗？</summary><p>默认每页以视频画面作为底图，保留原始视觉效果。需要改文字时，可以对选中页面运行文字识别，生成可编辑文本框。复杂图表和图片以原画面保存，图形元素保持整图形式。</p></details>
-        <details><summary>本地视频会上传到服务器吗？</summary><p>本地视频和屏幕录制默认在浏览器中读取、抽帧、去重和导出。使用在线视频链接时，服务端需要临时获取视频；生成摘要等联网功能会发送必要文本。<a href="/privacy/">查看隐私说明</a>。</p></details>
-        <details><summary>支持哪些视频来源和格式？</summary><p>支持浏览器能够解码的 MP4、WebM、MOV 等格式；也支持 B 站、YouTube 和部分公开视频链接。播放兼容性取决于文件内部编码；遇到格式问题时，可转换为 H.264 编码的 MP4 后重试。部分链接会受来源平台限制。<a href="/guide/#troubleshooting">查看导入与声音问题的处理方法</a>。</p></details>
-        <details><summary>重复页太多，或者漏掉页面怎么办？</summary><p>使用默认设置提取后，可在工作台逐页检查。重复页可删除，漏页可在时间轴定位后补抓；动画较多时可提高相似页合并强度，快速换页时可缩短检查间隔。</p></details>
-        <details><summary>免费额度如何计算？需要登录吗？</summary><p>无需注册即可开始。免费版每月支持 3 次、每段最多 10 分钟的视频转换；交互示例可免费体验，保留全部额度。免费额度记录在当前浏览器，登录后可查看和同步账号权益。具体能力与额度请见<a href="/pricing/">套餐页面</a>。</p></details>
-        <details><summary>原画面笔记和 AI 笔记有什么区别？</summary><p>原画面笔记把提取出的页面和时间位置排成可阅读的资料，无需登录。AI 笔记根据逐字稿提炼内容，需登录并使用相应额度；附带的视频页面用于回看参考，与文字段落的对应关系需要手动核对。</p></details>
-        <details><summary>需要等多久？可以关掉页面吗？</summary><p>页面会随处理陆续出现，提取完成后就能阅读和导出。转写与 AI 整理按需运行，耗时取决于视频长度、设备性能和服务响应；首次语音识别还需加载模型。处理时请保持页面打开。</p></details>
+        <details><summary>什么样的视频整理效果最好？</summary><p>有清晰课件、图表或演示画面的课程、培训与行业分享，最适合整理为画面笔记。你可以保留原始视觉内容，按时间位置回看，并按需提炼 AI 要点。</p></details>
       </div>
     </section>
 
@@ -91,7 +86,7 @@ function closeNavigation(restoreFocus = false): void {
   if (!navigation || !menuToggle) return;
   navigation.dataset.menuOpen = 'false';
   menuToggle.setAttribute('aria-expanded', 'false');
-  menuToggle.setAttribute('aria-label', '打开导航菜单');
+  menuToggle.setAttribute('aria-label', ui('打开导航菜单'));
   if (restoreFocus) menuToggle.focus();
 }
 
@@ -101,7 +96,7 @@ menuToggle?.addEventListener('click', () => {
   else {
     if (navigation) navigation.dataset.menuOpen = 'true';
     menuToggle.setAttribute('aria-expanded', 'true');
-    menuToggle.setAttribute('aria-label', '关闭导航菜单');
+    menuToggle.setAttribute('aria-label', ui('关闭导航菜单'));
   }
 });
 navLinks?.addEventListener('click', (event) => {
@@ -163,3 +158,5 @@ document.querySelector<HTMLButtonElement>('#doneBtn')?.addEventListener('click',
   if (window.location.hash === '#workspace') history.replaceState(history.state, '', '#start');
 });
 if (window.location.hash) requestAnimationFrame(() => navigateToSection(window.location.hash, false));
+
+initializeWorkspaceLanguage();

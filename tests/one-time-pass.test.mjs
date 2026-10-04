@@ -10,7 +10,8 @@ test('one-time pass remains a quiet noindex entry at its canonical purchase URL'
   assert.match(html, /<meta\s+name="robots"\s+content="noindex,nofollow"\s*\/>/);
   assert.match(html, /<link\s+rel="canonical"\s+href="https:\/\/vid2ppt\.com\/one-time-pass\/"\s*\/>/);
   assert.match(html, /<title>Vid2PPT \| 24-hour pass<\/title>/);
-  assert.match(html, /<meta\s+name="description"\s+content="[^"]*Paddle[^"]*"/);
+  assert.match(html, /<meta\s+name="description"\s+content="[^"]*24-hour passes[^"]*"/);
+  assert.doesNotMatch(html, /(?:<meta[^>]*|<noscript>[^<]*)Paddle/);
 });
 
 test('one-time pass loads shared localization before the deferred payment runtime', () => {

@@ -6,8 +6,8 @@
   "pricing": "Planer og priser",
   "language": "Sprog",
   "back": "Tilbage til arbejdsområdet",
-  "local": "Lokale videoer behandles på din enhed.",
-  "ai": "Hovedpunkter genereret med AI kræver login og sender den nødvendige transskriptionstekst til AI-tjenesten.",
+  "local": "Gem originale videobilleder og tidsstempler, så du kan gennemgå indholdet med tillid.",
+  "ai": "Lav de vigtigste dele af transskriptionen om til noter, du kan vende tilbage til.",
   "exports": "Gem noter i HTML eller Markdown, PDF, PPTX og billeder.",
   "stepsTitle": "Fra en video til nyttige noter",
   "step1Title": "Importér en video",
@@ -23,7 +23,7 @@
   "day_pass": "24-timerspas",
   "freeDesc": "Til at prøve korte videoer en gang imellem.",
   "proDesc": "Til regelmæssige kurser, møder og længere videoer.",
-  "lifetimeDesc": "Ét køb til fortsat brug, så længe tjenesten er i drift.",
+  "lifetimeDesc": "Ét køb for fortsat adgang.",
   "dayDesc": "Midlertidig adgang: 20 konverteringer, 300 OCR-sider og 120 transskriptionsminutter på 24 timer. Videoer på op til 10 minutter; én fil ad gangen.",
   "monthly": "pr. måned · løbende abonnement",
   "oneOff": "engangskøb · ingen automatisk fornyelse",
@@ -36,7 +36,7 @@
   "transcription": "Transskription: {value}",
   "batch": "Behandling af flere filer samlet",
   "single": "Én fil ad gangen",
-  "unlimited": "Ingen grænse i planen; den faktiske behandling afhænger af din enhed, browser og videoens kodning.",
+  "unlimited": "Ingen begrænsning i abonnementet.",
   "choose": "Vælg {plan}",
   "selected": "Valgt: {plan}",
   "buyEmail": "E-mailadresse til købet",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Øg antal",
   "budgetPresets": "Vælg et omtrentligt budget",
   "presetPasses": "{count} pas",
-  "accountTools": "Har du allerede betalt? Tjek din adgang"
+  "accountTools": "Har du allerede betalt? Tjek din adgang",
+  "privacyNote": "Dit indhold, behandlet med omtanke.",
+  "privacyDetails": "Sådan beskytter vi dit privatliv"
 }

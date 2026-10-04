@@ -6,8 +6,8 @@
   "pricing": "Planos e preços",
   "language": "Idioma",
   "back": "Voltar ao espaço de trabalho",
-  "local": "Os vídeos locais são processados no seu dispositivo.",
-  "ai": "Os pontos principais gerados por IA exigem login e enviam o texto de transcrição necessário para o serviço de IA.",
+  "local": "Guarde os quadros originais e as marcações de tempo para revisar o conteúdo com confiança.",
+  "ai": "Transforme os destaques da transcrição em notas que você pode consultar novamente.",
   "exports": "Salve notas em HTML ou Markdown, PDF, PPTX e imagens.",
   "stepsTitle": "De um vídeo a notas úteis",
   "step1Title": "Importe um vídeo",
@@ -23,7 +23,7 @@
   "day_pass": "Passe de 24 horas",
   "freeDesc": "Para experimentar vídeos curtos de vez em quando.",
   "proDesc": "Para cursos, reuniões e vídeos mais longos com frequência.",
-  "lifetimeDesc": "Uma compra única para continuar usando enquanto o serviço estiver em funcionamento.",
+  "lifetimeDesc": "Uma única compra para acesso contínuo.",
   "dayDesc": "Acesso temporário: 20 conversões, 300 páginas de OCR e 120 minutos de transcrição em 24 horas. Vídeos de até 10 minutos; um arquivo por vez.",
   "monthly": "por mês · assinatura recorrente",
   "oneOff": "compra única · sem renovação automática",
@@ -36,7 +36,7 @@
   "transcription": "Transcrição: {value}",
   "batch": "Processamento em lote",
   "single": "Um arquivo por vez",
-  "unlimited": "Sem limite do plano; o processamento real depende do seu dispositivo, navegador e da codificação do vídeo.",
+  "unlimited": "Sem limites do plano.",
   "choose": "Escolher {plan}",
   "selected": "Selecionado: {plan}",
   "buyEmail": "E-mail da compra",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Aumentar a quantidade",
   "budgetPresets": "Escolha um orçamento aproximado",
   "presetPasses": "{count} passes",
-  "accountTools": "Já pagou? Confira seu acesso"
+  "accountTools": "Já pagou? Confira seu acesso",
+  "privacyNote": "Seu conteúdo, tratado com cuidado.",
+  "privacyDetails": "Como protegemos sua privacidade"
 }

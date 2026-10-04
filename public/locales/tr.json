@@ -6,8 +6,8 @@
   "pricing": "Paketler ve fiyatlar",
   "language": "Dil",
   "back": "Çalışma alanına dön",
-  "local": "Yerel videolar cihazınızda işlenir.",
-  "ai": "Yapay zekâ ile önemli noktaları çıkarmak için oturum açmanız gerekir; gerekli transkript metni yapay zekâ hizmetine gönderilir.",
+  "local": "Orijinal kareleri ve zaman damgalarını koruyarak güvenle gözden geçirin.",
+  "ai": "Transkriptin önemli noktalarını tekrar inceleyebileceğiniz notlara dönüştürün.",
   "exports": "Notları HTML veya Markdown olarak, PDF, PPTX ve görselleri dosya olarak kaydedin.",
   "stepsTitle": "Tek videodan kullanışlı notlara",
   "step1Title": "Videoyu içe aktarın",
@@ -23,7 +23,7 @@
   "day_pass": "24 saatlik erişim",
   "freeDesc": "Ara sıra kısa videoları denemek için.",
   "proDesc": "Düzenli kurslar, toplantılar ve daha uzun videolar için.",
-  "lifetimeDesc": "Hizmet çalıştığı sürece sürekli kullanım için tek satın alma.",
+  "lifetimeDesc": "Tek seferlik satın alımla kullanmaya devam edin.",
   "dayDesc": "Geçici erişim: 24 saat içinde 20 dönüştürme, 300 OCR sayfası ve 120 dakika transkripsiyon. Videolar en fazla 10 dakika; her seferinde tek dosya.",
   "monthly": "aylık · yenilenen abonelik",
   "oneOff": "tek seferlik satın alma · otomatik yenileme yok",
@@ -36,7 +36,7 @@
   "transcription": "Transkripsiyon: {value}",
   "batch": "Toplu işleme",
   "single": "Her seferinde tek dosya",
-  "unlimited": "Paket sınırı yoktur; gerçek işleme kapasitesi cihazınıza, tarayıcınıza ve video kodlamasına bağlıdır.",
+  "unlimited": "Plan sınırı yok.",
   "choose": "{plan} paketini seç",
   "selected": "Seçilen paket: {plan}",
   "buyEmail": "Satın alma e-postası",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Miktarı artır",
   "budgetPresets": "Yaklaşık bir bütçe seçin",
   "presetPasses": "{count} erişim hakkı",
-  "accountTools": "Zaten ödeme yaptınız mı? Erişiminizi kontrol edin"
+  "accountTools": "Zaten ödeme yaptınız mı? Erişiminizi kontrol edin",
+  "privacyNote": "İçeriğiniz özenle ele alınır.",
+  "privacyDetails": "Gizliliğinizi nasıl koruyoruz"
 }

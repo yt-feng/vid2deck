@@ -6,8 +6,8 @@
   "pricing": "Paket dan harga",
   "language": "Bahasa",
   "back": "Kembali ke ruang kerja",
-  "local": "Video lokal diproses di perangkat Anda.",
-  "ai": "Sorotan AI memerlukan masuk ke akun dan mengirimkan teks transkrip yang diperlukan ke layanan AI.",
+  "local": "Simpan bingkai asli dan penanda waktu agar mudah ditinjau dengan yakin.",
+  "ai": "Ubah poin penting transkrip menjadi catatan yang dapat Anda baca kembali.",
   "exports": "Simpan catatan HTML atau Markdown, PDF, PPTX, dan gambar.",
   "stepsTitle": "Dari satu video menjadi catatan bermanfaat",
   "step1Title": "Impor video",
@@ -23,7 +23,7 @@
   "day_pass": "Akses 24 jam",
   "freeDesc": "Untuk sesekali mencoba video pendek.",
   "proDesc": "Untuk kursus, rapat, dan video panjang secara rutin.",
-  "lifetimeDesc": "Sekali beli untuk penggunaan berkelanjutan selama layanan beroperasi.",
+  "lifetimeDesc": "Sekali beli untuk akses berkelanjutan.",
   "dayDesc": "Akses sementara: 20 konversi, 300 halaman OCR, dan 120 menit transkripsi dalam 24 jam. Video hingga 10 menit; satu berkas dalam satu waktu.",
   "monthly": "per bulan · langganan berulang",
   "oneOff": "pembelian sekali bayar · tanpa perpanjangan otomatis",
@@ -36,7 +36,7 @@
   "transcription": "Transkripsi: {value}",
   "batch": "Pemrosesan sekaligus",
   "single": "Satu berkas dalam satu waktu",
-  "unlimited": "Tidak ada batas paket; pemrosesan aktual bergantung pada perangkat, peramban, dan pengodean video Anda.",
+  "unlimited": "Tanpa batasan paket.",
   "choose": "Pilih {plan}",
   "selected": "Dipilih: {plan}",
   "buyEmail": "Email pembelian",
@@ -105,5 +105,7 @@
   "increaseQuantity": "Tambah jumlah",
   "budgetPresets": "Pilih perkiraan anggaran",
   "presetPasses": "{count} paket akses",
-  "accountTools": "Sudah membayar? Periksa akses Anda"
+  "accountTools": "Sudah membayar? Periksa akses Anda",
+  "privacyNote": "Konten Anda ditangani dengan penuh perhatian.",
+  "privacyDetails": "Cara kami melindungi privasi Anda"
 }
