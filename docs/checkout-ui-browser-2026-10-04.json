@@ -1,0 +1,150 @@
+{
+  "source_commit": "fd56912b14f6aeb550610b628bc4769103bac33e",
+  "deployment_id": "dpl_37X6yQixQJhvbNLW6dJKaLK9E8ao",
+  "verified_at": "2026-10-04T08:58:51.445Z",
+  "cases": [
+    {
+      "charge": "Paddle 扣款：¥673.20 (CNY)。",
+      "quantity": "68",
+      "test": "budget 666 CNY",
+      "total": "¥673.20"
+    },
+    {
+      "charge": "Paddle 扣款：¥999.90 (CNY)。",
+      "quantity": "101",
+      "test": "budget 999 CNY",
+      "total": "¥999.90"
+    },
+    {
+      "quantity": "101",
+      "test": "quantity +/- returns 101",
+      "total": "¥999.90"
+    },
+    {
+      "test": "Paddle checkout",
+      "quantity": 7,
+      "total": "CNY 69.30",
+      "locale": "zh-Hans",
+      "submitted": false
+    },
+    {
+      "overflow": 0,
+      "quantity": "7",
+      "quantityY": 215.4921875,
+      "test": "CNY mobile",
+      "total": "¥69.30"
+    },
+    {
+      "charge": "Charged by Paddle: CN¥69.30 (CNY).",
+      "language": "en",
+      "overflow": 0,
+      "quantity": "7",
+      "test": "country and language switch",
+      "total": "≈ $10.31",
+      "url": "https://vid2ppt.com/one-time-pass/?lang=en&country=US&currency=USD&quantity=7"
+    },
+    {
+      "charge": "Charged by Paddle: CN¥118.80 (CNY).",
+      "quantity": "12",
+      "test": "manual quantity 12",
+      "total": "≈ $17.68"
+    },
+    {
+      "dir": "rtl",
+      "overflow": 0,
+      "quantity": "18",
+      "test": "Arabic mobile",
+      "total": "≈ ‏97.39 د.إ.‏"
+    },
+    {
+      "languageOptions": 33,
+      "overflow": 0,
+      "test": "English homepage desktop",
+      "title": "Turn videos into notes you can review."
+    },
+    {
+      "overflow": 0,
+      "prices": [
+        {
+          "plan": "free",
+          "text": "Free"
+        },
+        {
+          "plan": "pro",
+          "text": "≈ $5.80"
+        },
+        {
+          "plan": "lifetime",
+          "text": "≈ $74.11"
+        },
+        {
+          "plan": "day_pass",
+          "text": "≈ $1.47"
+        }
+      ],
+      "test": "English pricing desktop",
+      "url": "https://vid2ppt.com/pricing/?lang=en&country=US&currency=USD"
+    },
+    {
+      "charge": "Charged by Paddle: CN¥39.00 (CNY).",
+      "payEnabled": true,
+      "selected": "Selected: Pro · ≈ $5.80",
+      "test": "Choose Pro"
+    },
+    {
+      "label": "简体中文",
+      "languageOptions": 33,
+      "overflow": 0,
+      "test": "Chinese homepage region menu"
+    },
+    {
+      "charge": "Paddle 扣款：¥178.20 (CNY)。",
+      "quantity": "18",
+      "test": "budget 178 CNY",
+      "total": "¥178.20"
+    },
+    {
+      "charge": "Paddle 扣款：¥69.30 (CNY)。",
+      "height": 900,
+      "overflow": 0,
+      "payBottom": 763.21875,
+      "presets": [
+        {
+          "budget": "66",
+          "quantity": "7",
+          "text": "≈ ¥66.007 张通行证¥69.30"
+        },
+        {
+          "budget": "178",
+          "quantity": "18",
+          "text": "≈ ¥178.0018 张通行证¥178.20"
+        },
+        {
+          "budget": "666",
+          "quantity": "68",
+          "text": "≈ ¥666.0068 张通行证¥673.20"
+        },
+        {
+          "budget": "999",
+          "quantity": "101",
+          "text": "≈ ¥999.00101 张通行证¥999.90"
+        }
+      ],
+      "quantity": "7",
+      "shareField": false,
+      "test": "budget 66 CNY desktop",
+      "total": "¥69.30",
+      "width": 1280
+    }
+  ],
+  "screenshots": [
+    "home-en-desktop-live-2026-10-04.jpg",
+    "pricing-en-desktop-live-2026-10-04.jpg",
+    "pass-budget-desktop-live-2026-10-04.jpg",
+    "pass-budget-mobile-live-2026-10-04.jpg",
+    "pass-arabic-mobile-live-2026-10-04.jpg",
+    "region-menu-live-2026-10-04.jpg",
+    "paddle-budget-7-live-2026-10-04.jpg"
+  ],
+  "payment_submitted": false
+}

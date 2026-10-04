@@ -1,0 +1,33 @@
+# Localized storefront and one-time pass UI
+
+Source commit: `fd56912b14f6aeb550610b628bc4769103bac33e`.
+Production deployment: `dpl_37X6yQixQJhvbNLW6dJKaLK9E8ao`, READY, aliased to `https://vid2ppt.com` and `https://www.vid2ppt.com`.
+Deployment URL: https://vid2deck-201gbre7m-ys-projects-5fb6bad4.vercel.app
+
+The English homepage, localized pricing page and independent one-time pass now share the same warm green visual system. The homepage illustrates original video frames becoming reviewable notes; pricing emphasizes each plan and its purchase action. A compact globe menu contains flag-labelled native language and billing-country selectors. Country/currency remain consistent through page links and language changes.
+
+The pass form starts with a large editable number and 44px-plus decrement/increment targets. Focusing the input selects the current number; invalid or oversized entries can be recovered with the controls. Price requests are debounced and stale responses cannot overwrite the newer order. Quantity, current tax and final estimated total continue to use authoritative Paddle previews.
+
+Quick selections use the four requested CNY reference budgets, rounded upward to whole passes using the live Paddle unit quote. The current CNY 9.90 quote yields:
+
+| Approximate CNY budget | Pass quantity | Actual CNY total in the verified China quote |
+| --- | --- | --- |
+| 66 | 7 | 69.30 |
+| 178 | 18 | 178.20 |
+| 666 | 68 | 673.20 |
+| 999 | 101 | 999.90 |
+
+Other locales display these budget references and pass totals in the selected local currency. The actual Paddle charge stays explicit. No Paddle account configuration or price objects were modified. A same-currency quote remains payable without the exchange-rate feed; converted references require rates. Quantity limits still follow Paddle, capped at 999999. Multiple passes extend access duration, retaining the existing monthly usage limits.
+
+The purchase-link input is removed from the customer UI. Existing shareable query URLs still work. Policy details, exchange-rate attribution and post-purchase account tools are compact disclosures. Mobile layout puts quantity and budgets earlier; Arabic retains RTL layout.
+
+## Validation
+
+- Local frontend: 116 tests passed, including 46 global payment regressions; production build passed.
+- Cloud build: 84 backend tests plus all 116 frontend tests passed (200 total), followed by successful production build and deployment.
+- Live bytes: 41/41 public resources match source SHA-256; all 33 language files have 107 keys with exact placeholders. Production Paddle configuration is complete. Anonymous entitlement and unsigned webhook requests return 401.
+- Live browser: all four budget quantities/totals, +/- controls, manual quantity 12, country and language switching, English homepage and pricing, Pro selection, Chinese globe menu, mobile and Arabic RTL were verified. Checked pages have zero horizontal overflow.
+- Real Paddle checkout opened for 7 passes, showing CNY 69.30 and Simplified Chinese. No payment was submitted.
+- Temporary local preview was closed and browser viewport override was restored. The production pass tab remains as the deliverable.
+
+Evidence: `checkout-ui-live-2026-10-04.json`, `checkout-ui-browser-2026-10-04.json`, and dated screenshots in `payment-qa/`.
