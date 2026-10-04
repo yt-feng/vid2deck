@@ -1,0 +1,28 @@
+{
+  "observed_on": "2026-10-04",
+  "source_commit": "22712c86ebbc22a34c0cc89935892546bd778949",
+  "deployment_id": "dpl_9keJHAzeyHgaZZVaWNQJ3zCzzMJ1",
+  "url": "https://vid2ppt.com/one-time-pass/?lang=zh-CN&country=CN&currency=CNY&quantity=7",
+  "browser": "Codex In-app Browser",
+  "scope": "Rendered production desktop snapshot and read-only DOM observation; no payment submitted.",
+  "cases": [
+    {
+      "test": "CNY desktop final",
+      "width": 1280,
+      "height": 900,
+      "overflow": 0,
+      "provider_copy_visible": false,
+      "provider_copy_pattern": "Paddle|webhook|支付回调",
+      "actual_charge": "实际扣款：¥69.30 (CNY)。",
+      "quantity": "7",
+      "total": "¥69.30",
+      "presets": [
+        { "code": "A", "budget_cny": "66", "quantity": "7", "total_cny": "69.30" },
+        { "code": "B", "budget_cny": "178", "quantity": "18", "total_cny": "178.20" },
+        { "code": "C", "budget_cny": "666", "quantity": "68", "total_cny": "673.20" },
+        { "code": "D", "budget_cny": "999", "quantity": "101", "total_cny": "999.90" }
+      ],
+      "screenshot": "payment-qa/pass-abcd-clean-desktop-live-2026-10-04.jpg"
+    }
+  ]
+}

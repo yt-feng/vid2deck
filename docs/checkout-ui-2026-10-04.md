@@ -31,3 +31,18 @@ The purchase-link input is removed from the customer UI. Existing shareable quer
 - Temporary local preview was closed and browser viewport override was restored. The production pass tab remains as the deliverable.
 
 Evidence: `checkout-ui-live-2026-10-04.json`, `checkout-ui-browser-2026-10-04.json`, and dated screenshots in `payment-qa/`.
+
+## Customer copy and A–D follow-up
+
+Current application source: `22712c86ebbc22a34c0cc89935892546bd778949`.
+Current production deployment: `dpl_9keJHAzeyHgaZZVaWNQJ3zCzzMJ1`, READY, aliased to `https://vid2ppt.com` and `https://www.vid2ppt.com`.
+Deployment URL: https://vid2deck-5fa7yh0a5-ys-projects-5fb6bad4.vercel.app
+
+The four budget buttons now carry stable A, B, C and D labels in every locale, respectively mapping to the CNY 66, 178, 666 and 999 reference budgets. The quantities at the verified CNY 9.90 unit quote remain 7, 18, 68 and 101. The entire processed-by-Paddle paragraph is removed. Customer copy across all 33 locales uses ordinary purchase, account and renewal wording without provider or webhook implementation details. The actual charge and currency remain visible as useful order information.
+
+- Latest local and cloud frontend suites: 117 tests passed, including 47 global payment regressions. The cloud build also passed 84 backend tests, for 201 total tests.
+- Latest production resource verification: 41/41 resources match this source, all 33 locale files have 107 keys with matching placeholders, and all three configuration/authentication API checks passed.
+- Latest Chinese desktop browser snapshot: A–D labels, quantities and totals match the requested mapping; quantity is 7, actual charge is CNY 69.30, no provider/webhook copy is visible, and horizontal overflow is zero at 1280×900.
+- This follow-up changes copy and button labels. Earlier interaction, mobile/RTL and checkout observations above retain their original source/deployment provenance. No paid order was submitted.
+
+Current evidence: `checkout-ui-clean-live-2026-10-04.json`, `checkout-ui-clean-browser-2026-10-04.json`, and `payment-qa/pass-abcd-clean-desktop-live-2026-10-04.jpg`.
