@@ -11,6 +11,7 @@
   var quotes = {}, quoteVersion = 0, quoteReady = false, quoteTimer;
   var passMinimum = 1, passMaximum = 999999;
   var budgets = [66, 178, 666, 999], passUnitQuote = { amount: 990, currency: 'CNY' };
+  var defaultPassBudget = page === 'pass' && !new URLSearchParams(location.search).has('quantity') ? 666 : 0;
   var countryKey = 'vid2ppt.billingCountry';
   var rateKey = 'vid2ppt.exchangeRates', ratesPromise, exchangeRates;
   var localeCurrencies = { en:'USD', 'zh-CN':'CNY', 'zh-TW':'TWD', es:'EUR', fr:'EUR', de:'EUR', pt:'EUR', 'pt-BR':'BRL', it:'EUR', ja:'JPY', ko:'KRW', ar:'AED', ru:'RUB', hi:'INR', id:'IDR', tr:'TRY', vi:'VND', th:'THB', nl:'EUR', pl:'PLN', sv:'SEK', da:'DKK', no:'NOK', fi:'EUR', cs:'CZK', uk:'UAH', ro:'RON', hu:'HUF', el:'EUR', he:'ILS', bn:'BDT', ms:'MYR', tl:'PHP' };
@@ -54,16 +55,15 @@
     return defaultCountries[locale.current] || 'US';
   }
   function money(amount, currency) {
-    var formatter = new Intl.NumberFormat(locale.current, { style: 'currency', currency: currency });
-    var digits = formatter.resolvedOptions().maximumFractionDigits;
-    return formatter.format(Number(amount) / Math.pow(10, digits));
+    var digits = new Intl.NumberFormat(locale.current, { style: 'currency', currency: currency }).resolvedOptions().maximumFractionDigits;
+    return new Intl.NumberFormat(locale.current, { style: 'currency', currency: currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(amount) / Math.pow(10, digits));
   }
   function referenceMoney(amount, currency) {
     if (displayCurrency === currency) return money(amount, currency);
     if (!exchangeRates || !exchangeRates.rates[currency] || !exchangeRates.rates[displayCurrency]) throw new Error(t('quoteFailed'));
     var digits = new Intl.NumberFormat(locale.current, { style:'currency', currency:currency }).resolvedOptions().maximumFractionDigits;
     var value = Number(amount) / Math.pow(10, digits) / exchangeRates.rates[currency] * exchangeRates.rates[displayCurrency];
-    return '≈ ' + new Intl.NumberFormat(locale.current, { style:'currency', currency:displayCurrency }).format(value);
+    return '≈ ' + new Intl.NumberFormat(locale.current, { style:'currency', currency:displayCurrency, minimumFractionDigits:0, maximumFractionDigits:0 }).format(value);
   }
   function quotedPrice(plan) { return quotes[plan] ? referenceMoney(quotes[plan].unitTotals.total, quotes[plan].currency) : '—'; }
   function loadExchangeRates() {
@@ -279,13 +279,27 @@
             if (input) { input.min = String(passMinimum); input.max = String(passMaximum); document.getElementById('globalQuantityHelp').textContent = t('quantityHelp', { min: new Intl.NumberFormat(locale.current).format(passMinimum), max: new Intl.NumberFormat(locale.current).format(passMaximum) }); }
           }
         });
+        if (page === 'pass') {
+          passUnitQuote = { amount: Number(quotes.day_pass.unitTotals.total), currency: quotes.day_pass.currency };
+          if (defaultPassBudget) {
+            var defaultCount = budgetQuantity(defaultPassBudget);
+            if (defaultCount) {
+              defaultPassBudget = 0;
+              defaultCount = Math.min(passMaximum, defaultCount);
+              if (defaultCount !== count) {
+                document.getElementById('globalQuantity').value = String(defaultCount);
+                updateShare();
+                return refreshPrices();
+              }
+            }
+          }
+        }
         if (!quantity()) throw new Error(t('quantityValid', { min: passMinimum, max: passMaximum }));
         quoteReady = true;
         document.querySelectorAll('[data-price-plan]').forEach(function (node) { var plan = node.getAttribute('data-price-plan'); if (plan !== 'free') node.textContent = quotedPrice(plan); });
         if (selectedPlan) document.getElementById('globalSelected').textContent = t('selected', { plan: t(selectedPlan) }) + ' · ' + quotedPrice(selectedPlan);
         if (page === 'pass') {
           var quote = quotes.day_pass;
-          passUnitQuote = { amount: Number(quote.unitTotals.total), currency: quote.currency };
           document.getElementById('globalUnitPrice').textContent = quotedPrice('day_pass');
           document.getElementById('globalTotal').textContent = referenceMoney(quote.totals.subtotal, quote.currency);
           document.getElementById('globalTax').textContent = referenceMoney(quote.totals.tax, quote.currency);
@@ -436,7 +450,9 @@
     if (input) {
       var requested = new URLSearchParams(location.search).get('quantity');
       if (requested !== null) input.value = requested;
+      else if (defaultPassBudget) input.value = String(budgetQuantity(defaultPassBudget));
       function changeQuantity() {
+        defaultPassBudget = 0;
         input.removeAttribute('aria-invalid'); invalidatePrices(); updateShare();
         clearTimeout(quoteTimer); quoteTimer = setTimeout(refreshPrices, 250);
       }
@@ -453,6 +469,7 @@
       });
       document.querySelectorAll('.quantity-preset').forEach(function (button) { button.addEventListener('click', function () {
         if (busy || button.disabled) return;
+        defaultPassBudget = 0;
         input.value = button.getAttribute('data-quantity'); input.removeAttribute('aria-invalid'); refreshPrices(); updateShare();
       }); });
       updateShare();

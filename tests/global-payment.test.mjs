@@ -25,9 +25,13 @@ function pricePreview(request, { minimum = 1, maximum = 999999, currency = 'CNY'
   return { data: { currencyCode, details: { lineItems } } };
 }
 
+function formattedAmount(amount, currency, lang = 'en') {
+  return new Intl.NumberFormat(lang, { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+}
+
 function formattedMinor(amount, currency, lang = 'en') {
-  const formatter = new Intl.NumberFormat(lang, { style: 'currency', currency });
-  return formatter.format(Number(amount) / 10 ** formatter.resolvedOptions().maximumFractionDigits);
+  const minorDigits = new Intl.NumberFormat(lang, { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
+  return formattedAmount(Number(amount) / 10 ** minorDigits, currency, lang);
 }
 
 const exchangeRates = { result: 'success', base_code: 'CNY', time_last_update_utc: 'Sat, 03 Oct 2026 00:02:32 +0000', time_last_update_unix: Math.floor(Date.now() / 1000) - 60, rates: { CNY: 1, USD: 0.14, EUR: 0.13, JPY: 21, INR: 12, BRL: 0.8, GBP: 0.11, CAD: 0.19, AUD: 0.2, TWD: 4.5, AED: 0.51, KRW: 193, IDR: 2300, TRY: 6, VND: 3500, THB: 4.7, PLN: 0.6, SEK: 1.5, DKK: 1, NOK: 1.5, CZK: 3.4, UAH: 5.8, RON: 0.65, HUF: 53, ILS: 0.5, BDT: 17, MYR: 0.6, PHP: 8, RUB: 12 } };
@@ -258,7 +262,7 @@ for (const [lang, checkoutLocale] of [['en', 'en'], ['fr', 'fr'], ['ar', 'ar'], 
 }
 
 test('one-time pass rejects invalid quantities, and sends valid counts unchanged', async () => {
-  const page = harness({ lang: 'en', path: '/one-time-pass/' }); await page.flush();
+  const page = harness({ lang: 'en', path: '/one-time-pass/', query: 'quantity=1' }); await page.flush();
   page.elements.get('globalEmail').value = 'buyer@example.test';
   for (const value of ['0', '1.5', '1000000']) {
     page.elements.get('globalQuantity').value = value; page.elements.get('globalCheckoutForm').fire('submit');
@@ -325,10 +329,10 @@ test('10 passes show a USD exchange-rate estimate while Paddle keeps its CNY cha
   const page = harness({ path: '/one-time-pass/', query: 'country=US&quantity=10' }); await page.flush();
   assert.equal(page.previews[0].address.countryCode, 'US');
   assert.equal(page.previews[0].items[0].quantity, 10);
-  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $1.39');
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $13.86');
-  assert.equal(page.elements.get('globalTax').textContent, '≈ $0.00');
-  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $13.86');
+  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $1');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $14');
+  assert.equal(page.elements.get('globalTax').textContent, '≈ $0');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $14');
   assert.ok(page.elements.get('globalChargeSummary').textContent.includes(formattedMinor(9900, 'CNY') + ' (CNY)'));
   assert.ok(page.elements.get('globalRateDate').textContent.startsWith('Exchange rate updated:'));
   assert.equal(page.requests.filter(request => request.url === 'https://open.er-api.com/v6/latest/CNY').length, 1);
@@ -349,15 +353,15 @@ test('10 passes show a USD exchange-rate estimate while Paddle keeps its CNY cha
 
 test('provider subtotal, tax and total are converted separately without multiplying a rounded unit total', async () => {
   const page = harness({ path: '/one-time-pass/', query: 'country=US&quantity=10', preview: request => pricePreview(request, { unitSubtotal: 325, taxRate: 0.085 }) }); await page.flush();
-  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $0.49');
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $4.55');
-  assert.equal(page.elements.get('globalTax').textContent, '≈ $0.39');
-  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $4.94');
+  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $0');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $5');
+  assert.equal(page.elements.get('globalTax').textContent, '≈ $0');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $5');
   assert.ok(page.elements.get('globalChargeSummary').textContent.includes(formattedMinor(3526, 'CNY') + ' (CNY)'));
 });
 
 test('JPY reference amounts use zero decimal places and retain the original CNY charge', async () => {
-  const page = harness({ lang: 'ja', path: '/one-time-pass/', query: 'country=JP' }); await page.flush();
+  const page = harness({ lang: 'ja', path: '/one-time-pass/', query: 'country=JP&quantity=1' }); await page.flush();
   assert.equal(page.elements.get('globalTotal').textContent, '≈ ' + new Intl.NumberFormat('ja', { style: 'currency', currency: 'JPY' }).format(208));
   assert.ok(page.elements.get('globalChargeSummary').textContent.includes(formattedMinor(990, 'CNY', 'ja') + ' (CNY)'));
   page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
@@ -366,7 +370,7 @@ test('JPY reference amounts use zero decimal places and retain the original CNY 
 });
 
 test('an actual JPY provider quote is neither divided by 100 nor labeled as an estimate', async () => {
-  const page = harness({ lang: 'ja', path: '/one-time-pass/', query: 'country=JP', preview: request => pricePreview(request, { currency: 'JPY', unitSubtotal: 210 }) }); await page.flush();
+  const page = harness({ lang: 'ja', path: '/one-time-pass/', query: 'country=JP&quantity=1', preview: request => pricePreview(request, { currency: 'JPY', unitSubtotal: 210 }) }); await page.flush();
   assert.equal(page.elements.get('globalTotal').textContent, new Intl.NumberFormat('ja', { style: 'currency', currency: 'JPY' }).format(210));
   assert.ok(page.elements.get('globalChargeSummary').textContent.includes(formattedMinor(210, 'JPY', 'ja') + ' (JPY)'));
 });
@@ -398,7 +402,7 @@ test('purchase URLs restore 1000 passes and buyers can edit the quantity without
   const page = harness({ lang: 'en', path: '/one-time-pass/', query: 'country=BR&quantity=1000' }); await page.flush();
   assert.equal(page.elements.get('globalQuantity').value, '1000');
   assert.equal(page.previews[0].items[0].quantity, 1000);
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ ' + new Intl.NumberFormat('en', { style: 'currency', currency: 'BRL' }).format(7920));
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ ' + formattedAmount(7920, 'BRL'));
   assert.equal(page.elements.has('globalShare'), false);
   const share = new URL(page.window.location.href);
   assert.equal(share.pathname, '/one-time-pass/');
@@ -417,7 +421,7 @@ test('purchase URLs restore 1000 passes and buyers can edit the quantity without
 });
 
 test('a failed quote clears prices and explicit reload restores payment without duplicate initialization', async () => {
-  const page = harness({ path: '/one-time-pass/', preview: (request, attempt) => {
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: (request, attempt) => {
     if (attempt === 1) throw new Error('preview unavailable');
     return pricePreview(request);
   } }); await page.flush();
@@ -426,7 +430,7 @@ test('a failed quote clears prices and explicit reload restores payment without 
   assert.equal(page.elements.get('globalQuoteStatus').getAttribute('data-tone'), 'error');
   page.elements.get('globalRetryQuote').fire('click'); await page.flush();
   assert.equal(page.elements.get('globalPay').disabled, false);
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $1.39');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $1');
   assert.equal(page.previews.length, 2);
   assert.equal(page.initializations.length, 1);
   assert.equal(page.requests.filter(request => request.url === '/api/paddle-config').length, 1);
@@ -436,7 +440,7 @@ test('a failed quote clears prices and explicit reload restores payment without 
 
 test('a persistently failed preview cannot open checkout or retain a former quote', async () => {
   let fail = false;
-  const page = harness({ path: '/one-time-pass/', preview: request => {
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: request => {
     if (fail) throw new Error('preview unavailable');
     return pricePreview(request);
   } }); await page.flush();
@@ -453,17 +457,17 @@ test('a persistently failed preview cannot open checkout or retain a former quot
 for (const rejectOlder of [false, true]) {
   test(`a delayed ${rejectOlder ? 'failed' : 'successful'} older country quote cannot replace the current country`, async () => {
     const pending = [];
-    const page = harness({ path: '/one-time-pass/', preview: (request, attempt) => attempt === 1 ? pricePreview(request) : new Promise((resolve, reject) => pending.push({ request, resolve, reject })) });
+    const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: (request, attempt) => attempt === 1 ? pricePreview(request) : new Promise((resolve, reject) => pending.push({ request, resolve, reject })) });
     await page.flush();
     page.elements.get('globalCountry').value = 'JP'; page.elements.get('globalCountry').fire('change'); await page.flush();
     page.elements.get('globalCountry').value = 'GB'; page.elements.get('globalCountry').fire('change'); await page.flush();
     assert.equal(pending.length, 2);
     pending[1].resolve(pricePreview(pending[1].request)); await page.flush();
-    assert.equal(page.elements.get('globalTotal').textContent, '≈ £1.09');
+    assert.equal(page.elements.get('globalTotal').textContent, '≈ £1');
     if (rejectOlder) pending[0].reject(new Error('old quote failed'));
     else pending[0].resolve(pricePreview(pending[0].request));
     await page.flush();
-    assert.equal(page.elements.get('globalTotal').textContent, '≈ £1.09');
+    assert.equal(page.elements.get('globalTotal').textContent, '≈ £1');
     assert.equal(page.elements.get('globalQuoteStatus').getAttribute('data-tone'), 'ok');
     assert.equal(page.elements.get('globalPay').disabled, false);
     page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
@@ -474,7 +478,7 @@ for (const rejectOlder of [false, true]) {
 
 test('quantity typing is debounced and a late earlier quantity cannot restore its amount', async () => {
   let firstRequest, resolveFirst;
-  const page = harness({ path: '/one-time-pass/', preview: (request, attempt) => {
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: (request, attempt) => {
     if (attempt !== 1) return pricePreview(request);
     firstRequest = request; return new Promise(resolve => { resolveFirst = resolve; });
   } }); await page.flush();
@@ -485,9 +489,9 @@ test('quantity typing is debounced and a late earlier quantity cannot restore it
   await page.advance(249); assert.equal(page.previews.length, 1);
   await page.advance(1); assert.equal(page.previews.length, 2);
   assert.equal(page.previews[1].items[0].quantity, 100);
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $138.60');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $139');
   resolveFirst(pricePreview(firstRequest)); await page.flush();
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $138.60');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $139');
   page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
   assert.equal(page.checkouts[0].items[0].quantity, 100);
 });
@@ -534,14 +538,14 @@ test('all paid plans use the exact configured and previewed price IDs at checkou
     page.initializations[0].eventCallback({ name: 'checkout.closed' });
   }
   assert.equal(page.checkouts.length, 2);
-  const pass = harness({ path: '/one-time-pass/' }); await pass.flush();
+  const pass = harness({ path: '/one-time-pass/', query: 'quantity=1' }); await pass.flush();
   pass.elements.get('globalEmail').value = 'buyer@example.test'; pass.elements.get('globalCheckoutForm').fire('submit'); await pass.flush();
   assert.equal(pass.checkouts[0].items[0].priceId, 'day-price');
   assert.equal(pass.checkouts[0].items[0].priceId, pass.previews[0].items[0].priceId);
 });
 
 test('a provider quote for the wrong price ID cannot authorize checkout', async () => {
-  const page = harness({ path: '/one-time-pass/', preview: request => {
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: request => {
     const response = pricePreview(request); response.data.details.lineItems[0].price.id = 'different-price'; return response;
   } }); await page.flush();
   assert.equal(page.elements.get('globalPay').disabled, true);
@@ -558,7 +562,7 @@ test('all 33 languages display their local reference currency without changing t
     assert.equal(page.document.documentElement.lang, lang);
     assert.equal(page.window.Vid2PPTLocale.currencyForLanguage(lang), currency);
     assert.equal(page.elements.get('globalQuoteStatus').textContent, currency, lang);
-    const expected = new Intl.NumberFormat(lang, { style: 'currency', currency }).format(9.9 * exchangeRates.rates[currency]);
+    const expected = formattedAmount(9.9 * exchangeRates.rates[currency], currency, lang);
     assert.equal(page.priceNodes.find(node => node.getAttribute('data-price-plan') === 'day_pass').textContent, (currency === 'CNY' ? '' : '≈ ') + expected, lang);
     assert.equal(page.previews[0].items.find(item => item.priceId === 'day-price').quantity, 1);
   }
@@ -575,7 +579,7 @@ test('switching a Chinese payment page to English changes reference currency whi
   assert.equal(target.searchParams.get('quantity'), '1000');
   target.searchParams.delete('lang');
   const restored = harness({ lang: 'en', path: '/one-time-pass/', query: target.searchParams.toString() }); await restored.flush();
-  assert.equal(restored.elements.get('globalGrandTotal').textContent, '≈ $1,386.00');
+  assert.equal(restored.elements.get('globalGrandTotal').textContent, '≈ $1,386');
   assert.ok(restored.elements.get('globalChargeSummary').textContent.includes(formattedMinor(990000, 'CNY') + ' (CNY)'));
 });
 
@@ -592,7 +596,7 @@ test('a Russian purchase link preserves RUB references when its default billing 
 });
 
 test('exchange-rate endpoint failure does not substitute a guessed local amount or allow payment', async () => {
-  const page = harness({ path: '/one-time-pass/', rates: new Error('exchange rate service unavailable') }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', rates: new Error('exchange rate service unavailable') }); await page.flush();
   assert.equal(page.elements.get('globalTotal').textContent, '—');
   assert.equal(page.elements.get('globalChargeSummary').textContent, '');
   assert.equal(page.elements.get('globalPay').disabled, true);
@@ -604,10 +608,10 @@ test('exchange-rate endpoint failure does not substitute a guessed local amount 
 });
 
 test('exchange-rate loading can retry after failure using the official feed', async () => {
-  const page = harness({ path: '/one-time-pass/', rates: attempt => attempt === 1 ? new Error('temporary FX failure') : exchangeRates }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', rates: attempt => attempt === 1 ? new Error('temporary FX failure') : exchangeRates }); await page.flush();
   assert.equal(page.elements.get('globalPay').disabled, true);
   page.elements.get('globalRetryQuote').fire('click'); await page.flush();
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $1.39');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $1');
   assert.equal(page.elements.get('globalPay').disabled, false);
   assert.equal(page.requests.filter(request => request.url === 'https://open.er-api.com/v6/latest/CNY').length, 2);
   assert.ok(page.storage.get('vid2ppt.exchangeRates'));
@@ -615,8 +619,8 @@ test('exchange-rate loading can retry after failure using the official feed', as
 
 test('a changed live Paddle price replaces the old 9.9 reference instead of using a static fallback', async () => {
   const page = harness({ path: '/one-time-pass/', query: 'quantity=10&country=US', preview: request => pricePreview(request, { unitSubtotal: 2350 }) }); await page.flush();
-  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $3.29');
-  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $32.90');
+  assert.equal(page.elements.get('globalUnitPrice').textContent, '≈ $3');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $33');
   assert.ok(page.elements.get('globalChargeSummary').textContent.includes(formattedMinor(23500, 'CNY') + ' (CNY)'));
   page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
   assert.equal(page.checkouts[0].items[0].priceId, 'day-price');
@@ -662,7 +666,7 @@ test('the region menu closes on Escape and outside click while retaining clicks 
 });
 
 test('plus and minus change whole pass quantities with debounced quotes and select typed values on focus', async () => {
-  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1' }); await page.flush();
   const input = page.elements.get('globalQuantity'), decrease = page.elements.get('globalQuantityDecrease'), increase = page.elements.get('globalQuantityIncrease');
   assert.equal(decrease.disabled, true);
   assert.equal(increase.disabled, false);
@@ -675,7 +679,7 @@ test('plus and minus change whole pass quantities with debounced quotes and sele
   assert.ok(page.presets.every(button => button.disabled));
   await page.advance(249); assert.equal(page.previews.length, 1);
   await page.advance(1); assert.equal(page.previews.at(-1).items[0].quantity, 2);
-  assert.equal(page.elements.get('globalTotal').textContent, '≈ $2.77');
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $3');
   decrease.fire('click'); await page.advance(250);
   assert.equal(input.value, '1');
   assert.equal(decrease.disabled, true);
@@ -715,6 +719,99 @@ test('the four RMB budget presets show actual payable amounts and select their q
   assert.equal(page.checkouts[0].customData.quoted_currency, 'CNY');
 });
 
+test('an unparameterized pass page defaults to C and checks out its quoted 68 passes', async () => {
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN' }); await page.flush();
+  const selected = page.presets.find(button => button.getAttribute('aria-pressed') === 'true');
+  assert.equal(selected.querySelector('.preset-code').textContent, 'C');
+  assert.equal(selected.getAttribute('data-budget'), '666');
+  assert.equal(page.elements.get('globalQuantity').value, '68');
+  assert.equal(page.previews.at(-1).items[0].quantity, 68);
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '¥673');
+  assert.ok(page.elements.get('globalChargeSummary').textContent.includes('¥673 (CNY)'));
+  assert.equal(page.window.location.searchParams.get('quantity'), '68');
+  page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+  assert.equal(page.checkouts[0].items[0].quantity, 68);
+  assert.equal(page.checkouts[0].customData.pass_quantity, 68);
+});
+
+test('the default C count follows the first live unit price before it can authorize checkout', async () => {
+  let initialRequest, resolveInitial;
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN', preview: (request, attempt) => {
+    if (attempt === 1) { initialRequest = request; return new Promise(resolve => { resolveInitial = resolve; }); }
+    return pricePreview(request, { unitSubtotal: 2350 });
+  } }); await page.flush();
+  assert.equal(initialRequest.items[0].quantity, 68);
+  assert.equal(page.elements.get('globalQuantity').value, '68');
+  assert.equal(page.presets[2].getAttribute('aria-pressed'), 'true');
+  assert.equal(page.elements.get('globalPay').disabled, true);
+  resolveInitial(pricePreview(initialRequest, { unitSubtotal: 2350 })); await page.flush();
+  assert.equal(page.elements.get('globalQuantity').value, '29');
+  assert.equal(page.previews.at(-1).items[0].quantity, 29);
+  assert.equal(page.presets[2].getAttribute('data-quantity'), '29');
+  assert.equal(page.presets[2].getAttribute('aria-pressed'), 'true');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '¥682');
+  assert.equal(page.elements.get('globalPay').disabled, false);
+  assert.equal(page.window.location.searchParams.get('quantity'), '29');
+  page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+  assert.equal(page.checkouts[0].items[0].quantity, 29);
+});
+
+test('a buyer quantity entered during the initial quote prevents default C from replacing it', async () => {
+  let initialRequest, resolveInitial;
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN', preview: (request, attempt) => {
+    if (attempt === 1) { initialRequest = request; return new Promise(resolve => { resolveInitial = resolve; }); }
+    return pricePreview(request, { unitSubtotal: 2350 });
+  } }); await page.flush();
+  const input = page.elements.get('globalQuantity'); input.value = '10'; input.fire('input'); await page.advance(250);
+  assert.equal(page.previews.at(-1).items[0].quantity, 10);
+  assert.equal(input.value, '10');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '¥235');
+  resolveInitial(pricePreview(initialRequest)); await page.flush();
+  assert.equal(input.value, '10');
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '¥235');
+  assert.ok(page.presets.every(button => button.getAttribute('aria-pressed') === 'false'));
+});
+
+test('explicit purchase quantities remain authoritative when the live price changes', async () => {
+  for (const count of [1, 7, 68]) {
+    const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: `country=CN&quantity=${count}`, preview: request => pricePreview(request, { unitSubtotal: 2350 }) }); await page.flush();
+    assert.equal(page.elements.get('globalQuantity').value, String(count));
+    assert.equal(page.previews.at(-1).items[0].quantity, count);
+    assert.equal(page.previews.length, 1);
+    assert.equal(page.presets[2].getAttribute('data-quantity'), '29');
+    assert.equal(page.presets[2].getAttribute('aria-pressed'), 'false');
+    assert.equal(page.window.location.searchParams.get('quantity'), String(count));
+  }
+  for (const value of ['', '0', '1.5']) {
+    const page = harness({ path: '/one-time-pass/', query: `quantity=${value}` }); await page.flush();
+    assert.equal(page.elements.get('globalQuantity').value, value);
+    assert.equal(page.elements.get('globalPay').disabled, true);
+    assert.equal(page.previews.length, 0);
+  }
+});
+
+test('integer prices preserve zero, two and three currency minor-unit precisions', async () => {
+  const rates = { ...exchangeRates, rates: { ...exchangeRates.rates, BHD: 0.05 } };
+  for (const [currency, country, unitSubtotal, unitMajor, totalMajor, referenceUnit, referenceTotal] of [
+    ['JPY', 'JP', 210, 210, 2100, 1, 14],
+    ['CNY', 'CN', 325, 3, 33, 0, 5],
+    ['BHD', 'BH', 1634, 2, 16, 5, 46]
+  ]) {
+    const preview = request => pricePreview(request, { currency, unitSubtotal });
+    const actual = harness({ path: '/one-time-pass/', query: `country=${country}&currency=${currency}&quantity=10`, preview, rates }); await actual.flush();
+    assert.equal(actual.elements.get('globalUnitPrice').textContent, formattedAmount(unitMajor, currency), `${currency} unit`);
+    assert.equal(actual.elements.get('globalGrandTotal').textContent, formattedAmount(totalMajor, currency), `${currency} total`);
+    assert.ok(actual.elements.get('globalChargeSummary').textContent.includes(formattedAmount(totalMajor, currency) + ` (${currency})`), `${currency} actual charge`);
+    const reference = harness({ path: '/one-time-pass/', query: `country=${country}&currency=USD&quantity=10`, preview, rates }); await reference.flush();
+    assert.equal(reference.elements.get('globalUnitPrice').textContent, '≈ ' + formattedAmount(referenceUnit, 'USD'), `${currency} converted unit`);
+    assert.equal(reference.elements.get('globalGrandTotal').textContent, '≈ ' + formattedAmount(referenceTotal, 'USD'), `${currency} converted total`);
+    assert.ok(reference.elements.get('globalChargeSummary').textContent.includes(formattedAmount(totalMajor, currency) + ` (${currency})`), `${currency} retained actual charge`);
+    reference.elements.get('globalEmail').value = 'buyer@example.test'; reference.elements.get('globalCheckoutForm').fire('submit'); await reference.flush();
+    assert.equal(reference.checkouts[0].items[0].quantity, 10, `${currency} unchanged count`);
+    assert.equal(reference.checkouts[0].customData.quoted_currency, currency, `${currency} unchanged quote currency`);
+  }
+});
+
 test('budget counts recalculate from the live Paddle price and honor the new actual amounts', async () => {
   const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN', preview: request => pricePreview(request, { unitSubtotal: 2350 }) }); await page.flush();
   for (const [budget, count, total] of [[66, 3, 7050], [178, 8, 18800], [666, 29, 68150], [999, 43, 101050]]) {
@@ -737,7 +834,7 @@ test('budget quantities convert a foreign provider unit price back to RMB before
 });
 
 test('typed quantities update preset pressed states immediately and payment locks all quantity and region controls', async () => {
-  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1' }); await page.flush();
   const input = page.elements.get('globalQuantity');
   input.value = '18'; input.fire('input');
   assert.equal(page.presets.find(button => button.getAttribute('data-budget') === '178').getAttribute('aria-pressed'), 'true');
@@ -758,7 +855,7 @@ test('typed quantities update preset pressed states immediately and payment lock
 
 test('budget presets remain disabled until the first live price response arrives', async () => {
   let request, resolveQuote;
-  const page = harness({ path: '/one-time-pass/', preview: options => { request = options; return new Promise(resolve => { resolveQuote = resolve; }); } }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: options => { request = options; return new Promise(resolve => { resolveQuote = resolve; }); } }); await page.flush();
   assert.ok(page.presets.every(button => button.disabled));
   assert.ok(page.presets.every(button => button.querySelector('.preset-total').textContent === '—'));
   page.presets[0].fire('click');
@@ -766,11 +863,11 @@ test('budget presets remain disabled until the first live price response arrives
   resolveQuote(pricePreview(request)); await page.flush();
   assert.ok(page.presets.every(button => !button.disabled));
   assert.equal(page.presets[0].getAttribute('data-quantity'), '7');
-  assert.equal(page.presets[0].querySelector('.preset-total').textContent, '≈ $9.70');
+  assert.equal(page.presets[0].querySelector('.preset-total').textContent, '≈ $10');
 });
 
 test('quantity steps recover an out-of-range or empty input without sending invalid counts', async () => {
-  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1' }); await page.flush();
   const input = page.elements.get('globalQuantity'), decrease = page.elements.get('globalQuantityDecrease'), increase = page.elements.get('globalQuantityIncrease');
   input.value = '1000000'; input.fire('input');
   assert.equal(decrease.disabled, false);
@@ -862,8 +959,8 @@ test('changing country rewrites existing marketing links before navigation to pr
 });
 
 test('a zero provider unit price disables budget presets without rendering infinite quantities', async () => {
-  const page = harness({ path: '/one-time-pass/', preview: request => pricePreview(request, { unitSubtotal: 0 }) }); await page.flush();
-  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $0.00');
+  const page = harness({ path: '/one-time-pass/', query: 'quantity=1', preview: request => pricePreview(request, { unitSubtotal: 0 }) }); await page.flush();
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $0');
   assert.ok(page.presets.every(button => button.disabled && button.getAttribute('data-quantity') === '0'));
   assert.doesNotMatch(page.document.body.textContent, /Infinity|∞|NaN/);
   page.presets[0].fire('click'); await page.flush();

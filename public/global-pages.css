@@ -20,4 +20,18 @@
 .pass-checkout .field{margin-bottom:18px}.pass-checkout #globalEmailHelp{font-size:11px;margin-bottom:0}
 @media(min-width:781px){.pass-checkout{padding:28px 40px;margin-top:12px}}
 
-.preset-heading{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}.preset-code{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:4px;background:#edf2e8;color:#537542;font-size:11px;font-weight:750;line-height:1}.quantity-preset[aria-pressed=true] .preset-code{background:#638a4e;color:#fff}
+.quantity-preset{--preset-color:#245fc0;--preset-tint:#edf4ff;--preset-border:#c3d4ed;position:relative;min-height:140px;padding:15px 8px 13px;border-color:var(--preset-border);border-width:2px;background:var(--preset-tint);white-space:normal}
+.quantity-preset[data-budget="178"]{--preset-color:#98520e;--preset-tint:#fff6e6;--preset-border:#e7d1ac}
+.quantity-preset[data-budget="666"]{--preset-color:#7435ad;--preset-tint:#f6efff;--preset-border:#d8c3ec}
+.quantity-preset[data-budget="999"]{--preset-color:#16716d;--preset-tint:#eaf8f5;--preset-border:#b6ded6}
+.quantity-preset:not(:disabled):hover{background:var(--preset-tint);border-color:var(--preset-color)}
+.quantity-preset[aria-pressed=true]{background:var(--preset-tint);border-color:var(--preset-color);box-shadow:0 0 0 2px var(--preset-color),0 6px 18px #17362a12}
+.quantity-preset[aria-pressed=true]::after{content:'✓';position:absolute;top:9px;inset-inline-end:9px;display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:var(--preset-color);color:#fff;font-size:12px;font-weight:800}
+.preset-heading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;width:100%}
+.preset-code,.quantity-preset[aria-pressed=true] .preset-code{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:9px;background:var(--preset-color);color:#fff;font-size:24px;font-weight:800;line-height:1}
+.preset-budget{font-size:14px;color:var(--preset-color);font-weight:750;overflow-wrap:anywhere}
+.preset-count{font-size:12px;color:#4f5c50;text-align:center}
+.preset-total{font-size:11px;color:#677167;text-align:center}
+@media(max-width:1000px) and (min-width:781px){.global-quantity-presets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.global-quantity-presets{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+@media(max-width:480px){.quantity-preset{min-height:133px;padding:13px 8px 11px}.preset-code,.quantity-preset[aria-pressed=true] .preset-code{width:34px;height:34px;font-size:23px}}
