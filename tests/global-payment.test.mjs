@@ -36,36 +36,93 @@ function harness({ lang = 'en', path = '/pricing/', query = '', browserLanguages
   const elements = new Map(), buttons = [], cards = [], priceNodes = [], presets = [], requests = [], checkouts = [], initializations = [], previews = [], historyChanges = [], navigations = [];
   const timers = new Map();
   let nextTimer = 1, now = 0, focused = null, bodyHtml = '';
-  class Element {
-    constructor(attrs = {}) {
-      this.attrs = attrs; this.events = {}; this.children = []; this.value = attrs.value || '';
-      this.textContent = ''; this.disabled = 'disabled' in attrs;
-      this.min = attrs.min; this.max = attrs.max;
-      this.classList = { toggle() {} };
+  function decodeText(value) {
+    return value.replace(/&(?:amp|lt|gt|quot|#39);/g, entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" })[entity]);
+  }
+  function matches(element, selector) {
+    const parts = selector.trim().split(/\s+/);
+    const simple = parts.pop();
+    const tag = simple.match(/^[a-z][\w-]*/i)?.[0];
+    if (tag && element.tagName !== tag.toUpperCase()) return false;
+    const id = simple.match(/#([\w-]+)/)?.[1];
+    if (id && element.id !== id) return false;
+    for (const match of simple.matchAll(/\.([\w-]+)/g)) if (!element.classList.contains(match[1])) return false;
+    for (const match of simple.matchAll(/\[([\w-]+)(?:([~^$*]?=)["']?([^\]"']*)["']?)?\]/g)) {
+      const value = element.getAttribute(match[1]);
+      if (value === null) return false;
+      if (match[2] === '=' && value !== match[3]) return false;
+      if (match[2] === '^=' && !value.startsWith(match[3])) return false;
     }
+    if (!parts.length) return true;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) if (matches(parent, parts.join(' '))) return true;
+    return false;
+  }
+  class Element {
+    constructor(attrs = {}, tag = 'div') {
+      this.attrs = attrs; this.tagName = tag.toUpperCase(); this.events = {}; this.children = []; this.parentElement = null;
+      this.value = attrs.value || ''; this._text = ''; this.disabled = 'disabled' in attrs; this.hidden = 'hidden' in attrs;
+      this.min = attrs.min; this.max = attrs.max;
+      const classes = new Set((attrs.class || '').split(/\s+/).filter(Boolean));
+      const syncClass = () => { this.attrs.class = [...classes].join(' '); };
+      this.classList = {
+        contains: name => classes.has(name),
+        add: (...names) => { names.forEach(name => classes.add(name)); syncClass(); },
+        remove: (...names) => { names.forEach(name => classes.delete(name)); syncClass(); },
+        toggle: (name, force) => { const enabled = force ?? !classes.has(name); if (enabled) classes.add(name); else classes.delete(name); syncClass(); return enabled; }
+      };
+    }
+    get id() { return this.attrs.id || ''; }
+    set id(value) { this.attrs.id = value; elements.set(value, this); }
+    get href() { return this.attrs.href ? new URL(this.attrs.href, 'https://vid2ppt.com').href : ''; }
+    set href(value) { this.attrs.href = String(value); }
+    get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
+    set textContent(value) { this._text = String(value); this.children = []; }
+    set innerHTML(html) { parseHtml(this, html); }
     addEventListener(type, callback) { (this.events[type] ||= []).push(callback); }
-    fire(type) { for (const callback of this.events[type] || []) callback.call(this, { preventDefault() {} }); }
+    fire(type, properties = {}) { for (const callback of this.events[type] || []) callback.call(this, { preventDefault() {}, target: this, ...properties }); }
     setAttribute(name, value) { this.attrs[name] = String(value); }
     getAttribute(name) { return this.attrs[name] ?? null; }
     removeAttribute(name) { delete this.attrs[name]; }
-    appendChild(child) { this.children.push(child); }
-    remove() { this.removed = true; }
-    focus() { focused = this; }
+    appendChild(child) { child.parentElement = this; this.children.push(child); }
+    querySelectorAll(selector) {
+      const found = [];
+      for (const child of this.children) { if (matches(child, selector)) found.push(child); found.push(...child.querySelectorAll(selector)); }
+      return found;
+    }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+    closest(selector) { for (let element = this; element; element = element.parentElement) if (matches(element, selector)) return element; return null; }
+    contains(element) { return element === this || this.children.some(child => child.contains(element)); }
+    select() { this.wasSelected = true; this.selectionStart = 0; this.selectionEnd = String(this.value).length; }
+    remove() { this.removed = true; if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); }
+    focus() { focused = this; this.fire('focus'); }
     scrollIntoView() {}
   }
-  function attrs(value) { return Object.fromEntries([...value.matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(match => [match[1], match[2] ?? ''])); }
-  const body = new Element();
-  Object.defineProperty(body, 'innerHTML', { get: () => bodyHtml, set(html) {
-    bodyHtml = html;
-    elements.clear(); buttons.length = 0; cards.length = 0; priceNodes.length = 0; presets.length = 0;
-    for (const match of html.matchAll(/<[\w-]+\b[^>]*>/g)) {
-      const attributes = attrs(match[0]); const element = new Element(attributes);
-      if (attributes.id) elements.set(attributes.id, element);
-      if (attributes.class?.split(' ').includes('plan-button')) buttons.push(element);
-      if (attributes.class?.split(' ').includes('quantity-preset')) presets.push(element);
-      if ('data-card-plan' in attributes) cards.push(element);
-      if ('data-price-plan' in attributes) priceNodes.push(element);
+  function attrs(value) { return Object.fromEntries([...value.matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(match => [match[1], decodeText(match[2] ?? '')])); }
+  function parseHtml(root, html) {
+    root.children = []; root._text = '';
+    const stack = [root];
+    const voidTags = new Set(['AREA', 'BASE', 'BR', 'COL', 'EMBED', 'HR', 'IMG', 'INPUT', 'LINK', 'META', 'PARAM', 'SOURCE', 'TRACK', 'WBR']);
+    for (const token of html.match(/<!--[\s\S]*?-->|<\/?[^>]+>|[^<]+/g) || []) {
+      if (token.startsWith('<!--') || token.startsWith('<!')) continue;
+      if (token.startsWith('</')) {
+        const closing = token.match(/^<\/([\w-]+)/)?.[1].toUpperCase();
+        while (stack.length > 1) if (stack.pop().tagName === closing) break;
+      } else if (token.startsWith('<')) {
+        const match = token.match(/^<([\w-]+)\b([^>]*)>/); if (!match) continue;
+        const element = new Element(attrs(match[2]), match[1]);
+        stack.at(-1).appendChild(element);
+        if (element.id) elements.set(element.id, element);
+        if (!voidTags.has(element.tagName) && !token.endsWith('/>')) stack.push(element);
+      } else stack.at(-1)._text += decodeText(token);
     }
+  }
+  const body = new Element({}, 'body');
+  Object.defineProperty(body, 'innerHTML', { get: () => bodyHtml, set(html) {
+    bodyHtml = html; elements.clear(); parseHtml(body, html);
+    buttons.splice(0, buttons.length, ...body.querySelectorAll('.plan-button'));
+    cards.splice(0, cards.length, ...body.querySelectorAll('[data-card-plan]'));
+    priceNodes.splice(0, priceNodes.length, ...body.querySelectorAll('[data-price-plan]'));
+    presets.splice(0, presets.length, ...body.querySelectorAll('.quantity-preset'));
   } });
   const storage = new Map();
   if (savedLanguage) storage.set('vid2ppt.language', savedLanguage);
@@ -88,10 +145,12 @@ function harness({ lang = 'en', path = '/pricing/', query = '', browserLanguages
       Checkout: { open(options) { checkouts.push(options); } }
     }
   };
+  const documentEvents = {};
   const document = { body, documentElement: new Element(), title: '', head: new Element(),
-    createElement: () => new Element(), getElementById: id => elements.get(id),
-    querySelector: () => new Element(),
-    querySelectorAll: selector => ({ '.plan-button': buttons, '[data-card-plan]': cards, '[data-price-plan]': priceNodes, '.quantity-preset': presets })[selector] || []
+    addEventListener(type, callback) { (documentEvents[type] ||= []).push(callback); },
+    createElement: tag => new Element({}, tag), getElementById: id => elements.get(id),
+    querySelector: selector => selector === 'meta[name="description"]' ? new Element() : body.querySelector(selector),
+    querySelectorAll: selector => body.querySelectorAll(selector)
   };
   window.document = document;
   let configAttempts = 0, rateAttempts = 0;
@@ -131,7 +190,8 @@ function harness({ lang = 'en', path = '/pricing/', query = '', browserLanguages
       }
       await flush();
     },
-    fireWindow(type, event) { for (const callback of windowEvents[type] || []) callback(event); }
+    fireWindow(type, event) { for (const callback of windowEvents[type] || []) callback(event); },
+    fireDocument(type, event) { for (const callback of documentEvents[type] || []) callback(event); }
   };
 }
 
@@ -334,20 +394,21 @@ test('billing country affects preview and checkout while language changes preser
   assert.equal(changed.searchParams.get('currency'), 'USD');
 });
 
-test('shared purchase links restore 1000 passes and buyers can change the quantity before paying', async () => {
+test('purchase URLs restore 1000 passes and buyers can edit the quantity without a share form', async () => {
   const page = harness({ lang: 'en', path: '/one-time-pass/', query: 'country=BR&quantity=1000' }); await page.flush();
   assert.equal(page.elements.get('globalQuantity').value, '1000');
   assert.equal(page.previews[0].items[0].quantity, 1000);
   assert.equal(page.elements.get('globalTotal').textContent, '≈ ' + new Intl.NumberFormat('en', { style: 'currency', currency: 'BRL' }).format(7920));
-  const share = new URL(page.elements.get('globalShare').value);
+  assert.equal(page.elements.has('globalShare'), false);
+  const share = new URL(page.window.location.href);
   assert.equal(share.pathname, '/one-time-pass/');
   assert.equal(share.searchParams.get('lang'), 'en');
   assert.equal(share.searchParams.get('country'), 'BR');
   assert.equal(share.searchParams.get('quantity'), '1000');
   assert.equal(share.searchParams.get('currency'), 'BRL');
   page.elements.get('globalQuantity').value = '10'; page.elements.get('globalQuantity').fire('input'); await page.advance(250);
-  assert.equal(new URL(page.elements.get('globalShare').value).searchParams.get('quantity'), '10');
-  page.presets.find(button => button.getAttribute('data-quantity') === '1000').fire('click'); await page.flush();
+  assert.equal(page.window.location.searchParams.get('quantity'), '10');
+  page.elements.get('globalQuantity').value = '1000'; page.elements.get('globalQuantity').fire('input'); await page.advance(250);
   assert.equal(page.previews.at(-1).items[0].quantity, 1000);
   page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
   assert.equal(page.checkouts[0].items[0].quantity, 1000);
@@ -431,7 +492,7 @@ test('quantity typing is debounced and a late earlier quantity cannot restore it
   assert.equal(page.checkouts[0].items[0].quantity, 100);
 });
 
-test('provider quantity bounds constrain typed values and quick quantities before checkout', async () => {
+test('provider quantity bounds constrain typed values and budget quantities before checkout', async () => {
   const page = harness({ path: '/one-time-pass/', query: 'quantity=10', preview: request => pricePreview(request, { minimum: 2, maximum: 50 }) }); await page.flush();
   assert.equal(page.elements.get('globalQuantity').min, '2');
   assert.equal(page.elements.get('globalQuantity').max, '50');
@@ -444,13 +505,18 @@ test('provider quantity bounds constrain typed values and quick quantities befor
     assert.equal(page.focused, page.elements.get('globalQuantity'));
     assert.equal(page.previews.length, 1);
   }
-  page.presets.find(button => button.getAttribute('data-quantity') === '1000').fire('click'); await page.flush();
-  assert.equal(page.previews.length, 1);
-  assert.equal(page.elements.get('globalPay').disabled, true);
-  page.presets.find(button => button.getAttribute('data-quantity') === '10').fire('click'); await page.flush();
-  assert.equal(page.previews.at(-1).items[0].quantity, 10);
+  page.elements.get('globalQuantity').value = '7'; page.elements.get('globalQuantity').fire('input'); await page.advance(250);
+  const excessive = page.presets.find(button => button.getAttribute('data-budget') === '999');
+  assert.equal(excessive.disabled, true);
+  excessive.fire('click'); await page.flush();
+  assert.equal(page.previews.length, 2);
+  assert.equal(page.elements.get('globalQuantity').value, '7');
+  const allowed = page.presets.find(button => button.getAttribute('data-budget') === '66');
+  assert.equal(allowed.disabled, false);
+  allowed.fire('click'); await page.flush();
+  assert.equal(page.previews.at(-1).items[0].quantity, 7);
   page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
-  assert.equal(page.checkouts[0].items[0].quantity, 10);
+  assert.equal(page.checkouts[0].items[0].quantity, 7);
 });
 
 test('all paid plans use the exact configured and previewed price IDs at checkout', async () => {
@@ -458,7 +524,7 @@ test('all paid plans use the exact configured and previewed price IDs at checkou
   const previewed = new Set(Array.from(page.previews[0].items, item => item.priceId));
   assert.deepEqual([...previewed].sort(), ['day-price', 'lifetime-price', 'pro-price']);
   page.elements.get('globalEmail').value = 'buyer@example.test';
-  for (const [plan, expected] of [['pro', 'pro-price'], ['lifetime', 'lifetime-price'], ['day_pass', 'day-price']]) {
+  for (const [plan, expected] of [['pro', 'pro-price'], ['lifetime', 'lifetime-price']]) {
     page.buttons.find(button => button.getAttribute('data-plan') === plan).fire('click');
     page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
     const checkout = page.checkouts.at(-1);
@@ -467,7 +533,11 @@ test('all paid plans use the exact configured and previewed price IDs at checkou
     assert.equal(checkout.customData.quoted_currency, 'CNY');
     page.initializations[0].eventCallback({ name: 'checkout.closed' });
   }
-  assert.equal(page.checkouts.length, 3);
+  assert.equal(page.checkouts.length, 2);
+  const pass = harness({ path: '/one-time-pass/' }); await pass.flush();
+  pass.elements.get('globalEmail').value = 'buyer@example.test'; pass.elements.get('globalCheckoutForm').fire('submit'); await pass.flush();
+  assert.equal(pass.checkouts[0].items[0].priceId, 'day-price');
+  assert.equal(pass.checkouts[0].items[0].priceId, pass.previews[0].items[0].priceId);
 });
 
 test('a provider quote for the wrong price ID cannot authorize checkout', async () => {
@@ -512,7 +582,7 @@ test('switching a Chinese payment page to English changes reference currency whi
 test('a Russian purchase link preserves RUB references when its default billing country is US', async () => {
   const page = harness({ lang: 'ru', path: '/one-time-pass/' }); await page.flush();
   assert.equal(page.elements.get('globalQuoteStatus').textContent, 'RUB');
-  const share = new URL(page.elements.get('globalShare').value);
+  const share = new URL(page.window.location.href);
   assert.equal(share.searchParams.get('country'), 'US');
   assert.equal(share.searchParams.get('currency'), 'RUB');
   share.searchParams.delete('lang');
@@ -529,7 +599,8 @@ test('exchange-rate endpoint failure does not substitute a guessed local amount 
   page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
   assert.equal(page.checkouts.length, 0);
   assert.equal(page.elements.get('globalPay').disabled, true);
-  assert.equal(page.previews.length, 0);
+  assert.equal(page.previews.length, 2);
+  assert.ok(page.previews.every(request => request.items[0].priceId === 'day-price'));
 });
 
 test('exchange-rate loading can retry after failure using the official feed', async () => {
@@ -551,4 +622,249 @@ test('a changed live Paddle price replaces the old 9.9 reference instead of usin
   assert.equal(page.checkouts[0].items[0].priceId, 'day-price');
   assert.equal(page.checkouts[0].items[0].quantity, 10);
   assert.equal(page.checkouts[0].customData.quoted_currency, 'CNY');
+});
+
+test('the welcome page offers one flag region menu with country and language choices without starting payment', async () => {
+  const page = harness({ path: '/welcome/' }); await page.flush();
+  const menu = page.elements.get('globalRegionMenu'), summary = page.elements.get('globalRegionSummary');
+  const language = page.elements.get('siteLanguage'), country = page.elements.get('globalCountry');
+  assert.ok(menu && summary && language && country);
+  assert.equal(menu.tagName, 'DETAILS');
+  assert.equal(summary.tagName, 'SUMMARY');
+  assert.equal(page.elements.get('globalRegionFlag').textContent, '🇺🇸');
+  assert.equal(language.children.length, 33);
+  assert.equal(language.children.find(option => option.value === 'ja').textContent, '🇯🇵 日本語');
+  assert.ok(country.children.find(option => option.getAttribute('value') === 'JP').textContent.includes('🇯🇵'));
+  menu.open = true; country.value = 'JP'; country.fire('change');
+  assert.equal(menu.open, false);
+  assert.equal(page.elements.get('globalRegionFlag').textContent, '🇯🇵');
+  assert.equal(page.elements.get('globalRegionLabel').textContent, 'English · JPY');
+  assert.equal(page.window.location.searchParams.get('country'), 'JP');
+  language.value = 'fr'; language.fire('change');
+  const target = new URL(page.navigations.at(-1));
+  assert.equal(target.pathname, '/welcome/');
+  assert.equal(target.searchParams.get('lang'), 'fr');
+  assert.equal(target.searchParams.get('country'), 'JP');
+  assert.equal(page.previews.length, 0);
+  assert.ok(page.requests.every(request => request.url.startsWith('/locales/')));
+});
+
+test('the region menu closes on Escape and outside click while retaining clicks inside', async () => {
+  const page = harness({ path: '/welcome/' }); await page.flush();
+  const menu = page.elements.get('globalRegionMenu'), summary = page.elements.get('globalRegionSummary');
+  menu.open = true; page.fireDocument('click', { target: page.elements.get('globalCountry') });
+  assert.equal(menu.open, true);
+  menu.fire('keydown', { key: 'Escape' });
+  assert.equal(menu.open, false);
+  assert.equal(page.focused, summary);
+  menu.open = true; page.fireDocument('click', { target: page.document.body });
+  assert.equal(menu.open, false);
+});
+
+test('plus and minus change whole pass quantities with debounced quotes and select typed values on focus', async () => {
+  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const input = page.elements.get('globalQuantity'), decrease = page.elements.get('globalQuantityDecrease'), increase = page.elements.get('globalQuantityIncrease');
+  assert.equal(decrease.disabled, true);
+  assert.equal(increase.disabled, false);
+  input.focus(); assert.equal(input.wasSelected, true);
+  assert.equal(input.selectionEnd, 1);
+  increase.fire('click');
+  assert.equal(input.value, '2');
+  assert.equal(page.window.location.searchParams.get('quantity'), '2');
+  assert.equal(page.elements.get('globalPay').disabled, true);
+  assert.ok(page.presets.every(button => button.disabled));
+  await page.advance(249); assert.equal(page.previews.length, 1);
+  await page.advance(1); assert.equal(page.previews.at(-1).items[0].quantity, 2);
+  assert.equal(page.elements.get('globalTotal').textContent, '≈ $2.77');
+  decrease.fire('click'); await page.advance(250);
+  assert.equal(input.value, '1');
+  assert.equal(decrease.disabled, true);
+  assert.equal(page.previews.at(-1).items[0].quantity, 1);
+  input.value = '12'; input.fire('input'); await page.advance(250);
+  increase.fire('click'); await page.advance(250);
+  assert.equal(input.value, '13');
+  assert.equal(page.previews.at(-1).items[0].quantity, 13);
+});
+
+test('the four RMB budget presets show actual payable amounts and select their quoted pass counts', async () => {
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN' }); await page.flush();
+  assert.equal(page.presets.length, 4);
+  assert.equal(page.elements.has('globalShare'), false);
+  assert.doesNotMatch(page.document.body.textContent, /Purchase link/);
+  for (const [budget, count, total] of [[66, 7, 6930], [178, 18, 17820], [666, 68, 67320], [999, 101, 99990]]) {
+    const button = page.presets.find(item => item.getAttribute('data-budget') === String(budget));
+    assert.equal(button.getAttribute('data-quantity'), String(count));
+    assert.ok(button.querySelector('.preset-budget').textContent.includes(String(budget)));
+    assert.ok(button.querySelector('.preset-count').textContent.includes(String(count)));
+    assert.equal(button.querySelector('.preset-total').textContent, formattedMinor(total, 'CNY', 'zh-CN'));
+    assert.equal(button.disabled, false);
+    button.fire('click');
+    assert.equal(button.getAttribute('aria-pressed'), 'true');
+    assert.ok(page.presets.every(item => item === button || item.getAttribute('aria-pressed') === 'false'));
+    assert.ok(page.presets.every(item => item.disabled));
+    assert.equal(page.elements.get('globalQuantity').value, String(count));
+    await page.flush();
+    assert.equal(page.previews.at(-1).items[0].quantity, count);
+    assert.equal(page.elements.get('globalGrandTotal').textContent, formattedMinor(total, 'CNY', 'zh-CN'));
+    assert.equal(button.getAttribute('aria-pressed'), 'true');
+  }
+  page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+  assert.equal(page.checkouts[0].items[0].quantity, 101);
+  assert.equal(page.checkouts[0].customData.quoted_currency, 'CNY');
+});
+
+test('budget counts recalculate from the live Paddle price and honor the new actual amounts', async () => {
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN', preview: request => pricePreview(request, { unitSubtotal: 2350 }) }); await page.flush();
+  for (const [budget, count, total] of [[66, 3, 7050], [178, 8, 18800], [666, 29, 68150], [999, 43, 101050]]) {
+    const button = page.presets.find(item => item.getAttribute('data-budget') === String(budget));
+    assert.equal(button.getAttribute('data-quantity'), String(count));
+    assert.equal(button.querySelector('.preset-total').textContent, formattedMinor(total, 'CNY', 'zh-CN'));
+  }
+  page.presets[0].fire('click'); await page.flush();
+  assert.equal(page.previews.at(-1).items[0].quantity, 3);
+  assert.equal(page.elements.get('globalTotal').textContent, formattedMinor(7050, 'CNY', 'zh-CN'));
+});
+
+test('budget quantities convert a foreign provider unit price back to RMB before rounding up', async () => {
+  const page = harness({ lang: 'en', path: '/one-time-pass/', query: 'country=US', preview: request => pricePreview(request, { currency: 'USD', unitSubtotal: 140 }) }); await page.flush();
+  for (const [budget, count, total] of [[66, 7, 980], [178, 18, 2520], [666, 67, 9380], [999, 100, 14000]]) {
+    const button = page.presets.find(item => item.getAttribute('data-budget') === String(budget));
+    assert.equal(button.getAttribute('data-quantity'), String(count));
+    assert.equal(button.querySelector('.preset-total').textContent, formattedMinor(total, 'USD'));
+  }
+});
+
+test('typed quantities update preset pressed states immediately and payment locks all quantity and region controls', async () => {
+  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const input = page.elements.get('globalQuantity');
+  input.value = '18'; input.fire('input');
+  assert.equal(page.presets.find(button => button.getAttribute('data-budget') === '178').getAttribute('aria-pressed'), 'true');
+  assert.ok(page.presets.every(button => button.disabled));
+  await page.advance(250);
+  input.value = '19'; input.fire('input');
+  assert.ok(page.presets.every(button => button.getAttribute('aria-pressed') === 'false'));
+  await page.advance(250);
+  page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+  assert.equal(page.checkouts[0].items[0].quantity, 19);
+  for (const id of ['globalQuantityDecrease', 'globalQuantityIncrease', 'globalQuantity', 'globalCountry', 'siteLanguage']) assert.equal(page.elements.get(id).disabled, true, id);
+  assert.ok(page.presets.every(button => button.disabled));
+  page.presets[0].fire('click'); page.elements.get('globalQuantityIncrease').fire('click'); await page.advance(250);
+  assert.equal(input.value, '19');
+  page.initializations[0].eventCallback({ name: 'checkout.closed' });
+  for (const id of ['globalQuantityDecrease', 'globalQuantityIncrease', 'globalQuantity', 'globalCountry', 'siteLanguage']) assert.equal(page.elements.get(id).disabled, false, id);
+});
+
+test('budget presets remain disabled until the first live price response arrives', async () => {
+  let request, resolveQuote;
+  const page = harness({ path: '/one-time-pass/', preview: options => { request = options; return new Promise(resolve => { resolveQuote = resolve; }); } }); await page.flush();
+  assert.ok(page.presets.every(button => button.disabled));
+  assert.ok(page.presets.every(button => button.querySelector('.preset-total').textContent === '—'));
+  page.presets[0].fire('click');
+  assert.equal(page.elements.get('globalQuantity').value, '1');
+  resolveQuote(pricePreview(request)); await page.flush();
+  assert.ok(page.presets.every(button => !button.disabled));
+  assert.equal(page.presets[0].getAttribute('data-quantity'), '7');
+  assert.equal(page.presets[0].querySelector('.preset-total').textContent, '≈ $9.70');
+});
+
+test('quantity steps recover an out-of-range or empty input without sending invalid counts', async () => {
+  const page = harness({ path: '/one-time-pass/' }); await page.flush();
+  const input = page.elements.get('globalQuantity'), decrease = page.elements.get('globalQuantityDecrease'), increase = page.elements.get('globalQuantityIncrease');
+  input.value = '1000000'; input.fire('input');
+  assert.equal(decrease.disabled, false);
+  assert.equal(increase.disabled, true);
+  decrease.fire('click');
+  assert.equal(input.value, '999999');
+  await page.advance(250);
+  assert.equal(page.previews.at(-1).items[0].quantity, 999999);
+  assert.equal(page.elements.get('globalPay').disabled, false);
+  input.value = ''; input.fire('input');
+  assert.equal(decrease.disabled, true);
+  assert.equal(increase.disabled, false);
+  increase.fire('click'); await page.advance(250);
+  assert.equal(input.value, '1');
+  assert.equal(page.previews.at(-1).items[0].quantity, 1);
+  assert.ok(page.previews.every(request => request.items[0].quantity >= 1 && request.items[0].quantity <= 999999));
+});
+
+test('an authoritative CNY Paddle quote remains payable when exchange-rate loading fails', async () => {
+  const page = harness({ lang: 'zh-CN', path: '/one-time-pass/', query: 'country=CN&quantity=7', rates: new Error('exchange rate service unavailable') }); await page.flush();
+  assert.equal(page.elements.get('globalGrandTotal').textContent, formattedMinor(6930, 'CNY', 'zh-CN'));
+  assert.equal(page.elements.get('globalQuoteStatus').textContent, 'CNY');
+  assert.equal(page.elements.get('globalRateDate').textContent, '');
+  assert.equal(page.elements.get('globalPay').disabled, false);
+  assert.equal(page.presets[0].getAttribute('data-quantity'), '7');
+  assert.equal(page.presets[0].disabled, false);
+  page.elements.get('globalEmail').value = 'buyer@example.test'; page.elements.get('globalCheckoutForm').fire('submit'); await page.flush();
+  assert.equal(page.checkouts.length, 1);
+  assert.equal(page.checkouts[0].items[0].quantity, 7);
+  assert.equal(page.checkouts[0].customData.quoted_currency, 'CNY');
+});
+
+test('marketing links retain the selected country and currency through welcome, pricing and the pass entry', async () => {
+  const welcome = harness({ path: '/welcome/', query: 'country=BR&currency=BRL' }); await welcome.flush();
+  const pricingLinks = welcome.document.querySelectorAll('a').filter(link => new URL(link.href).pathname === '/pricing/');
+  assert.ok(pricingLinks.length >= 2);
+  for (const link of pricingLinks) {
+    const target = new URL(link.href);
+    assert.equal(target.searchParams.get('lang'), 'en');
+    assert.equal(target.searchParams.get('country'), 'BR');
+    assert.equal(target.searchParams.get('currency'), 'BRL');
+  }
+  const target = new URL(pricingLinks[0].href); target.searchParams.delete('lang');
+  const pricing = harness({ path: target.pathname, query: target.searchParams.toString() }); await pricing.flush();
+  const passLink = pricing.document.querySelectorAll('a').find(link => new URL(link.href).pathname === '/one-time-pass/');
+  assert.ok(passLink);
+  const passTarget = new URL(passLink.href);
+  assert.equal(passTarget.searchParams.get('country'), 'BR');
+  assert.equal(passTarget.searchParams.get('currency'), 'BRL');
+  passTarget.searchParams.delete('lang');
+  const pass = harness({ path: passTarget.pathname, query: passTarget.searchParams.toString() }); await pass.flush();
+  assert.equal(pass.elements.get('globalCountry').value, 'BR');
+  assert.equal(pass.elements.get('globalQuoteStatus').textContent, 'BRL');
+});
+
+test('changing country rewrites existing marketing links before navigation to pricing and the pass entry', async () => {
+  const welcome = harness({ path: '/welcome/' }); await welcome.flush();
+  const pricingLinks = welcome.document.querySelectorAll('a[href]').filter(link => new URL(link.href).pathname === '/pricing/');
+  const originalLink = new URL(pricingLinks[0].href);
+  originalLink.searchParams.set('campaign', 'region-check'); originalLink.hash = '#plans';
+  pricingLinks[0].href = originalLink.toString();
+  const country = welcome.elements.get('globalCountry'); country.value = 'BR'; country.fire('change');
+  for (const link of pricingLinks) {
+    const target = new URL(link.href);
+    assert.equal(target.searchParams.get('country'), 'BR');
+    assert.equal(target.searchParams.get('currency'), 'BRL');
+    assert.equal(target.searchParams.get('lang'), 'en');
+  }
+  const target = new URL(pricingLinks[0].href);
+  assert.equal(target.searchParams.get('campaign'), 'region-check');
+  assert.equal(target.hash, '#plans');
+  const startLink = welcome.document.querySelectorAll('a[href]').find(link => new URL(link.href).hash === '#start');
+  assert.equal(new URL(startLink.href).searchParams.get('country'), 'BR');
+  assert.equal(new URL(startLink.href).hash, '#start');
+  target.searchParams.delete('lang');
+  const pricing = harness({ path: target.pathname, query: target.searchParams.toString() }); await pricing.flush();
+  const passLink = pricing.document.querySelectorAll('a[href]').find(link => new URL(link.href).pathname === '/one-time-pass/');
+  assert.equal(new URL(passLink.href).searchParams.get('country'), 'BR');
+  const pricingCountry = pricing.elements.get('globalCountry'); pricingCountry.value = 'JP'; pricingCountry.fire('change'); await pricing.flush();
+  const passTarget = new URL(passLink.href);
+  assert.equal(passTarget.searchParams.get('country'), 'JP');
+  assert.equal(passTarget.searchParams.get('currency'), 'JPY');
+  assert.equal(passTarget.searchParams.get('lang'), 'en');
+  passTarget.searchParams.delete('lang');
+  const pass = harness({ path: passTarget.pathname, query: passTarget.searchParams.toString() }); await pass.flush();
+  assert.equal(pass.elements.get('globalCountry').value, 'JP');
+  assert.equal(pass.elements.get('globalQuoteStatus').textContent, 'JPY');
+  assert.equal(pass.previews[0].address.countryCode, 'JP');
+});
+
+test('a zero provider unit price disables budget presets without rendering infinite quantities', async () => {
+  const page = harness({ path: '/one-time-pass/', preview: request => pricePreview(request, { unitSubtotal: 0 }) }); await page.flush();
+  assert.equal(page.elements.get('globalGrandTotal').textContent, '≈ $0.00');
+  assert.ok(page.presets.every(button => button.disabled && button.getAttribute('data-quantity') === '0'));
+  assert.doesNotMatch(page.document.body.textContent, /Infinity|∞|NaN/);
+  page.presets[0].fire('click'); await page.flush();
+  assert.equal(page.elements.get('globalQuantity').value, '1');
+  assert.equal(page.previews.length, 1);
 });

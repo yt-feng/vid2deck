@@ -10,6 +10,7 @@
   var authKey = 'vid2deck.auth.session', emailKey = 'vid2deck.checkout.email';
   var quotes = {}, quoteVersion = 0, quoteReady = false, quoteTimer;
   var passMinimum = 1, passMaximum = 999999;
+  var budgets = [66, 178, 666, 999], passUnitQuote = { amount: 990, currency: 'CNY' };
   var countryKey = 'vid2ppt.billingCountry';
   var rateKey = 'vid2ppt.exchangeRates', ratesPromise, exchangeRates;
   var localeCurrencies = { en:'USD', 'zh-CN':'CNY', 'zh-TW':'TWD', es:'EUR', fr:'EUR', de:'EUR', pt:'EUR', 'pt-BR':'BRL', it:'EUR', ja:'JPY', ko:'KRW', ar:'AED', ru:'RUB', hi:'INR', id:'IDR', tr:'TRY', vi:'VND', th:'THB', nl:'EUR', pl:'PLN', sv:'SEK', da:'DKK', no:'NOK', fi:'EUR', cs:'CZK', uk:'UAH', ro:'RON', hu:'HUF', el:'EUR', he:'ILS', bn:'BDT', ms:'MYR', tl:'PHP' };
@@ -82,25 +83,41 @@
     }).catch(function (error) { ratesPromise = null; throw error; });
     return ratesPromise;
   }
-  function countryControl() {
+  function regionControl() {
     var names = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames([locale.current], { type: 'region' }) : null;
     var choices = countries.map(function (code) { return { code: code, name: names ? names.of(code) : code }; });
     choices.sort(function (a, b) { return a.name.localeCompare(b.name, locale.current); });
-    return '<div class="field global-country"><label for="globalCountry">' + e('billingCountry') + '</label><select id="globalCountry" aria-describedby="globalCountryHelp">' + choices.map(function (choice) { return '<option value="' + choice.code + '"' + (choice.code === billingCountry ? ' selected' : '') + '>' + escape(choice.name) + '</option>'; }).join('') + '</select><p class="global-note" id="globalCountryHelp">' + e('countryHelp') + '</p><p id="globalRateDate" class="global-note"></p><p class="global-note"><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a></p><p id="globalQuoteStatus" class="global-note" role="status" aria-live="polite">' + e('quoteLoading') + '</p><button type="button" class="global-action secondary" id="globalRetryQuote">' + e('retryPrice') + '</button></div>';
-  }
-  function shareLink() {
-    var link = new URL('/one-time-pass/', location.origin);
-    link.searchParams.set('lang', locale.current); link.searchParams.set('country', billingCountry); link.searchParams.set('currency', displayCurrency);
-    link.searchParams.set('quantity', String(quantity() || 1));
-    return link.toString();
+    return '<details id="globalRegionMenu" class="global-region"><summary id="globalRegionSummary" class="region-summary" aria-label="' + e('billingCountry') + ' / ' + e('language') + '"><svg class="region-globe" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a16 16 0 0 1 0 18 16 16 0 0 1 0-18Z"/></svg><span class="region-flag" id="globalRegionFlag" aria-hidden="true">' + locale.flag(billingCountry) + '</span><span class="region-label" id="globalRegionLabel">' + escape(locale.languageLabel(locale.current)) + ' · ' + displayCurrency + '</span><svg class="region-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class="region-panel"><div class="field"><label for="siteLanguage">' + e('language') + '</label><span id="languageControl"></span></div><div class="field"><label for="globalCountry">' + e('billingCountry') + '</label><select id="globalCountry" aria-describedby="globalCountryHelp">' + choices.map(function (choice) { return '<option value="' + choice.code + '"' + (choice.code === billingCountry ? ' selected' : '') + '>' + locale.flag(choice.code) + ' ' + escape(choice.name) + '</option>'; }).join('') + '</select><p class="global-note" id="globalCountryHelp">' + e('countryHelp') + '</p></div></div></details>';
   }
   function updateShare() {
-    var input = document.getElementById('globalShare'); if (input) input.value = shareLink();
     if (window.history && window.history.replaceState) {
       var current = new URL(location.href); current.searchParams.set('country', billingCountry); current.searchParams.set('currency', displayCurrency);
       if (page === 'pass') current.searchParams.set('quantity', document.getElementById('globalQuantity').value);
       window.history.replaceState(null, '', current.toString());
     }
+  }
+  function bindRegion() {
+    var menu = document.getElementById('globalRegionMenu');
+    document.getElementById('globalCountry').value = billingCountry;
+    document.getElementById('globalCountry').addEventListener('change', function () {
+      billingCountry = this.value; displayCurrency = countryCurrencies[billingCountry] || 'USD';
+      write(localStorage, countryKey, billingCountry);
+      document.getElementById('globalRegionFlag').textContent = locale.flag(billingCountry);
+      document.getElementById('globalRegionLabel').textContent = locale.languageLabel(locale.current) + ' · ' + displayCurrency;
+      if (page !== 'welcome') refreshPrices();
+      updateShare(); updateRegionLinks(); menu.open = false;
+    });
+    document.addEventListener('click', function (event) { if (!menu.contains(event.target)) menu.open = false; });
+    menu.addEventListener('keydown', function (event) { if (event.key === 'Escape') { menu.open = false; document.getElementById('globalRegionSummary').focus(); } });
+  }
+  function updateRegionLinks() {
+    document.querySelectorAll('a[href]').forEach(function (link) {
+      var target = new URL(link.getAttribute('href'), location.origin);
+      if (target.origin === location.origin && (/^\/(?:welcome|pricing|one-time-pass)(?:\/|$)/.test(target.pathname) || target.pathname === '/')) {
+        target.searchParams.set('country', billingCountry); target.searchParams.set('currency', displayCurrency);
+        link.setAttribute('href', target.toString());
+      }
+    });
   }
   function checkoutSuccessUrl(plan) {
     var target = new URL(locale.successUrl(page === 'pass' ? '/one-time-pass/' : '/pricing/', plan));
@@ -109,13 +126,19 @@
     if (page === 'pass') target.searchParams.set('quantity', String(quantity() || 1));
     return target.toString();
   }
-  function url(path) { return escape(locale.url(path)); }
+  function url(path) {
+    var target = new URL(locale.url(path), location.origin);
+    if (/^\/(?:welcome|pricing|one-time-pass)(?:\/|$)/.test(target.pathname) || target.pathname === '/') {
+      target.searchParams.set('country', billingCountry); target.searchParams.set('currency', displayCurrency);
+    }
+    return escape(target.toString());
+  }
   function status(id, message, tone) {
     var node = document.getElementById(id); if (!node) return;
     node.textContent = message; node.setAttribute('data-tone', tone || '');
   }
   function nav() {
-    return '<nav class="global-nav"><a class="global-brand" href="' + url(locale.current === 'zh-CN' ? '/' : '/welcome/') + '"><img src="/brand/vid2ppt-mark.svg" alt="" />Vid2PPT</a><div class="global-links"><a href="' + url('/pricing/') + '">' + e('pricing') + '</a><a href="' + url('/#account') + '">' + e('login') + '</a><span id="languageControl"></span></div></nav>';
+    return '<nav class="global-nav"><a class="global-brand" href="' + url(locale.current === 'zh-CN' ? '/' : '/welcome/') + '"><img src="/brand/vid2ppt-mark.svg" alt="" />Vid2PPT</a><div class="global-links"><a href="' + url('/pricing/') + '">' + e('pricing') + '</a><a href="' + url('/#account') + '">' + e('login') + '</a>' + regionControl() + '</div></nav>';
   }
   function footer() {
     return '<footer class="global-footer"><span>© 2026 Vid2PPT</span><a href="mailto:info@vid2ppt.com">' + e('contact') + '</a><a href="' + url('/terms-and-conditions/') + '">' + e('terms') + '</a><a href="' + url('/privacy/') + '">' + e('privacy') + '</a><a href="' + url('/refund/') + '">' + e('refund') + '</a></footer>';
@@ -126,10 +149,13 @@
     }).join('') + '</section>';
   }
   function workspaceNotice() { return locale.current.indexOf('zh-') === 0 ? '' : '<p class="global-notice">' + e('workspaceLanguage') + '</p>'; }
+  function productPreview() {
+    return '<div class="product-preview" aria-hidden="true"><div class="preview-toolbar"><img src="/brand/vid2ppt-mark.svg" alt="" /><span>Vid2PPT</span><span class="preview-formats">HTML · PDF · PPTX</span></div><div class="preview-stage"><div class="preview-source"><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i></div><div class="preview-play">▶</div><div class="preview-timeline"><span></span><small>02:36 / 10:00</small></div></div><div class="preview-pages"><div class="preview-page"><span class="preview-timestamp">02:36</span><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i></div><div class="preview-lines"><i></i><i></i><i></i></div></div><div class="preview-page"><span class="preview-timestamp">04:18</span><div class="preview-lines"><i></i><i></i><i></i></div><div class="preview-mini-grid"><span></span><span></span></div></div></div></div><div class="preview-caption"><span class="preview-dot"></span>' + e('step2Title') + '</div></div>';
+  }
   function welcome() {
-    return '<section class="global-hero"><div class="global-tag">' + e('tag') + '</div><h1>' + e('title') + '</h1><p>' + e('lead') + '</p><div class="global-actions"><a class="global-action" href="' + url('/#start') + '">' + e('start') + '</a><a class="global-action secondary" href="' + url('/pricing/') + '">' + e('pricing') + '</a></div><p class="global-note">' + e('freeIntro') + '</p></section>' +
-      '<div class="global-grid">' + ['local', 'ai', 'exports'].map(function (key) { return '<article class="global-card"><p>' + e(key) + '</p></article>'; }).join('') + '</div>' +
-      '<section class="global-section"><h2>' + e('stepsTitle') + '</h2><div class="global-grid">' + [1, 2, 3].map(function (n) { return '<article class="global-card"><div class="global-tag">0' + n + '</div><h2>' + e('step' + n + 'Title') + '</h2><p>' + e('step' + n) + '</p></article>'; }).join('') + '</div></section>' + workspaceNotice() + faq();
+    return '<section class="global-hero welcome-hero"><div class="hero-copy"><div class="global-tag"><span class="tag-dot"></span>' + e('tag') + '</div><h1>' + e('title') + '</h1><p>' + e('lead') + '</p><div class="global-actions"><a class="global-action" href="' + url('/#start') + '">' + e('start') + '<span aria-hidden="true">↗</span></a><a class="global-action secondary" href="' + url('/pricing/') + '">' + e('pricing') + '</a></div><p class="global-note">' + e('freeIntro') + '</p></div>' + productPreview() + '</section>' +
+      '<div class="global-grid feature-grid">' + ['local', 'ai', 'exports'].map(function (key, n) { return '<article class="global-card feature-card"><span class="feature-icon" aria-hidden="true">' + ['⌂','✦','↗'][n] + '</span><p>' + e(key) + '</p></article>'; }).join('') + '</div>' +
+      '<section class="global-section"><div class="section-heading"><span class="global-tag">01 — 03</span><h2>' + e('stepsTitle') + '</h2></div><div class="global-grid steps-grid">' + [1, 2, 3].map(function (n) { return '<article class="global-card step-card"><div class="step-number">0' + n + '</div><h2>' + e('step' + n + 'Title') + '</h2><p>' + e('step' + n) + '</p></article>'; }).join('') + '</div></section>' + workspaceNotice() + faq();
   }
   function card(plan) {
     var free = plan === 'free';
@@ -138,24 +164,62 @@
       t('ocr', { value: free ? 100 : plan === 'pro' ? new Intl.NumberFormat(locale.current).format(10000) : '∞' }),
       t('transcription', { value: free ? t('minutes', { value: 600 }) : '∞' }),
       free ? t('single') : t('batch'), t('exports')];
-    return '<article class="global-card" data-card-plan="' + plan + '"><h2>' + e(plan) + '</h2><p>' + e(plan + 'Desc') + '</p><p class="price" data-price-plan="' + plan + '">' + (free ? e('free') : '—') + '</p><p class="cadence">' + (free ? e('free') : e(plan === 'pro' ? 'monthly' : 'oneOff')) + '</p><ul>' + features.map(function (feature) { return '<li>' + escape(feature) + '</li>'; }).join('') + '</ul>' +
+    return '<article class="global-card pricing-card' + (plan === 'pro' ? ' featured' : '') + '" data-card-plan="' + plan + '"><h2>' + e(plan) + '</h2><p>' + e(plan + 'Desc') + '</p><p class="price" data-price-plan="' + plan + '">' + (free ? e('free') : '—') + '</p><p class="cadence">' + (free ? e('free') : e(plan === 'pro' ? 'monthly' : 'oneOff')) + '</p><ul>' + features.map(function (feature) { return '<li>' + escape(feature) + '</li>'; }).join('') + '</ul>' +
       (free ? '<a class="global-action secondary" href="' + url('/#start') + '">' + e('start') + '</a>' : '<button class="global-action plan-button" type="button" data-plan="' + plan + '" aria-pressed="false">' + e('choose', { plan: t(plan) }) + '</button>') + '</article>';
+  }
+  function quoteTools() {
+    return '<div class="quote-tools"><p id="globalQuoteStatus" class="global-note" role="status" aria-live="polite">' + e('quoteLoading') + '</p><button type="button" class="quote-retry" id="globalRetryQuote">' + e('retryPrice') + '</button><details class="rate-details"><summary>' + e('finalAmount') + '</summary><p id="globalRateDate" class="global-note"></p><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a></details></div>';
+  }
+  function budgetQuantity(budget) {
+    var digits = new Intl.NumberFormat(locale.current, { style: 'currency', currency: passUnitQuote.currency }).resolvedOptions().maximumFractionDigits;
+    var unitCny = Number(passUnitQuote.amount) / Math.pow(10, digits);
+    if (passUnitQuote.currency !== 'CNY') {
+      if (!exchangeRates || !exchangeRates.rates[passUnitQuote.currency]) return 0;
+      unitCny /= exchangeRates.rates[passUnitQuote.currency];
+    }
+    if (!Number.isFinite(unitCny) || unitCny <= 0) return 0;
+    return Math.max(passMinimum, Math.ceil(budget / unitCny - 1e-9));
+  }
+  function updateQuantityControls() {
+    if (page !== 'pass') return;
+    var count = quantity(), entered = Number(document.getElementById('globalQuantity').value);
+    document.getElementById('globalQuantityDecrease').disabled = busy || entered <= passMinimum;
+    document.getElementById('globalQuantityIncrease').disabled = busy || entered >= passMaximum;
+    document.querySelectorAll('.quantity-preset').forEach(function (button) {
+      var budget = Number(button.getAttribute('data-budget')), target = budgetQuantity(budget);
+      button.setAttribute('data-quantity', String(target));
+      button.setAttribute('aria-pressed', String(count === target));
+      button.disabled = busy || !quoteReady || !target || target > passMaximum;
+      var label = button.querySelector('.preset-budget'), number = button.querySelector('.preset-count'), total = button.querySelector('.preset-total');
+      var budgetPrice = exchangeRates ? referenceMoney(budget * 100, 'CNY') : money(budget * 100, 'CNY');
+      label.textContent = budgetPrice.indexOf('≈') === 0 ? budgetPrice : '≈ ' + budgetPrice;
+      number.textContent = t('presetPasses', { count: new Intl.NumberFormat(locale.current).format(target) });
+      total.textContent = quoteReady ? referenceMoney(Number(passUnitQuote.amount) * target, passUnitQuote.currency) : '—';
+    });
+  }
+  function quantityControl() {
+    return '<div class="field quantity-field"><label for="globalQuantity">' + e('quantity') + '</label><div class="quantity-stepper"><button type="button" id="globalQuantityDecrease" aria-label="' + e('decreaseQuantity') + '" disabled>−</button><input id="globalQuantity" type="number" min="1" max="999999" step="1" inputmode="numeric" value="1" aria-describedby="globalQuantityHelp" required /><button type="button" id="globalQuantityIncrease" aria-label="' + e('increaseQuantity') + '">+</button></div><p class="global-note" id="globalQuantityHelp">' + e('quantityHelp', { min: passMinimum, max: new Intl.NumberFormat(locale.current).format(passMaximum) }) + '</p><p class="budget-label">' + e('budgetPresets') + '</p><div class="global-quantity-presets" role="group" aria-label="' + e('budgetPresets') + '">' + budgets.map(function (budget) { return '<button type="button" class="quantity-preset" data-budget="' + budget + '" data-quantity="' + Math.ceil(budget / 9.9) + '" aria-pressed="false" disabled><span class="preset-budget">≈ ' + escape(money(budget * 100, 'CNY')) + '</span><span class="preset-count">' + e('presetPasses', { count: Math.ceil(budget / 9.9) }) + '</span><span class="preset-total">—</span></button>'; }).join('') + '</div></div>';
   }
   function checkout() {
     var pass = page === 'pass';
     var fallback = locale.paddleLocale(locale.current) === 'en' && locale.current !== 'en';
-    return '<section class="global-section global-checkout" id="globalCheckout"><div><h2>' + e('orderSummary') + '</h2><p id="globalSelected">' + (pass ? e('selected', { plan: t('day_pass') }) : e('selectPlan')) + '</p><p id="globalPlanTerms">' + (pass ? e('dayDesc') + ' ' + e('oneOff') : '') + '</p><p class="global-note">' + e('finalAmount') + '</p><p class="global-notice" id="globalChargeSummary"></p>' + (fallback ? '<p class="global-notice">' + e('checkoutEnglish') + '</p>' : '') + '<p class="global-note">' + e('secure') + '</p><p class="global-note">' + e('support') + '</p></div>' +
-      '<form id="globalCheckoutForm" novalidate><div class="field"><label for="globalEmail">' + e('buyEmail') + '</label><input id="globalEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" aria-describedby="globalEmailHelp" required /><p class="global-note" id="globalEmailHelp">' + e('emailHelp') + '</p></div>' +
-      (pass ? '<div class="field"><label for="globalQuantity">' + e('quantity') + '</label><input id="globalQuantity" type="number" min="1" max="999999" step="1" inputmode="numeric" value="1" aria-describedby="globalQuantityHelp" required /><p class="global-note" id="globalQuantityHelp">' + e('quantityHelp', { min: passMinimum, max: passMaximum }) + '</p><p class="global-note">' + e('multiplePass') + '</p><div class="global-quantity-presets" role="group" aria-label="' + e('quantityPresets') + '">' + [1, 10, 100, 1000].map(function (count) { return '<button type="button" class="global-action secondary quantity-preset" data-quantity="' + count + '">' + new Intl.NumberFormat(locale.current).format(count) + '</button>'; }).join('') + '</div></div><div class="global-subtotal"><span>' + e('subtotal') + '</span><strong id="globalTotal">—</strong></div><div class="global-subtotal"><span>' + e('tax') + '</span><strong id="globalTax">—</strong></div><div class="global-subtotal global-total"><span>' + e('estimatedTotal') + '</span><strong id="globalGrandTotal">—</strong></div><div class="field"><label for="globalShare">' + e('shareLink') + '</label><input id="globalShare" type="url" readonly /><p class="global-note">' + e('shareHelp') + '</p></div>' : '') +
-      '<button class="global-action" type="submit" id="globalPay"' + (pass ? '' : ' disabled') + '>' + e('continuePay') + '</button><p class="global-note">' + e('readPolicies') + ' <a href="' + url('/terms-and-conditions/') + '">' + e('terms') + '</a> · <a href="' + url('/refund/') + '">' + e('refund') + '</a></p><div class="global-status" id="globalPaymentStatus" role="status" aria-live="polite"></div><div class="global-actions"><button class="global-action secondary" type="button" id="globalRefresh">' + e('refresh') + '</button><a href="' + url('/#account') + '">' + e('login') + '</a></div><div class="global-status" id="globalEntitlementStatus" role="status" aria-live="polite">' + e('accountHelp') + '</div></form></section>';
+    var passBenefits = [t('conversions', { value: 20 }), t('ocr', { value: 300 }), t('transcription', { value: t('minutes', { value: 120 }) }), t('maxVideo', { value: t('minutes', { value: 10 }) }), t('single')];
+    return '<section class="global-section global-checkout' + (pass ? ' pass-checkout' : '') + '" id="globalCheckout"><div class="checkout-overview"><div class="global-tag">Vid2PPT</div><h2>' + e('orderSummary') + '</h2><p id="globalSelected">' + (pass ? e('selected', { plan: t('day_pass') }) : e('selectPlan')) + '</p>' +
+      (pass ? '<div class="pass-unit-price"><span id="globalUnitPrice">—</span><small>/ ' + e('perPass') + '</small></div><p class="one-off-note">' + e('oneOff') + '</p><ul class="pass-benefits">' + passBenefits.map(function (feature) { return '<li>' + escape(feature) + '</li>'; }).join('') + '</ul><p class="global-note pass-duration">' + e('multiplePass') + '</p>' : '') +
+      '<details class="plan-details"><summary>' + (pass ? e('day_pass') : e('terms')) + '</summary><p id="globalPlanTerms">' + (pass ? e('dayDesc') : '') + '</p></details><p class="payment-trust"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>' + e('secure') + '</p><a class="payment-support" href="mailto:info@vid2ppt.com">' + e('contact') + ' ↗</a></div>' +
+      '<form id="globalCheckoutForm" novalidate>' + (pass ? quantityControl() : '') +
+      '<div class="field"><label for="globalEmail">' + e('buyEmail') + '</label><input id="globalEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" aria-describedby="globalEmailHelp" required /><p class="global-note" id="globalEmailHelp">' + e('emailHelp') + '</p></div>' +
+      (pass ? '<div class="order-totals"><div class="global-subtotal"><span>' + e('subtotal') + '</span><strong id="globalTotal">—</strong></div><div class="global-subtotal"><span>' + e('tax') + '</span><strong id="globalTax">—</strong></div><div class="global-subtotal global-total"><span>' + e('estimatedTotal') + '</span><strong id="globalGrandTotal">—</strong></div></div>' : '') +
+      '<p class="charge-summary" id="globalChargeSummary"></p>' + (fallback ? '<p class="global-note checkout-fallback">' + e('checkoutEnglish') + '</p>' : '') +
+      '<button class="global-action pay-button" type="submit" id="globalPay" disabled>' + e('continuePay') + '</button><details class="policy-details"><summary><a href="' + url('/terms-and-conditions/') + '">' + e('terms') + '</a> · <a href="' + url('/refund/') + '">' + e('refund') + '</a></summary><p>' + e('readPolicies') + '</p></details><div class="global-status" id="globalPaymentStatus" role="status" aria-live="polite"></div>' + quoteTools() +
+      '<details class="account-tools" id="globalAccountTools"><summary>' + e('accountTools') + '</summary><div class="global-actions"><a href="' + url('/#account') + '">' + e('login') + '</a><button class="global-action secondary" type="button" id="globalRefresh">' + e('refresh') + '</button></div><div class="global-status" id="globalEntitlementStatus" role="status" aria-live="polite">' + e('accountHelp') + '</div></details></form></section>';
   }
   function pricing() {
-    return '<section class="global-hero"><div class="global-tag">Vid2PPT</div><h1>' + e('pricing') + '</h1><p>' + e('freeIntro') + '</p></section>' + countryControl() + '<div class="global-grid">' + ['free', 'pro', 'lifetime'].map(card).join('') + '</div>' +
-      '<section class="global-section global-card" data-card-plan="day_pass"><h2>' + e('day_pass') + '</h2><p>' + e('dayDesc') + '</p><p class="price" data-price-plan="day_pass">' + '—' + '</p><p class="cadence">' + e('oneOff') + '</p><button class="global-action plan-button" type="button" data-plan="day_pass" aria-pressed="false">' + e('choose', { plan: t('day_pass') }) + '</button></section>' + checkout() +
-      '<a href="' + url('/one-time-pass/') + '">' + e('passEntry') + '</a>' + workspaceNotice() + faq();
+    return '<section class="global-hero pricing-hero"><div class="global-tag">Vid2PPT</div><h1>' + e('pricing') + '</h1><p>' + e('freeIntro') + '</p></section><div class="global-grid pricing-grid">' + ['free', 'pro', 'lifetime'].map(card).join('') + '</div>' +
+      '<section class="global-section pass-entry"><div><span class="global-tag">24h</span><h2>' + e('day_pass') + '</h2><p>' + e('dayDesc') + '</p></div><div class="pass-entry-action"><p class="price" data-price-plan="day_pass">—</p><p class="global-note">' + e('oneOff') + '</p><a class="global-action secondary" href="' + url('/one-time-pass/') + '">' + e('passEntry') + ' <span aria-hidden="true">↗</span></a></div></section>' + checkout() + workspaceNotice() + faq();
   }
   function pass() {
-    return '<section class="global-hero"><div class="global-tag">Vid2PPT</div><h1>' + e('day_pass') + '</h1><p>' + e('dayDesc') + '</p><p><span id="globalUnitPrice">—</span> / ' + e('perPass') + ' · ' + e('oneOff') + '</p></section>' + countryControl() + checkout() + '<a href="' + url('/pricing/') + '">' + e('pricing') + '</a>' + workspaceNotice();
+    return '<section class="global-hero pass-hero"><div class="global-tag"><span class="tag-dot"></span>' + e('oneOff') + '</div><h1>' + e('day_pass') + '</h1></section>' + checkout() + '<div class="pass-back"><a href="' + url('/pricing/') + '">← ' + e('pricing') + '</a></div>' + workspaceNotice();
   }
   function setBusy(value) {
     busy = value;
@@ -164,7 +228,8 @@
     document.getElementById('globalEmail').disabled = value;
     var quantity = document.getElementById('globalQuantity'); if (quantity) quantity.disabled = value;
     document.getElementById('globalCountry').disabled = value;
-    document.querySelectorAll('.quantity-preset').forEach(function (button) { button.disabled = value; });
+    var language = document.getElementById('siteLanguage'); if (language) language.disabled = value;
+    updateQuantityControls();
     document.querySelectorAll('.plan-button').forEach(function (button) { button.disabled = value; });
     document.getElementById('globalCheckoutForm').setAttribute('aria-busy', String(value));
   }
@@ -196,7 +261,7 @@
     var version = quoteVersion, country = billingCountry, count = quantity();
     if (!count) { status('globalQuoteStatus', t('quantityValid', { min: passMinimum, max: passMaximum }), 'error'); return Promise.resolve(); }
     status('globalQuoteStatus', t('quoteLoading'));
-    return Promise.all([ensurePaddle(), loadExchangeRates()]).then(function (results) {
+    return Promise.all([ensurePaddle(), loadExchangeRates().catch(function () { return null; })]).then(function (results) {
       var config = results[0];
       var plans = page === 'pass' ? ['day_pass'] : ['pro', 'lifetime', 'day_pass'];
       var items = plans.map(function (plan) { if (!config[priceKeys[plan]]) throw new Error(t('unavailable')); return { priceId: config[priceKeys[plan]], quantity: page === 'pass' ? count : 1 }; });
@@ -220,13 +285,14 @@
         if (selectedPlan) document.getElementById('globalSelected').textContent = t('selected', { plan: t(selectedPlan) }) + ' · ' + quotedPrice(selectedPlan);
         if (page === 'pass') {
           var quote = quotes.day_pass;
+          passUnitQuote = { amount: Number(quote.unitTotals.total), currency: quote.currency };
           document.getElementById('globalUnitPrice').textContent = quotedPrice('day_pass');
           document.getElementById('globalTotal').textContent = referenceMoney(quote.totals.subtotal, quote.currency);
           document.getElementById('globalTax').textContent = referenceMoney(quote.totals.tax, quote.currency);
           document.getElementById('globalGrandTotal').textContent = referenceMoney(quote.totals.total, quote.currency);
         }
         updateChargeSummary();
-        document.getElementById('globalRateDate').textContent = t('rateDate', { date:new Date(exchangeRates.time_last_update_unix*1000).toLocaleDateString(locale.current) });
+        document.getElementById('globalRateDate').textContent = exchangeRates ? t('rateDate', { date:new Date(exchangeRates.time_last_update_unix*1000).toLocaleDateString(locale.current) }) : '';
         status('globalQuoteStatus', displayCurrency, 'ok'); setBusy(busy);
       });
     }).catch(function (error) {
@@ -347,6 +413,7 @@
       .finally(function () { button.disabled = false; });
   }
   function syncAccess() {
+    var tools = document.getElementById('globalAccountTools'); if (tools) tools.open = true;
     var signedIn = session();
     if (!signedIn) { status('globalEntitlementStatus', t('accountHelp')); return; }
     var email = normalizedEmail(document.getElementById('globalEmail').value);
@@ -364,21 +431,29 @@
       var signedIn = session();
       document.getElementById('globalEmailHelp').textContent = signedIn && normalizedEmail(this.value) && normalizedEmail(this.value) !== normalizedEmail(signedIn.user.email) ? t('emailMismatch') : t('emailHelp');
     });
-    document.getElementById('globalCountry').value = billingCountry;
-    document.getElementById('globalCountry').addEventListener('change', function () {
-      billingCountry = this.value; displayCurrency = countryCurrencies[billingCountry] || 'USD'; write(localStorage, countryKey, billingCountry); refreshPrices(); updateShare();
-    });
     document.getElementById('globalRetryQuote').addEventListener('click', refreshPrices);
     var input = document.getElementById('globalQuantity');
     if (input) {
       var requested = new URLSearchParams(location.search).get('quantity');
       if (requested !== null) input.value = requested;
-      input.addEventListener('input', function () {
-        this.removeAttribute('aria-invalid'); invalidatePrices(); updateShare();
+      function changeQuantity() {
+        input.removeAttribute('aria-invalid'); invalidatePrices(); updateShare();
         clearTimeout(quoteTimer); quoteTimer = setTimeout(refreshPrices, 250);
+      }
+      input.addEventListener('input', changeQuantity);
+      input.addEventListener('focus', function () { input.select(); });
+      ['Decrease', 'Increase'].forEach(function (direction) {
+        document.getElementById('globalQuantity' + direction).addEventListener('click', function () {
+          if (busy) return;
+          var entered = Number(input.value);
+          var count = Number.isFinite(entered) && entered >= passMinimum ? Math.floor(entered) : passMinimum - 1;
+          input.value = String(Math.max(passMinimum, Math.min(passMaximum, count + (direction === 'Increase' ? 1 : -1))));
+          changeQuantity();
+        });
       });
       document.querySelectorAll('.quantity-preset').forEach(function (button) { button.addEventListener('click', function () {
-        if (busy) return; input.value = button.getAttribute('data-quantity'); input.removeAttribute('aria-invalid'); refreshPrices(); updateShare();
+        if (busy || button.disabled) return;
+        input.value = button.getAttribute('data-quantity'); input.removeAttribute('aria-invalid'); refreshPrices(); updateShare();
       }); });
       updateShare();
     }
@@ -401,9 +476,10 @@
     document.documentElement.dir = locale.current === 'ar' || locale.current === 'he' ? 'rtl' : 'ltr';
     document.title = 'Vid2PPT | ' + t(page === 'welcome' ? 'title' : page === 'pass' ? 'day_pass' : 'pricing');
     var meta = document.querySelector('meta[name="description"]'); if (meta) meta.setAttribute('content', t(page === 'welcome' ? 'lead' : page === 'pass' ? 'dayDesc' : 'freeIntro'));
-    document.body.innerHTML = '<div class="global-wrap">' + nav() + '<main id="globalMain">' + (page === 'welcome' ? welcome() : page === 'pricing' ? pricing() : pass()) + '</main>' + footer() + '</div>';
+    document.body.innerHTML = '<div class="global-wrap global-page-' + page + '">' + nav() + '<main id="globalMain">' + (page === 'welcome' ? welcome() : page === 'pricing' ? pricing() : pass()) + '</main>' + footer() + '</div>';
     if (document.documentElement.removeAttribute) document.documentElement.removeAttribute('data-global-loading');
     document.getElementById('languageControl').appendChild(locale.selector(t('language')));
+    bindRegion();
     if (page !== 'welcome') bindCheckout();
   }
   async function boot() {

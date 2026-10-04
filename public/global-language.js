@@ -10,6 +10,12 @@
     ['hu', 'Magyar'], ['el', 'Ελληνικά'], ['he', 'עברית'], ['bn', 'বাংলা'], ['ms', 'Bahasa Melayu'], ['tl', 'Filipino']
   ];
   var paddleLanguages = ['en', 'es', 'fr', 'de', 'pt', 'pt-BR', 'it', 'ja', 'ko', 'ar', 'ru', 'tr', 'nl', 'pl', 'sv', 'da', 'no'];
+  var languageCountries = {
+    en: 'US', 'zh-CN': 'CN', 'zh-TW': 'TW', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', 'pt-BR': 'BR',
+    it: 'IT', ja: 'JP', ko: 'KR', ar: 'AE', ru: 'RU', hi: 'IN', id: 'ID', tr: 'TR', vi: 'VN',
+    th: 'TH', nl: 'NL', pl: 'PL', sv: 'SE', da: 'DK', no: 'NO', fi: 'FI', cs: 'CZ', uk: 'UA',
+    ro: 'RO', hu: 'HU', el: 'GR', he: 'IL', bn: 'BD', ms: 'MY', tl: 'PH'
+  };
   var storageKey = 'vid2ppt.language';
   function normalize(value) {
     var tag = String(value || '').trim().replace(/_/g, '-').toLowerCase();
@@ -38,6 +44,17 @@
     if (normalized === 'zh-TW') return 'zh-TW';
     return paddleLanguages.indexOf(normalized) >= 0 ? normalized : 'en';
   }
+  function countryFlag(country) {
+    var code = String(country || '').trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) return '';
+    return String.fromCodePoint(0x1F1E6 + code.charCodeAt(0) - 65, 0x1F1E6 + code.charCodeAt(1) - 65);
+  }
+  function languageLabel(code) {
+    var normalized = normalize(code) || 'en';
+    var language = languages.find(function (item) { return item[0] === normalized; });
+    return language[1];
+  }
+  function languageFlag(code) { return countryFlag(languageCountries[normalize(code) || 'en']); }
   var query = new URLSearchParams(root.location.search).get('lang');
   var current = resolveLanguage(query, readSaved(), (root.navigator && (root.navigator.languages || [root.navigator.language])) || []);
   if (/^\/(?:pricing|one-time-pass)\/?$/.test(root.location.pathname) && root.document && root.document.documentElement && root.document.documentElement.setAttribute) {
@@ -60,10 +77,13 @@
     var select = root.document.createElement('select');
     select.id = 'siteLanguage';
     select.setAttribute('aria-label', label || 'Language');
-    select.className = 'language-select';
+    select.className = 'language-select region-language-select';
+    select.setAttribute('dir', 'auto');
     languages.forEach(function (item) {
       var option = root.document.createElement('option');
-      option.value = item[0]; option.textContent = item[1]; option.selected = item[0] === api.current;
+      option.value = item[0]; option.textContent = languageFlag(item[0]) + ' ' + item[1]; option.selected = item[0] === api.current;
+      option.setAttribute('lang', item[0]);
+      option.setAttribute('dir', 'auto');
       select.appendChild(option);
     });
     select.addEventListener('change', function () {
@@ -78,7 +98,8 @@
     return select;
   }
   var api = { languages: languages, current: current, normalize: normalize, resolve: resolveLanguage,
-    paddleLocale: paddleLocale, url: localizedUrl, successUrl: successUrl, save: save, selector: languageSelector };
+    paddleLocale: paddleLocale, url: localizedUrl, successUrl: successUrl, save: save, selector: languageSelector,
+    flag: countryFlag, languageLabel: languageLabel, languageFlag: languageFlag };
   root.Vid2PPTLocale = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 }(typeof window === 'undefined' ? globalThis : window));
