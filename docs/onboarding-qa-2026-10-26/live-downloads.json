@@ -1,0 +1,15 @@
+[
+  {
+    "format": "PPTX",
+    "pages": 2,
+    "bytes": 130947,
+    "sha256": "7e5a3d0596f44110fd5596f238426ab4b44c636774241f945cd9e9d20bbe0c48",
+    "all_package_xml_parse": true
+  },
+  {
+    "format": "PDF",
+    "pages": 3,
+    "bytes": 198181,
+    "sha256": "7e9788194b04eb69f05d9dab87a28e231f9f92f1d3a1ce326214dcfb4ed4b57e"
+  }
+]

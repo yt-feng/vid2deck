@@ -35,4 +35,17 @@
 
 ## 发布
 
-发布前 `vercel inspect https://vid2ppt.com` 核对到的原部署为 `dpl_CqHF7HZ86NB8yoXxrNQbZZwJCKtN`，与本轮基线记录一致。新版部署与正式域名验证结果在发布后补充。
+发布前 `vercel inspect https://vid2ppt.com` 核对到的原部署为 `dpl_CqHF7HZ86NB8yoXxrNQbZZwJCKtN`，与本轮基线记录一致。
+
+- 实现提交：`acecdf7`，已推送至 `codex/onboarding-flow-20261026`。
+- 正式部署：`dpl_FDmFYuLiJvr45NF6FbzBGoYsKReY`，Vercel 返回 `READY`、`production`，正式域名已指向本次版本。
+- [正式站](https://vid2ppt.com)；[固定部署地址](https://vid2deck-rc77t5e9x-ys-projects-5fb6bad4.vercel.app)。
+- 云端构建通过 **84 项后端测试 + 165 项前端测试，共 249 项**，生产构建通过。
+- 正式域名 10 个关键资源均 HTTP 200，字节内容及 SHA-256 与本地生产构建相同，包括首页、欢迎页入口、中英文字典和主 JS/CSS。[资源读回记录](onboarding-qa-2026-10-26/live-assets.json)。
+- 正式站 Chrome 中文示例：取消第 2 页，经过格式选择下载 **2 页 PPTX**；界面正确进入完成状态，提供“用我的视频开始”。文件包内全部 XML 和关系文件可解析。
+- 正式站 Chrome 英文欢迎页：`Try a sample → Review pages → Looks good, continue → Create and download PDF` 全流程完成；实际下载 **3 页 PDF**，界面出现 `Sample complete. Try your own video.`。[文件检查记录](onboarding-qa-2026-10-26/live-downloads.json)。
+- 正式站检查使用内置示例，没有上传个人素材或提交登录、支付、AI 生成。
+
+界面证据：[中文正式站](onboarding-qa-2026-10-26/chinese-review-live.png)、[英文正式站](onboarding-qa-2026-10-26/english-review-live.png)、[英文手机预览](onboarding-qa-2026-10-26/english-mobile.png)。
+
+这些检查证明本次功能已部署且中英文路径可操作；真实新用户的理解程度、首次导出率与留存改善仍需上线后的使用数据验证。

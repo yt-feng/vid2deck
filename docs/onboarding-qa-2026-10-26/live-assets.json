@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-26",
+  "commit": "acecdf7",
+  "results": [
+    {
+      "path": "index.html",
+      "status": 200,
+      "bytes": 8695,
+      "sha256": "d9af6d66374ed6ffb26634e3dc7c2b83e753cede79fb058ae72fba42966fae1b",
+      "matches_build": true
+    },
+    {
+      "path": "welcome/index.html",
+      "status": 200,
+      "bytes": 869,
+      "sha256": "cbf6bd0bdcff8ab754871fd49d3e70044c2f6caffff4d65f2765e0baa7f10068",
+      "matches_build": true
+    },
+    {
+      "path": "global-home.js",
+      "status": 200,
+      "bytes": 3532,
+      "sha256": "b41a896f74af6de7dc5e0b7ccaaa1e9f780ab6cf05dbed7720e404b64e4f1457",
+      "matches_build": true
+    },
+    {
+      "path": "global-language.js",
+      "status": 200,
+      "bytes": 5922,
+      "sha256": "6ded442e674d12f1d60a08fa7739bd63aa0fe01ba31be45fcb76b21ade4540a7",
+      "matches_build": true
+    },
+    {
+      "path": "global-page.js",
+      "status": 200,
+      "bytes": 46450,
+      "sha256": "1093f40c4e2a9f96306da2b2f72e942b26558b8854bfb46d90eddf9e2add2dab",
+      "matches_build": true
+    },
+    {
+      "path": "global-pages.css",
+      "status": 200,
+      "bytes": 23857,
+      "sha256": "17802b8e37e6d46324c2ec6a444cb9db14316c869449eaba908b907ce2e2bb7e",
+      "matches_build": true
+    },
+    {
+      "path": "locales/zh-CN.json",
+      "status": 200,
+      "bytes": 6797,
+      "sha256": "1d2bd0aacb2f8b904f8b5f031a612a3f0b185aedc08c602ea6ee671d9a7a2cd7",
+      "matches_build": true
+    },
+    {
+      "path": "locales/en.json",
+      "status": 200,
+      "bytes": 6937,
+      "sha256": "fe9a98a1497ce57fd85454d779d67b13aab8c103ca49143044217a6e0249c0f2",
+      "matches_build": true
+    },
+    {
+      "path": "assets/index-AixZTttC.js",
+      "status": 200,
+      "bytes": 376971,
+      "sha256": "166267b0acbcc95c1e36dcb7d7bc29cd4242cfb4e4ff14b10021b5cd076aa12d",
+      "matches_build": true
+    },
+    {
+      "path": "assets/index-DwwxM3W5.css",
+      "status": 200,
+      "bytes": 89697,
+      "sha256": "61caf4599da9acbca7f9f58635b9376b41827624ceb136589431261e6184314f",
+      "matches_build": true
+    }
+  ]
+}
