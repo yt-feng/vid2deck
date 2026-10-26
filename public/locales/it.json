@@ -107,5 +107,9 @@
   "presetPasses": "{count} pass",
   "accountTools": "Hai già pagato? Verifica il tuo accesso",
   "privacyNote": "I tuoi contenuti, trattati con cura.",
-  "privacyDetails": "Come proteggiamo la tua privacy"
+  "privacyDetails": "Come proteggiamo la tua privacy",
+  "startOwn": "Usa il mio video",
+  "trySample": "Prova un esempio",
+  "sampleHelp": "L’esempio non richiede registrazione e non consuma conversioni.",
+  "samplePreview": "Esempio interattivo · contenuti illustrativi"
 }

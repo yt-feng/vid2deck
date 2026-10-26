@@ -107,5 +107,9 @@
   "presetPasses": "Hozzáférések száma: {count}",
   "accountTools": "Már fizetett? Ellenőrizze a hozzáférését",
   "privacyNote": "Tartalmad gondos kezekben.",
-  "privacyDetails": "Hogyan védjük a magánszférádat"
+  "privacyDetails": "Hogyan védjük a magánszférádat",
+  "startOwn": "Saját videó használata",
+  "trySample": "Példa kipróbálása",
+  "sampleHelp": "A példa nem igényel regisztrációt, és nem fogyaszt átalakítási keretet.",
+  "samplePreview": "Interaktív példa · bemutató tartalom"
 }

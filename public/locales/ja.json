@@ -107,5 +107,9 @@
   "presetPasses": "{count} 枚のパス",
   "accountTools": "支払い済みですか？利用権を確認",
   "privacyNote": "コンテンツを大切に扱います。",
-  "privacyDetails": "プライバシー保護について"
+  "privacyDetails": "プライバシー保護について",
+  "startOwn": "自分の動画を使う",
+  "trySample": "サンプルを試す",
+  "sampleHelp": "サンプルは登録不要で、変換回数も消費しません。",
+  "samplePreview": "操作サンプル · デモ素材"
 }

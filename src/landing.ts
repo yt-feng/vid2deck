@@ -118,6 +118,12 @@ document.querySelectorAll<HTMLButtonElement>('[data-open-demo]').forEach((button
 });
 
 function navigateToSection(hash: string, smooth = true): void {
+  document.body.dataset.entry = hash === '#start' || hash === '#demo' || hash === '#workspace' ? 'start' : 'explore';
+  if (hash === '#demo') {
+    document.querySelector<HTMLButtonElement>('#openDemoProjectBtn')?.click();
+    closeNavigation();
+    return;
+  }
   if (hash === '#workspace') {
     document.querySelector<HTMLButtonElement>('#openWorkspaceBtn')?.click();
     closeNavigation();
@@ -129,6 +135,7 @@ function navigateToSection(hash: string, smooth = true): void {
   if (!target) return;
   const workspace = document.querySelector<HTMLElement>('#workspaceView');
   if (workspace && !workspace.hidden) document.querySelector<HTMLButtonElement>('#doneBtn')?.click();
+  document.body.dataset.entry = anchor === 'start' ? 'start' : 'explore';
   if (anchor === 'account') document.querySelector<HTMLButtonElement>('#openLoginBtn')?.click();
   closeNavigation();
   requestAnimationFrame(() => {
@@ -148,14 +155,14 @@ document.addEventListener('click', (event) => {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
   const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#"]');
   if (!link?.hash || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
-  if (link.hash !== '#workspace' && !document.getElementById(decodeURIComponent(link.hash.slice(1)))) return;
+  if (link.hash !== '#workspace' && link.hash !== '#demo' && !document.getElementById(decodeURIComponent(link.hash.slice(1)))) return;
   event.preventDefault();
   if (window.location.hash !== link.hash) history.pushState(history.state, '', link.hash);
   navigateToSection(link.hash);
 });
 window.addEventListener('hashchange', () => navigateToSection(window.location.hash || '#product'));
 document.querySelector<HTMLButtonElement>('#doneBtn')?.addEventListener('click', () => {
-  if (window.location.hash === '#workspace') history.replaceState(history.state, '', '#start');
+  if (window.location.hash === '#workspace' || window.location.hash === '#demo') history.replaceState(history.state, '', '#start');
 });
 if (window.location.hash) requestAnimationFrame(() => navigateToSection(window.location.hash, false));
 

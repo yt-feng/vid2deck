@@ -39,6 +39,10 @@ const videoNotesContext = createContext({ exports: {}, require: (name) => {
 runInContext(ts.transpileModule(readFileSync(resolve(root, 'src/videoNotes.ts'), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
 }).outputText, videoNotesContext);
+const journeyContext = createContext({ exports: {} });
+runInContext(ts.transpileModule(readFileSync(resolve(root, 'src/journey.ts'), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
+}).outputText, journeyContext);
 
 // Run the actual application function declarations. Only browser I/O is replaced;
 // there is no copied implementation of conversion, packaging, or job orchestration.
@@ -52,6 +56,8 @@ function workspace(overrides = {}) {
     transcriptEl: { value: 'Original transcript' },
     summaryEl: { value: '' }, illustratedNotesMarkdown: '',
     authSession: null, pendingNotesFile: null, resultView: 'pages',
+    journeyFile: null, journeyReviewed: false, journeyExport: null,
+    getJourneyStage: journeyContext.exports.getJourneyStage,
     buildVideoNoteHtml: videoNotesContext.exports.buildVideoNoteHtml,
     buildVideoNoteMarkdown: videoNotesContext.exports.buildVideoNoteMarkdown,
     ui: workspaceI18nContext.exports.ui,
@@ -66,13 +72,14 @@ function workspace(overrides = {}) {
     ...overrides
   });
   runInContext(coreJavaScript, context, { importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER });
-  context.sourceFunctions = runInContext('({ scheduleDraftSave, persistWorkspaceToState, loadStateIntoWorkspace })', context);
+  context.sourceFunctions = runInContext('({ scheduleDraftSave, persistWorkspaceToState, loadStateIntoWorkspace, updateJourney })', context);
   Object.assign(context, {
     updateActionState: noOp, renderFileList: noOp, renderImageFileList: noOp,
     renderSlides: noOp, setProgress: noOp, setStatus: noOp, setHomeStatus: noOp,
     setImageStatus: noOp, persistWorkspaceToState: noOp, loadStateIntoWorkspace: noOp,
     setPreview: noOp, setupTimeline: noOp, recordUsage: async () => {},
     yieldToBrowser: async () => {}, scheduleDraftSave: noOp, hideProgress: noOp,
+    updateJourney: noOp,
     ...overrides
   });
   return context;
@@ -236,6 +243,57 @@ test('audio sources open transcription controls without starting video extractio
   }
 });
 
+test('adding another video selects the first new file while preserving the completed task and its latest edits', () => {
+  const oldFile = new File(['previous-video'], 'previous.mp4', { type: 'video/mp4', lastModified: 100 });
+  const nextFile = new File(['next-video'], 'next.mp4', { type: 'video/mp4', lastModified: 200 });
+  const laterFile = new File(['later-video'], 'later.mp4', { type: 'video/mp4', lastModified: 300 });
+  const app = workspace({
+    selectedFile: oldFile, selectedFiles: [oldFile], currentFileIndex: 0,
+    slides: [slide(7), { ...slide(2), selected: false }, slide(4)],
+    summaryEl: { value: 'Reviewed summary' }, illustratedNotesMarkdown: 'Saved note content',
+    fileStates: new Map(), videoInput: { value: 'selected-local-file' },
+    setWorkspaceMode: () => {}, updateHomeFileStatus: () => {}, updateTimelinePosition: () => {},
+    previewImage: { removeAttribute() {} }, previewEmpty: {}
+  });
+  app.persistWorkspaceToState = app.sourceFunctions.persistWorkspaceToState;
+  app.loadStateIntoWorkspace = app.sourceFunctions.loadStateIntoWorkspace;
+  app.slides[0].textBoxes[0].text = 'Latest edit before starting another video';
+  app.addFiles([nextFile, laterFile]);
+  assert.equal(app.selectedFile, nextFile);
+  assert.equal(app.currentFileIndex, 1);
+  assert.deepEqual(Array.from(app.selectedFiles), [oldFile, nextFile, laterFile]);
+  assert.equal(app.slides.length, 0, 'new video starts with its own empty output');
+  assert.equal(app.getState(nextFile).status, 'queued');
+  assert.equal(app.videoInput.value, '');
+  const previous = app.getState(oldFile);
+  assert.equal(previous.status, 'done');
+  assert.deepEqual(Array.from(previous.slides, (frame) => frame.id), [7, 2, 4]);
+  assert.equal(previous.slides[1].selected, false);
+  assert.equal(previous.slides[0].textBoxes[0].text, 'Latest edit before starting another video');
+  assert.equal(previous.summary, 'Reviewed summary');
+  assert.equal(previous.illustratedNotes, 'Saved note content');
+  app.chooseFile(0);
+  assert.equal(app.selectedFile, oldFile);
+  assert.deepEqual(Array.from(app.slides, (frame) => frame.id), [7, 2, 4]);
+  assert.equal(app.slides[1].selected, false);
+  assert.equal(app.slides[0].textBoxes[0].text, 'Latest edit before starting another video');
+  assert.equal(app.summaryEl.value, 'Reviewed summary');
+  app.addFiles([nextFile]);
+  assert.equal(app.selectedFile, nextFile, 'reselecting an existing file activates its queued task');
+  assert.equal(app.selectedFiles.length, 3, 'reselecting a file does not duplicate the queue');
+});
+
+test('normal local import remains blocked while an online video download is in progress', () => {
+  const file = new File(['video'], 'new.mp4', { type: 'video/mp4' });
+  const messages = [];
+  const app = workspace({ isUrlDownloading: true, selectedFiles: [], setHomeStatus: (message) => messages.push(message) });
+  const previousFile = app.selectedFile;
+  app.addFiles([file]);
+  assert.equal(app.selectedFile, previousFile);
+  assert.equal(app.selectedFiles.length, 0);
+  assert.ok(messages.some((message) => message.includes('运行中')));
+});
+
 test('export locks repeated clicks and freezes selected pages and filename before async packaging', async () => {
   const packaging = deferred();
   let calls = 0;
@@ -258,6 +316,151 @@ test('export locks repeated clicks and freezes selected pages and filename befor
   await task;
   assert.equal(downloaded, 'lecture.pptx');
   assert.equal(app.isBusy(), false);
+  assert.equal(app.journeyOutputIsCurrent(), false, 'an older snapshot export must not complete a different or edited task');
+});
+
+test('export completion follows exact selected content and becomes stale after an edit or task switch', async () => {
+  const app = workspace({
+    slides: [slide(3), { ...slide(2), selected: false }, slide(1)],
+    summaryEl: { value: 'Original summary' }, illustratedNotesMarkdown: 'Original notes',
+    makePdf: async () => new Blob(['fixture']), downloadBlob: () => {}
+  });
+  const file = app.selectedFile;
+  await app.exportSelected('pdf');
+  assert.equal(app.journeyOutputIsCurrent(), true);
+  assert.deepEqual(Array.from(app.journeyExport.slides, (item) => item.id), [3, 1]);
+  app.slides[1].textBoxes[0].text = 'Edit an excluded page';
+  assert.equal(app.journeyOutputIsCurrent(), true, 'excluded content does not change the exported selection');
+  app.slides[0].textBoxes[0].text = 'Edit an exported page';
+  assert.equal(app.journeyOutputIsCurrent(), false);
+  app.slides[0] = slide(3);
+  assert.equal(app.journeyOutputIsCurrent(), true, 'undoing to the exported content restores completion');
+  app.slides.reverse();
+  assert.equal(app.journeyOutputIsCurrent(), false, 'page order is part of the exported result');
+  app.slides.reverse();
+  app.summaryEl.value = 'New summary';
+  assert.equal(app.journeyOutputIsCurrent(), false);
+  app.summaryEl.value = 'Original summary';
+  app.illustratedNotesMarkdown = 'New notes';
+  assert.equal(app.journeyOutputIsCurrent(), false);
+  app.illustratedNotesMarkdown = 'Original notes';
+  app.selectedFile = { ...file };
+  assert.equal(app.journeyOutputIsCurrent(), false, 'matching filenames cannot complete a different task');
+  app.selectedFile = file;
+  app.slides[0].selected = false;
+  assert.equal(app.journeyOutputIsCurrent(), false);
+});
+
+test('failed packaging never records a completed journey or discards the current pages', async () => {
+  const frames = [slide(1), slide(2)];
+  const messages = [];
+  const app = workspace({ slides: frames, makePdf: async () => { throw new Error('Encoder unavailable'); },
+    downloadBlob: () => assert.fail('no file should be downloaded'), setStatus: (message) => messages.push(message) });
+  await app.exportSelected('pdf');
+  assert.equal(app.journeyExport, null);
+  assert.equal(app.journeyOutputIsCurrent(), false);
+  assert.equal(app.slides, frames);
+  assert.equal(app.isBusy(), false);
+  assert.ok(messages.some((message) => message.includes('Encoder unavailable')));
+});
+
+function journeyElements() {
+  const elements = new Map();
+  const get = (selector) => {
+    if (!elements.has(selector)) elements.set(selector, { dataset: {}, hidden: false, disabled: false,
+      textContent: '', focus() {}, setAttribute() {}, removeAttribute() {}, classList: { toggle() {} } });
+    return elements.get(selector);
+  };
+  const steps = ['source', 'extract', 'review', 'export'].map((stage) => {
+    const step = get(`step:${stage}`);
+    step.dataset.step = stage;
+    step.attributes = {};
+    step.setAttribute = (name, value) => { step.attributes[name] = value; };
+    step.removeAttribute = (name) => { delete step.attributes[name]; };
+    return step;
+  });
+  return { get, steps, document: { querySelectorAll: () => steps } };
+}
+
+test('the coach derives current stages, resets review on task replacement and never forces audio through page export', () => {
+  const dom = journeyElements();
+  const app = workspace({ $: dom.get, document: dom.document, workspaceView: { dataset: {} }, slides: [slide(1)] });
+  const update = () => app.sourceFunctions.updateJourney();
+  update();
+  assert.equal(dom.get('#journeyCoach').dataset.stage, 'review');
+  assert.equal(dom.steps.find((step) => step.attributes['aria-current'] === 'step').dataset.step, 'review');
+  app.journeyReviewed = true;
+  update();
+  assert.equal(dom.get('#journeyCoach').dataset.stage, 'export');
+  app.recordJourneyExport('PDF');
+  update();
+  assert.equal(dom.get('#journeyCoach').dataset.stage, 'done');
+  app.isExtracting = true;
+  update();
+  assert.equal(dom.get('#journeyCoach').dataset.stage, 'extract');
+  assert.equal(dom.get('#journeyPrimaryBtn').disabled, true);
+  assert.equal(dom.get('#resultDock').hidden, true);
+  app.isExtracting = false;
+  app.selectedFile = new File([], 'another.mp4', { type: 'video/mp4' });
+  update();
+  assert.equal(app.journeyReviewed, false);
+  assert.equal(dom.get('#journeyCoach').dataset.stage, 'review');
+  app.slides[0].selected = false;
+  update();
+  assert.equal(dom.get('#openExportBtn').disabled, true);
+  assert.equal(dom.get('#journeySkipBtn').hidden, true);
+  app.selectedFile = new File([], 'voice.wav', { type: 'audio/wav' });
+  app.slides = [];
+  update();
+  assert.equal(dom.get('#journeyCoach').hidden, true);
+});
+
+test('export dialog stays open after failure, unlocks retry, and closes only after a new successful export', async () => {
+  const dom = journeyElements();
+  let closed = 0;
+  let attempts = 0;
+  const app = workspace({ slides: [slide(1)], downloadBlob: () => {},
+    makePdf: async () => { if (++attempts !== 2) throw new Error('Temporary failure'); return new Blob(['fixture']); } });
+  const submit = mainListener(app, '#exportChoiceForm', 'submit');
+  app.$ = dom.get;
+  dom.get('input[name="exportFormat"]:checked').value = 'pdf';
+  dom.get('#exportChoiceDialog').close = () => { closed += 1; };
+  await submit({ preventDefault() {} });
+  assert.equal(closed, 0);
+  assert.equal(app.journeyExport, null);
+  assert.match(dom.get('#exportChoiceFeedback').textContent, /未能生成/);
+  assert.equal(dom.get('#exportChoiceSubmitBtn').disabled, false);
+  assert.equal(dom.get('#closeExportChoiceBtn').disabled, false);
+  await submit({ preventDefault() {} });
+  assert.equal(closed, 1);
+  assert.equal(app.journeyOutputIsCurrent(), true);
+  assert.equal(attempts, 2);
+  const previousExport = app.journeyExport;
+  await submit({ preventDefault() {} });
+  assert.equal(closed, 1, 'a previous successful export must not dismiss a new failed attempt');
+  assert.equal(app.journeyExport, previousExport);
+  assert.match(dom.get('#exportChoiceFeedback').textContent, /未能生成/);
+  assert.equal(dom.get('#exportChoiceSubmitBtn').disabled, false);
+});
+
+test('the actual coach action lets users review a sample, confirm pages, or export directly without a forced tour', () => {
+  const dom = journeyElements();
+  let opened = 0;
+  const app = workspace({ slides: [slide(1)], resultView: 'notes', isDemoProject: true,
+    setResultView: (view) => { app.resultView = view; }, openExportChoice: () => { opened += 1; } });
+  const primary = mainListener(app, '#journeyPrimaryBtn');
+  app.$ = dom.get;
+  dom.get('#journeyCoach').dataset.stage = 'review';
+  primary();
+  assert.equal(app.resultView, 'pages');
+  assert.equal(opened, 0);
+  assert.equal(app.journeyReviewed, false);
+  primary();
+  assert.equal(app.journeyReviewed, true);
+  assert.equal(opened, 1);
+  const skip = mainListener(app, '#journeySkipBtn');
+  skip();
+  assert.equal(opened, 2);
 });
 
 test('delete keeps manual order and stable IDs; the actual undo control restores the edit', () => {
@@ -434,7 +637,7 @@ test('guest note request preserves the active file and edits while opening login
     homeView: { hidden: true }, workspaceView: { hidden: false },
     accountStatus: {}, authUsername: { focus: () => { focused += 1; } },
     requestAnimationFrame: (callback) => callback(),
-    document: { querySelector: () => ({ scrollIntoView() {} }) },
+    document: { body: { dataset: {} }, querySelector: () => ({ scrollIntoView() {} }) },
     loadAuthCaptcha: async () => {},
     persistWorkspaceToState: () => { persisted += 1; },
     generateIllustratedNotes: async () => assert.fail('guest request must wait for login'),
@@ -860,4 +1063,17 @@ test('all directory pages resolve to their own source content and canonical URLs
   plugin.configurePreviewServer({ config: { root, build: { outDir: 'public' } }, middlewares: { use: (handler) => { middleware = handler; } } });
   assert.equal(request('/contact/').body, readFileSync(resolve(root, 'public/contact/index.html'), 'utf8'));
   assert.equal(request('/contact?subject=Help').headers.Location, '/contact/?subject=Help');
+});
+
+
+test('an empty studio entry returns to focused import rather than showing a second empty tool surface', () => {
+  let returned = false;
+  const app = workspace({
+    selectedFile: null, slides: [],
+    returnHomeForVideoStart: () => { returned = true; },
+    showWorkspace: () => assert.fail('empty studio must use the focused importer'),
+    setWorkspaceMode: () => assert.fail('there is no task to restore')
+  });
+  app.openWorkspaceFromNav();
+  assert.equal(returned, true);
 });

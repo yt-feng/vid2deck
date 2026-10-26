@@ -107,5 +107,9 @@
   "presetPasses": "{count} 张通行证",
   "accountTools": "已付款？查看使用权益",
   "privacyNote": "用心保护您的内容。",
-  "privacyDetails": "了解我们如何保护隐私"
+  "privacyDetails": "了解我们如何保护隐私",
+  "startOwn": "整理我的视频",
+  "trySample": "先体验示例",
+  "sampleHelp": "示例无需注册，不占转换次数。",
+  "samplePreview": "交互示例 · 演示素材"
 }

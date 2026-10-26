@@ -107,5 +107,9 @@
   "presetPasses": "{count} pass",
   "accountTools": "Har du allerede betalt? Sjekk tilgangen din",
   "privacyNote": "Innholdet ditt, behandlet med omtanke.",
-  "privacyDetails": "Slik beskytter vi personvernet ditt"
+  "privacyDetails": "Slik beskytter vi personvernet ditt",
+  "startOwn": "Bruk videoen min",
+  "trySample": "Prøv et eksempel",
+  "sampleHelp": "Eksemplet krever ingen registrering og bruker ingen konverteringer.",
+  "samplePreview": "Interaktivt eksempel · demonstrasjonsinnhold"
 }

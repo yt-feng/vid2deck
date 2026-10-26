@@ -9,7 +9,7 @@
     location.replace(checkout.toString());
     return;
   }
-  if (!/^#(?:start|account|workspace)$/.test(location.hash)) {
+  if (!/^#(?:start|demo|account|workspace|more-tools|faq|how-it-works|use-cases|product)$/.test(location.hash)) {
     var welcome = new URL(locale.url('/welcome/'), location.origin);
     ['country', 'currency'].forEach(function (key) { if (params.has(key)) welcome.searchParams.set(key, params.get(key)); });
     location.replace(welcome.pathname + welcome.search);

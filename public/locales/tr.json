@@ -107,5 +107,9 @@
   "presetPasses": "{count} erişim hakkı",
   "accountTools": "Zaten ödeme yaptınız mı? Erişiminizi kontrol edin",
   "privacyNote": "İçeriğiniz özenle ele alınır.",
-  "privacyDetails": "Gizliliğinizi nasıl koruyoruz"
+  "privacyDetails": "Gizliliğinizi nasıl koruyoruz",
+  "startOwn": "Videomu kullan",
+  "trySample": "Bir örnek dene",
+  "sampleHelp": "Örnek kayıt gerektirmez ve dönüştürme hakkı kullanmaz.",
+  "samplePreview": "Etkileşimli örnek · temsili içerik"
 }

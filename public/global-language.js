@@ -91,7 +91,7 @@
       var url = new URL(root.location.href);
       url.searchParams.set('lang', select.value);
       if (api.currencyForLanguage && /^\/(?:pricing|one-time-pass)\/?$/.test(url.pathname)) url.searchParams.set('currency', api.currencyForLanguage(select.value));
-      if (url.pathname === '/' && !/^#(?:start|account|workspace)$/.test(url.hash)) { url.pathname = '/welcome/'; url.hash = ''; }
+      if (url.pathname === '/' && !/^#(?:start|demo|account|workspace|more-tools|faq|how-it-works|use-cases|product)$/.test(url.hash)) { url.pathname = '/welcome/'; url.hash = ''; }
       root.location.assign(url.toString());
     });
     return select;

@@ -107,5 +107,9 @@
   "presetPasses": "Käyttöoikeuksia: {count}",
   "accountTools": "Oletko jo maksanut? Tarkista käyttöoikeutesi",
   "privacyNote": "Sisältöäsi käsitellään huolellisesti.",
-  "privacyDetails": "Näin suojaamme yksityisyyttäsi"
+  "privacyDetails": "Näin suojaamme yksityisyyttäsi",
+  "startOwn": "Käytä omaa videota",
+  "trySample": "Kokeile esimerkkiä",
+  "sampleHelp": "Esimerkki ei vaadi rekisteröitymistä eikä kuluta muunnoskertoja.",
+  "samplePreview": "Interaktiivinen esimerkki · esittelysisältö"
 }

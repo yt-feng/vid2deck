@@ -107,5 +107,9 @@
   "presetPasses": "{count} na pahintulot",
   "accountTools": "Nakapagbayad na? Suriin ang iyong pahintulot",
   "privacyNote": "Pinangangalagaan namin ang iyong nilalaman.",
-  "privacyDetails": "Paano namin pinoprotektahan ang iyong privacy"
+  "privacyDetails": "Paano namin pinoprotektahan ang iyong privacy",
+  "startOwn": "Gamitin ang video ko",
+  "trySample": "Subukan ang halimbawa",
+  "sampleHelp": "Hindi kailangan ng pagpaparehistro ang halimbawa at wala itong bawas sa conversion credits.",
+  "samplePreview": "Interaktibong halimbawa · ilustrasyong nilalaman"
 }

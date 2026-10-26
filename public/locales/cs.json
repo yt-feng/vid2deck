@@ -107,5 +107,9 @@
   "presetPasses": "Počet přístupů: {count}",
   "accountTools": "Už jste zaplatili? Zkontrolujte svůj přístup",
   "privacyNote": "Váš obsah, zpracovaný s péčí.",
-  "privacyDetails": "Jak chráníme vaše soukromí"
+  "privacyDetails": "Jak chráníme vaše soukromí",
+  "startOwn": "Použít moje video",
+  "trySample": "Vyzkoušet příklad",
+  "sampleHelp": "Příklad nevyžaduje registraci a nečerpá limit převodů.",
+  "samplePreview": "Interaktivní příklad · ukázkový obsah"
 }

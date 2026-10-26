@@ -107,5 +107,9 @@
   "presetPasses": "{count} paket akses",
   "accountTools": "Sudah membayar? Periksa akses Anda",
   "privacyNote": "Konten Anda ditangani dengan penuh perhatian.",
-  "privacyDetails": "Cara kami melindungi privasi Anda"
+  "privacyDetails": "Cara kami melindungi privasi Anda",
+  "startOwn": "Gunakan video saya",
+  "trySample": "Coba contoh",
+  "sampleHelp": "Contoh tidak memerlukan pendaftaran dan tidak memakai kuota konversi.",
+  "samplePreview": "Contoh interaktif · konten ilustrasi"
 }

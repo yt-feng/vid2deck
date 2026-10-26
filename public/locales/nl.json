@@ -107,5 +107,9 @@
   "presetPasses": "{count} passen",
   "accountTools": "Al betaald? Controleer je toegang",
   "privacyNote": "Je inhoud, zorgvuldig behandeld.",
-  "privacyDetails": "Hoe we je privacy beschermen"
+  "privacyDetails": "Hoe we je privacy beschermen",
+  "startOwn": "Mijn video gebruiken",
+  "trySample": "Probeer een voorbeeld",
+  "sampleHelp": "Het voorbeeld vereist geen registratie en verbruikt geen conversietegoed.",
+  "samplePreview": "Interactief voorbeeld · illustratieve inhoud"
 }

@@ -4,6 +4,8 @@ import JSZip from 'jszip';
 import { cropTextBoxes } from './cropGeometry';
 import { paintPdfTextBoxes } from './pdfTextLayer';
 import './style.css';
+import './onboarding.css';
+import { getJourneyStage } from './journey';
 import { readDraft, writeDraft } from './workspaceDraft';
 import { buildVideoNoteHtml, buildVideoNoteMarkdown, formatNoteTime } from './videoNotes';
 import type { VideoNoteInput } from './videoNotes';
@@ -259,21 +261,18 @@ if (!app) throw new Error('Missing #app');
 app.innerHTML = ui`
   <main id="homeView">
     <section class="hero-shell" id="product">
-      <div class="hero-copy">
-        <p class="eyebrow">课程、培训、行业分享，随时翻阅</p>
-        <h1>把视频整理成<br />方便复习的笔记。</h1>
-        <p class="subhead">导入视频，自动整理原画面，按需提炼 AI 要点。笔记保留图表和时间位置，方便复习、查找和分享。</p>
+      <div class="hero-copy start-intro">
+        <p class="eyebrow">从第一份资料开始</p>
+        <h1>把视频里的重点，<br /> 带到下一次使用。</h1>
+        <p class="subhead">先选一段带课件的视频。我们整理画面，你检查后带走。</p>
+        <ol class="start-path" aria-label="你的操作路径">
+          <li aria-current="step"><span>1</span><div><strong>放入视频</strong><small>先用一段 10 分钟内的视频</small></div></li>
+          <li><span>2</span><div><strong>检查页面</strong><small>自动去重，多余的取消勾选</small></div></li>
+          <li><span>3</span><div><strong>带走资料</strong><small>按用途选择 PDF、PPTX 或笔记</small></div></li>
+        </ol>
         <div class="hero-demo-action">
-          <button id="openDemoProjectBtn" type="button">查看示例笔记</button>
-          <span>打开即看 · 免费体验</span>
-        </div>
-        <ul class="hero-benefits" aria-label="产品优势">
-          <li><strong>翻阅画面</strong><span>自动整理与去重，快速浏览内容</span></li>
-          <li><strong>提炼要点</strong><span>按需生成逐字稿与 AI 要点</span></li>
-          <li><strong>随时带走</strong><span>笔记、PDF、PPTX，融入已有工作流</span></li>
-        </ul>
-        <div class="hero-output-row" aria-label="支持导出格式">
-          <span>原画面笔记</span><span>AI 要点</span><span>Markdown</span><span>PDF / PPTX</span>
+          <button id="openDemoProjectBtn" type="button">没有素材？先体验示例 →</button>
+          <span>3 页演示素材 · 可以真实导出 · 不计额度</span>
         </div>
       </div>
 
@@ -281,12 +280,12 @@ app.innerHTML = ui`
         <div class="converter-heading">
           <div>
             <span class="step-chip">01</span>
-            <h2>把一段视频交给 Vid2PPT</h2>
+            <h2>选择一段视频</h2>
           </div>
           <small id="sourceQuota">免费版 · 10 分钟以内 · 每月 3 次</small>
         </div>
 
-        <div class="source-guide"><strong>还没有视频文件？</strong><a href="/guide/#get-video" target="_blank" rel="noopener">看看视频从哪里来 ↗</a><small>文件可直接导入，播放地址可在“视频链接”中尝试获取。</small></div>
+        <p class="start-reassurance">使用推荐设置，提取后随时可以调整。</p>
         <div class="source-tabs" role="tablist" aria-label="视频来源">
           <button id="sourceLocalTab" type="button" role="tab" aria-selected="true" aria-controls="sourceLocal" data-source="local">本地文件</button>
           <button id="sourceUrlTab" type="button" role="tab" aria-selected="false" aria-controls="sourceUrl" data-source="url" tabindex="-1">视频链接</button>
@@ -298,7 +297,7 @@ app.innerHTML = ui`
             <input id="videoInput" type="file" multiple accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi,.m4v" />
             <span class="upload-mark" aria-hidden="true">＋</span>
             <span id="fileLabel">拖入视频，或点击选择文件</span>
-            <small>MP4、WebM、MOV 等 · 隐私受到保护</small>
+            <small>推荐 MP4 · 本地视频在浏览器中提取</small>
           </label>
 
         </div>
@@ -312,7 +311,7 @@ app.innerHTML = ui`
             <input id="videoUrlInput" type="url" inputmode="url" placeholder="粘贴 B 站、YouTube 或公开视频链接" autocomplete="off" />
           </div>
           <div class="url-import-actions">
-            <button id="processUrlBtn" type="button">立即生成</button>
+            <button id="processUrlBtn" type="button">获取视频并提取页面</button>
             <button id="downloadUrlBtn" type="button" class="ghost-btn">仅导入</button>
           </div>
           <div id="urlDownloadProgress" class="url-download-progress" hidden>
@@ -359,7 +358,7 @@ app.innerHTML = ui`
         <div id="fileList" class="file-list" hidden></div>
 
         <details class="advanced-settings">
-          <summary>调整页面识别灵敏度</summary>
+          <summary>提取设置 <small>建议先用默认值</small></summary>
           <div class="grid">
             <label>检查间隔（秒）<input id="sampleEvery" type="number" min="0.5" step="0.5" value="1" /></label>
             <label>相似页合并强度<input id="duplicateThreshold" type="number" min="1" max="20" step="0.5" value="4" /></label>
@@ -466,6 +465,8 @@ app.innerHTML = ui`
   <main id="workspaceView" class="workspace" hidden>
     <aside class="workspace-rail" aria-label="应用导航">
       <button id="railHomeBtn" class="rail-logo" type="button" title="回到 Vid2PPT 首页" aria-label="回到 Vid2PPT 首页"><img src="/brand/vid2ppt-mark.svg" alt="" /></button>
+      <button id="workspaceMenuBtn" type="button" aria-expanded="false" aria-controls="workspaceRailLinks">菜单</button>
+      <div id="workspaceRailLinks" class="workspace-rail-links">
       <button id="railWorkspaceBtn" class="rail-item is-active" type="button">工作台</button>
       <button id="railOrdersBtn" class="rail-item" type="button">套餐权益</button>
 
@@ -474,6 +475,7 @@ app.innerHTML = ui`
       <a class="rail-item" href="/blog/" target="_blank" rel="noopener">文章</a>
       <button id="railSettingsBtn" class="rail-item" type="button">设置</button>
       <button id="railLoginBtn" class="rail-item" type="button">账号</button>
+      </div>
     </aside>
 
     <section class="workspace-main">
@@ -495,8 +497,12 @@ app.innerHTML = ui`
         <button id="toggleImportBtn" class="ghost-btn" type="button" aria-expanded="true" aria-controls="workspaceImport">添加视频</button>
       </header>
       <ol class="workspace-steps" aria-label="转换步骤">
-        <li data-step="source">1 导入视频</li><li data-step="extract">2 识别与去重</li><li data-step="review">3 阅读与带走</li>
+        <li data-step="source">1 导入视频</li><li data-step="extract">2 自动提取</li><li data-step="review">3 检查页面</li><li data-step="export">4 带走资料</li>
       </ol>
+      <section id="journeyCoach" class="journey-coach" aria-labelledby="journeyTitle">
+        <div class="journey-copy"><span id="journeyEyebrow" class="journey-eyebrow"></span><h2 id="journeyTitle" tabindex="-1"></h2><p id="journeyBody"></p></div>
+        <div class="journey-actions"><button id="journeyPrimaryBtn" type="button"></button><button id="journeySkipBtn" type="button" class="ghost-btn">直接导出</button></div>
+      </section>
       <section class="result-dock" id="resultDock" aria-live="polite">
         <div class="result-summary">
           <span id="resultBadge" class="result-badge">等待处理</span>
@@ -506,9 +512,10 @@ app.innerHTML = ui`
           </div>
         </div>
         <div class="result-actions">
-          <button id="dockDownloadPdfBtn" class="primary-download" disabled>导出 PDF</button>
-          <button id="dockDownloadPptxBtn" disabled>导出 PPTX</button>
-          <button id="dockDownloadFramesBtn" disabled>导出页面图片</button>
+          <button id="openExportBtn" class="primary-download" type="button" disabled>选择导出格式 ↗</button>
+          <button id="dockDownloadPdfBtn" hidden class="primary-download" disabled>导出 PDF</button>
+          <button id="dockDownloadPptxBtn" hidden disabled>导出 PPTX</button>
+          <button id="dockDownloadFramesBtn" hidden disabled>导出页面图片</button>
           <button id="dockNotesBtn" hidden disabled>提炼 AI 要点</button>
         </div>
       </section>
@@ -523,7 +530,7 @@ app.innerHTML = ui`
             <span>我确认有权处理这个视频</span>
           </label>
           <div class="workspace-url-actions">
-            <button id="workspaceProcessUrlBtn" type="button">获取并开始生成</button>
+            <button id="workspaceProcessUrlBtn" type="button">获取视频并提取页面</button>
             <button id="workspaceDownloadUrlBtn" class="ghost-btn" type="button">仅导入</button>
           </div>
           <small id="workspaceUrlStatus">粘贴链接后会直接进入获取视频和页面生成流程。</small>
@@ -629,21 +636,22 @@ app.innerHTML = ui`
               <button id="readNotesViewBtn" type="button" aria-pressed="true">笔记阅读</button>
               <button id="editPagesViewBtn" type="button" aria-pressed="false">页面编辑</button>
             </div>
-            <div class="note-takeaway-actions">
+            <details class="note-takeaway-menu"><summary>更多笔记操作</summary><div class="note-takeaway-actions">
               <button id="saveVideoNoteBtn" class="ghost-btn" type="button">保存完整笔记</button>
               <button id="copyVideoNoteBtn" class="ghost-btn" type="button">复制 Markdown</button>
               <button id="saveVideoMarkdownBtn" class="ghost-btn" type="button">下载 Markdown</button>
-            </div>
+            </div></details>
           </div>
           <article id="videoNoteReader" class="video-note-reader" aria-label="视频笔记" hidden>
             <header class="reading-header"><p class="eyebrow" id="readingKind">原画面笔记</p><h2 id="readingTitle"></h2><p id="readingMeta"></p></header>
+            <div class="reading-section-title"><h3>原画面与时间位置</h3><span>画面按整理顺序展示，供回看原视频</span></div>
+            <div id="readingFrames" class="reading-frames"></div>
             <section class="reading-overview" aria-labelledby="readingOverviewTitle">
               <div class="reading-overview-heading"><h3 id="readingOverviewTitle">画面与要点</h3><button id="readerGenerateNotesBtn" type="button">提炼 AI 要点</button></div>
               <p id="readingHelp">已按顺序整理原画面。需要文字重点时，可继续转写语音并生成 AI 要点；首次转写需要加载模型，请保持页面打开。</p>
               <div id="readingSummary" class="reading-summary"></div>
             </section>
-            <div class="reading-section-title"><h3>原画面与时间位置</h3><span>画面按整理顺序展示，供回看原视频</span></div>
-            <div id="readingFrames" class="reading-frames"></div>
+
             <p class="reading-footnote">保存完整笔记包含原画面；Markdown 包含文字与时间索引。<a href="/privacy/" target="_blank" rel="noopener">隐私保护说明</a></p>
           </article>
           <div id="workspaceEmptyState" class="workspace-empty-state">
@@ -786,6 +794,24 @@ app.innerHTML = ui`
       <article id="illustratedNotesPreview" class="illustrated-note-preview"></article>
     </section>
   </dialog>
+  <dialog id="exportChoiceDialog" class="export-choice-dialog" aria-labelledby="exportChoiceTitle" aria-describedby="exportChoiceSummary">
+    <form id="exportChoiceForm" class="export-choice-panel">
+      <header><div><p class="eyebrow">最后一步</p><h2 id="exportChoiceTitle">这份资料，你想怎么用？</h2></div><button id="closeExportChoiceBtn" type="button" class="ghost-btn" aria-label="关闭导出">×</button></header>
+      <div class="export-choice-body"><p id="exportChoiceSummary"></p>
+      <fieldset class="export-format-options"><legend class="sr-only">选择导出格式</legend>
+        <label><input type="radio" name="exportFormat" value="pdf" checked /><span class="format-icon">PDF</span><span><strong>复习与打印</strong><small>原画面按顺序排版，方便阅读和标注</small></span></label>
+        <label><input type="radio" name="exportFormat" value="pptx" /><span class="format-icon">PPTX</span><span><strong>演示与分享</strong><small>保留原画面；需要改文字时，先在编辑器识别再导出</small></span></label>
+        <label data-note-format><input type="radio" name="exportFormat" value="html" /><span class="format-icon">HTML</span><span><strong>保存完整笔记</strong><small>包含原画面、时间位置和已有要点，离线可读</small></span></label>
+      </fieldset>
+      <details class="export-more"><summary>其他格式</summary><fieldset class="export-format-options"><legend class="sr-only">其他导出格式</legend>
+        <label data-note-format><input type="radio" name="exportFormat" value="markdown" /><span><strong>Markdown · 笔记工具</strong><small>文字与时间索引，不含原画面</small></span></label>
+        <label><input type="radio" name="exportFormat" value="zip" /><span><strong>图片 ZIP · 复用素材</strong><small>每页一张图片，打包下载</small></span></label>
+      </fieldset></details>
+      <p id="exportChoiceFeedback" class="export-choice-feedback" role="status"></p>
+      </div><footer><button id="exportChoiceSubmitBtn" type="submit">生成并下载 PDF</button><small>只导出勾选的页面，当前任务会保留。</small></footer>
+    </form>
+  </dialog>
+
 `;
 
 const $ = <T extends Element>(selector: string) => {
@@ -1021,6 +1047,9 @@ let authSession: AuthSession | null = loadAuthSession();
 let userPreferences: UserPreferences = loadUserPreferences();
 let illustratedNotesMarkdown = '';
 let resultView: 'notes' | 'pages' = 'notes';
+let journeyFile: File | null = null;
+let journeyReviewed = false;
+let journeyExport: { file: File | null; slides: Slide[]; summary: string; notes: string; label: string } | null = null;
 let pendingNotesFile: File | null = null;
 let authCaptchaToken = '';
 let isAuthBusy = false;
@@ -1125,6 +1154,7 @@ $<HTMLButtonElement>('#saveVideoMarkdownBtn').addEventListener('click', () => ex
 $<HTMLButtonElement>('#copyVideoNoteBtn').addEventListener('click', () => { void copyVideoNote(); });
 
 doneBtn.addEventListener('click', () => {
+  document.body.dataset.entry = 'start';
   const closedDemo = isDemoProject;
   if (!closedDemo && !isBusy()) persistWorkspaceToState({ markProcessed: slides.length > 0 });
   workspaceView.hidden = true;
@@ -2306,7 +2336,7 @@ async function downloadVideoFromUrl(mode: UrlDownloadMode): Promise<void> {
     });
     if (blob.size === 0) throw new Error(ui('没有获取到可处理的视频文件。'));
     const file = new File([blob], filename, { type: blob.type || 'video/mp4', lastModified: Date.now() });
-    addFiles([file], true);
+    addFiles([file], true, true);
     if (youtubeDownload) void importYoutubeTranscript(parsedUrl, file);
     videoUrlInput.value = '';
     clearMediaPreview();
@@ -2469,8 +2499,8 @@ function sanitizeDownloadedFilename(filename: string): string {
     : `${baseName(safeName)}.mp4`;
 }
 
-function addFiles(files: File[], selectAdded = false): void {
-  if (isBusy() && !(selectAdded && isUrlDownloading)) { setHomeStatus(ui('当前任务运行中，完成后可添加文件。')); return; }
+function addFiles(files: File[], selectAdded = true, allowDownloadImport = false): void {
+  if (isBusy() && !(allowDownloadImport && isUrlDownloading)) { setHomeStatus(ui('当前任务运行中，完成后可添加文件。')); return; }
   if (isDemoProject) restoreWorkspaceAfterDemo();
   const validFiles = files.filter((file) => isSupportedMediaFile(file) && file.size > 0);
   if (validFiles.length === 0) {
@@ -2492,7 +2522,7 @@ function addFiles(files: File[], selectAdded = false): void {
     if (firstAddedIndex < 0) firstAddedIndex = selectedFiles.length - 1;
   }
 
-  const allowBusySelection = selectAdded && isUrlDownloading;
+  const allowBusySelection = allowDownloadImport && isUrlDownloading;
   if (currentFileIndex < 0 && selectedFiles.length > 0) chooseFile(0, allowBusySelection);
   else if (selectAdded && firstAddedIndex >= 0) chooseFile(firstAddedIndex, allowBusySelection);
   else {
@@ -3596,6 +3626,7 @@ function addWorkspaceFiles(files: File[]): void {
 }
 
 function openWorkspaceFromNav(): void {
+  if (!selectedFile && !slides.length && !isBusy()) { returnHomeForVideoStart(); return; }
   setWorkspaceMode(workspaceMode);
   showWorkspace();
   if (!selectedFile && slides.length === 0) {
@@ -3611,6 +3642,7 @@ function showOrdersPlaceholder(): void {
 function focusLoginPanel(): void {
   if (!isBusy()) persistWorkspaceToState();
   if (isDemoProject) restoreWorkspaceAfterDemo();
+  document.body.dataset.entry = 'account';
   void loadAuthCaptcha();
   workspaceView.hidden = true;
   homeView.hidden = false;
@@ -3621,6 +3653,8 @@ function focusLoginPanel(): void {
 }
 
 function returnHomeForVideoStart(): void {
+  document.body.dataset.entry = 'start';
+  history.replaceState(history.state, '', '#start');
   if (!isBusy()) persistWorkspaceToState();
   workspaceView.hidden = true;
   homeView.hidden = false;
@@ -3643,6 +3677,7 @@ function showWorkspace(): void {
   captureTimeline.hidden = workspaceMode !== 'video' || !selectedFile || isDemoProject || isAudioSource(selectedFile);
   updateWorkspaceEmptyState();
   renderVideoNoteReader();
+  updateJourney();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
@@ -3661,7 +3696,7 @@ function openDemoProject(): void {
     setHomeStatus(ui('当前任务运行中，完成后可打开交互示例。'));
     return;
   }
-  if (isDemoProject) return;
+  if (isDemoProject) { showWorkspace(); return; }
   resultView = 'notes';
   persistWorkspaceToState();
   demoSnapshot = { file: selectedFile, mode: workspaceMode, state: snapshotWorkspace(), index: currentFileIndex };
@@ -3833,6 +3868,7 @@ function setStateForFile(file: File, state: FileJobState): void {
 }
 
 function persistWorkspaceToState(options: { markProcessed?: boolean } = {}): void {
+  if (journeyExport) updateJourney();
   if (!selectedFile || isDemoProject) return;
   const previous = getState(selectedFile);
   setStateForFile(selectedFile, {
@@ -4509,6 +4545,8 @@ async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
   if (isBusy()) return;
   const items = cloneSlides(slides.filter((slide) => slide.selected));
   const file = selectedFile;
+  const exportSummary = summaryEl.value;
+  const exportNotes = illustratedNotesMarkdown;
   if (!file || !items.length) { setStatus(ui('请至少勾选 1 页后导出。')); return; }
   isExporting = true;
   updateActionState();
@@ -4524,6 +4562,7 @@ async function exportSelected(format: 'pdf' | 'pptx' | 'zip'): Promise<void> {
       blob = await zip.generateAsync({ type: 'blob' });
     }
     downloadBlob(blob, `${baseName(file.name)}.${format}`);
+    recordJourneyExport(label, { file, slides: items, summary: exportSummary, notes: exportNotes });
     setProgress(ui`${label} 已生成`, 100);
     setStatus(ui`已生成 ${items.length} 页 ${label}，请在浏览器下载列表中查看。可以继续导出其他格式。`);
   } catch (error) {
@@ -5558,11 +5597,6 @@ function updateWorkspaceEmptyState(): void {
   if (busy) $<HTMLElement>('#workspaceImport').hidden = true;
   else if (!hasSlides) $<HTMLElement>('#workspaceImport').hidden = false;
   $<HTMLElement>('#toggleImportBtn').setAttribute('aria-expanded', String(!$<HTMLElement>('#workspaceImport').hidden));
-  document.querySelectorAll<HTMLElement>('[data-step]').forEach((step) => {
-    const current = busy ? 'extract' : hasSlides ? 'review' : 'source';
-    if (step.dataset.step === current) step.setAttribute('aria-current', 'step');
-    else step.removeAttribute('aria-current');
-  });
   workspaceView.classList.toggle('has-timeline', !captureTimeline.hidden);
   workspaceSubtitle.textContent = selectedFile ? selectedFile.name : ui('选择来源开始转换');
   slidesEl.hidden = !hasSlides;
@@ -5639,6 +5673,7 @@ function updateSelectionUI(): void {
   updateWorkspaceEmptyState();
   updateTextBoxPanel();
   renderVideoNoteReader();
+  updateJourney();
 }
 
 function videoNoteInput(): VideoNoteInput {
@@ -5685,8 +5720,8 @@ function renderVideoNoteReader(): void {
   $<HTMLElement>('#readingHelp').textContent = isDemoProject
     ? ui('这份笔记使用演示素材和作者编写的文字，供体验阅读和导出。')
     : hasText
-      ? ui('文字来自已有摘要或笔记。下方画面按整理顺序展示，供对照原视频回看。')
-      : ui('下方画面可直接翻阅。提炼 AI 要点需识别语音并整理逐字稿；首次使用会加载语音模型，请保持页面打开。');
+      ? ui('文字来自已有摘要或笔记。画面按整理顺序展示，供对照原视频回看。')
+      : ui('画面可直接翻阅。提炼 AI 要点需识别语音并整理逐字稿；首次使用会加载语音模型，请保持页面打开。');
   const generate = $<HTMLButtonElement>('#readerGenerateNotesBtn');
   generate.hidden = isDemoProject;
   generate.disabled = selected.length === 0;
@@ -5758,7 +5793,9 @@ function exportVideoNote(format: 'html' | 'markdown'): void {
   const input = videoNoteInput();
   const body = format === 'html' ? buildVideoNoteHtml(input) : buildVideoNoteMarkdown(input);
   downloadBlob(new Blob([body], { type: format === 'html' ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8' }), `${selectedFile ? baseName(selectedFile.name) : 'video'}-notes.${format === 'html' ? 'html' : 'md'}`);
-  setStatus(format === 'html' ? ui('完整笔记已保存，含原画面；可以离线打开、阅读和打印。') : ui('Markdown 已下载，含文字与时间索引；需要原画面时请保存完整笔记。'));
+  recordJourneyExport(format === 'html' ? 'HTML' : 'Markdown');
+  updateJourney();
+  setStatus(format === 'html' ? ui('完整笔记已生成，请在浏览器下载列表中查看；可以离线阅读和打印。') : ui('Markdown 已下载，含文字与时间索引；需要原画面时请保存完整笔记。'));
 }
 
 async function copyVideoNote(): Promise<void> {
@@ -6382,4 +6419,175 @@ window.addEventListener('drop', (event) => { if (event.dataTransfer?.types.inclu
 workspaceView.classList.add('side-collapsed');
 void discoverDraft();
 
+function journeyOutputIsCurrent(): boolean {
+  if (!journeyExport || journeyExport.file !== selectedFile) return false;
+  const selected = slides.filter((slide) => slide.selected);
+  return selected.length === journeyExport.slides.length
+    && selected.every((slide, index) => {
+      const saved = journeyExport!.slides[index];
+      return slide.id === saved.id && slide.time === saved.time && slide.dataUrl === saved.dataUrl
+        && JSON.stringify(slide.textBoxes) === JSON.stringify(saved.textBoxes);
+    }) && summaryEl.value === journeyExport.summary && illustratedNotesMarkdown === journeyExport.notes;
+}
+
+function recordJourneyExport(label: string, snapshot?: { file: File | null; slides: Slide[]; summary: string; notes: string }): void {
+  journeyExport = snapshot ? { ...snapshot, slides: cloneSlides(snapshot.slides), label }
+    : { file: selectedFile, slides: cloneSlides(slides.filter((slide) => slide.selected)),
+      summary: summaryEl.value, notes: illustratedNotesMarkdown, label };
+}
+
+function updateJourney(): void {
+  if (journeyFile !== selectedFile) {
+    journeyFile = selectedFile;
+    journeyReviewed = false;
+  }
+  if (!slides.length) journeyReviewed = false;
+  const selected = slides.filter((slide) => slide.selected).length;
+  const busy = isBusy();
+  const stage = getJourneyStage({ hasSource: !!selectedFile, busy, frameCount: slides.length,
+    selectedCount: selected, reviewed: journeyReviewed, exported: journeyOutputIsCurrent() });
+  const coach = $<HTMLElement>('#journeyCoach');
+  coach.hidden = isAudioSource(selectedFile);
+  coach.dataset.stage = stage;
+  workspaceView.dataset.journey = stage;
+  workspaceView.dataset.demo = String(isDemoProject);
+  const primary = $<HTMLButtonElement>('#journeyPrimaryBtn');
+  const skip = $<HTMLButtonElement>('#journeySkipBtn');
+  const title = $<HTMLElement>('#journeyTitle');
+  const body = $<HTMLElement>('#journeyBody');
+  primary.disabled = busy;
+  skip.hidden = stage !== 'review' || selected === 0;
+  $<HTMLButtonElement>('#openExportBtn').disabled = !selected || busy;
+  // The guide has the primary action. Returning users can always use the export shortcut.
+  $<HTMLElement>('#resultDock').hidden = stage !== 'done';
+  $<HTMLElement>('#journeyEyebrow').textContent = isDemoProject ? ui('示例练习 · 不占额度') : ui('当前任务 · 下一步');
+  if (stage === 'done') {
+    title.textContent = isDemoProject ? ui('示例已完成，换你的视频试试。') : ui('这份资料已经生成。');
+    body.textContent = ui`${journeyExport?.label ?? ''} 已生成，请在浏览器下载列表中查看。还可以切换格式，或继续完善内容。`;
+    primary.textContent = isDemoProject ? ui('用我的视频开始 →') : ui('整理下一段视频 →');
+  } else if (busy) {
+    title.textContent = isExporting ? ui('正在打包你选中的页面…') : isExtracting ? ui('正在提取页面，稍后一起检查。') : ui('正在处理当前任务…');
+    body.textContent = isExtracting ? ui('页面会陆续出现。完成后再检查顺序与内容，无需等待 AI 要点。') : ui('请保持此页面打开，完成后继续下一步。');
+    primary.textContent = ui('处理中…');
+  } else if (stage === 'export') {
+    title.textContent = ui('页面已确认，选一个适合的格式。');
+    body.textContent = ui`已选 ${selected} 页。复习用 PDF，演示用 PPTX，完整笔记可离线阅读。`;
+    primary.textContent = ui('选择格式并导出 →');
+  } else if (stage === 'review') {
+    title.textContent = selected === 0 ? ui('先勾选至少一页。') : resultView === 'pages' ? ui('留下你需要的页面。') : ui('页面已就绪，先看一眼内容。');
+    body.textContent = selected === 0 ? ui('也可以点击“全选”恢复全部页面，再继续导出。') : resultView === 'pages'
+      ? ui('取消勾选可排除页面；拖动可排序。原样就合适的话，直接继续。')
+      : isDemoProject ? ui('这是 3 页演示素材。试着检查页面，再导出一份真正可以打开的文件。')
+      : ui('先浏览画面和顺序。需要调整时进入页面编辑，也可以直接导出。');
+    primary.textContent = selected === 0 ? ui('全选并继续检查') : resultView === 'pages' ? ui('页面没问题，继续 →') : ui('检查页面 →');
+  } else {
+    title.textContent = selectedFile ? ui('视频已选好，下一步自动提取。') : ui('从一段视频开始。');
+    body.textContent = ui('使用推荐设置即可。提取完成后，可以检查、调整并导出页面。');
+    primary.textContent = selectedFile ? ui('开始提取页面 →') : ui('选择视频 →');
+  }
+  const order = ['source', 'extract', 'review', 'export'];
+  const current = stage === 'done' ? 'export' : stage;
+  document.querySelectorAll<HTMLElement>('[data-step]').forEach((step) => {
+    const active = step.dataset.step === current;
+    if (active) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+    step.classList.toggle('is-complete', stage === 'done' || order.indexOf(step.dataset.step ?? '') < order.indexOf(current));
+  });
+}
+
+function openExportChoice(): void {
+  if (isBusy() || !slides.some((slide) => slide.selected)) return;
+  const dialog = $<HTMLDialogElement>('#exportChoiceDialog');
+  const selected = slides.filter((slide) => slide.selected).length;
+  $<HTMLElement>('#exportChoiceSummary').textContent = isDemoProject
+    ? ui`示例资料 · 已选 ${selected} / ${slides.length} 页 · 不计额度`
+    : ui`已选 ${selected} / ${slides.length} 页 · 按当前顺序导出`;
+  $<HTMLElement>('#exportChoiceFeedback').textContent = '';
+  dialog.querySelectorAll<HTMLElement>('[data-note-format]').forEach((option) => { option.hidden = workspaceMode === 'image'; });
+  const checked = dialog.querySelector<HTMLInputElement>('input[name="exportFormat"]:checked');
+  if (workspaceMode === 'image' && (checked?.value === 'html' || checked?.value === 'markdown')) {
+    $<HTMLInputElement>('input[name="exportFormat"][value="pptx"]').checked = true;
+  }
+  updateExportChoiceLabel();
+  dialog.showModal();
+}
+
+function updateExportChoiceLabel(): void {
+  const format = $<HTMLInputElement>('input[name="exportFormat"]:checked').value;
+  const label = format === 'markdown' ? 'Markdown' : format.toUpperCase();
+  $<HTMLButtonElement>('#exportChoiceSubmitBtn').textContent = ui`生成并下载 ${label}`;
+}
+
+$<HTMLButtonElement>('#journeyPrimaryBtn').addEventListener('click', () => {
+  if (isBusy()) return;
+  const stage = $<HTMLElement>('#journeyCoach').dataset.stage;
+  if (stage === 'done' || stage === 'source') { returnHomeForVideoStart(); return; }
+  if (stage === 'extract') { void processCurrentFile(); return; }
+  if (stage === 'export') { openExportChoice(); return; }
+  if (!slides.some((slide) => slide.selected)) { setAllSlidesSelected(true); setResultView('pages'); return; }
+  if (resultView !== 'pages') {
+    setResultView('pages');
+    $<HTMLElement>('#journeyTitle').focus({ preventScroll: true });
+    return;
+  }
+  journeyReviewed = true;
+  updateJourney();
+  openExportChoice();
+});
+$<HTMLButtonElement>('#journeySkipBtn').addEventListener('click', openExportChoice);
+$<HTMLButtonElement>('#openExportBtn').addEventListener('click', openExportChoice);
+$<HTMLButtonElement>('#closeExportChoiceBtn').addEventListener('click', () => $<HTMLDialogElement>('#exportChoiceDialog').close());
+$<HTMLDialogElement>('#exportChoiceDialog').addEventListener('click', (event) => {
+  if (event.target === event.currentTarget) $<HTMLDialogElement>('#exportChoiceDialog').close();
+});
+$<HTMLFormElement>('#exportChoiceForm').addEventListener('change', updateExportChoiceLabel);
+$<HTMLFormElement>('#exportChoiceForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (isBusy()) return;
+  const format = $<HTMLInputElement>('input[name="exportFormat"]:checked').value;
+  const submit = $<HTMLButtonElement>('#exportChoiceSubmitBtn');
+  const close = $<HTMLButtonElement>('#closeExportChoiceBtn');
+  const dialog = $<HTMLDialogElement>('#exportChoiceDialog');
+  const before = journeyExport;
+  submit.disabled = true;
+  close.disabled = true;
+  $<HTMLElement>('#exportChoiceFeedback').textContent = ui('正在生成文件…');
+  try {
+    if (format === 'html' || format === 'markdown') exportVideoNote(format);
+    else if (format === 'pdf' || format === 'pptx' || format === 'zip') await exportSelected(format);
+    if (journeyExport !== before && journeyOutputIsCurrent()) {
+      dialog.close();
+      updateJourney();
+      $<HTMLElement>('#journeyTitle').focus({ preventScroll: true });
+    } else {
+      $<HTMLElement>('#exportChoiceFeedback').textContent = ui('这次未能生成文件，页面已保留。可以重试，或选择其他格式。');
+    }
+  } catch {
+    $<HTMLElement>('#exportChoiceFeedback').textContent = ui('这次未能生成文件，页面已保留。可以重试，或选择其他格式。');
+  } finally {
+    submit.disabled = false;
+    close.disabled = false;
+  }
+});
+
+$<HTMLButtonElement>('#workspaceMenuBtn').addEventListener('click', () => {
+  const button = $<HTMLButtonElement>('#workspaceMenuBtn');
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  button.setAttribute('aria-expanded', String(open));
+  $<HTMLElement>('.workspace-rail').classList.toggle('is-menu-open', open);
+});
+function closeWorkspaceMenu(restoreFocus = false): void {
+  $<HTMLButtonElement>('#workspaceMenuBtn').setAttribute('aria-expanded', 'false');
+  $<HTMLElement>('.workspace-rail').classList.remove('is-menu-open');
+  if (restoreFocus) $<HTMLButtonElement>('#workspaceMenuBtn').focus();
+}
+$<HTMLElement>('#workspaceRailLinks').addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('button, a')) closeWorkspaceMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && $<HTMLButtonElement>('#workspaceMenuBtn').getAttribute('aria-expanded') === 'true') closeWorkspaceMenu(true);
+});
+document.addEventListener('click', (event) => {
+  if (!$<HTMLElement>('.workspace-rail').contains(event.target as Node)) closeWorkspaceMenu();
+});
 initializeWorkspaceLanguage();

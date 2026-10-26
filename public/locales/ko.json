@@ -107,5 +107,9 @@
   "presetPasses": "이용권 {count}장",
   "accountTools": "이미 결제하셨나요? 이용 권한 확인",
   "privacyNote": "여러분의 콘텐츠를 소중하게 다룹니다.",
-  "privacyDetails": "개인정보 보호 방식 알아보기"
+  "privacyDetails": "개인정보 보호 방식 알아보기",
+  "startOwn": "내 동영상 사용",
+  "trySample": "예제 체험하기",
+  "sampleHelp": "예제는 가입 없이 사용할 수 있으며 변환 횟수를 차감하지 않습니다.",
+  "samplePreview": "체험 예제 · 데모 콘텐츠"
 }

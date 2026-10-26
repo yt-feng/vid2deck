@@ -311,10 +311,10 @@ test('Paddle transaction landing links initialize with page language', async () 
   assert.match(page.initializations[0].checkout.settings.successUrl, /lang=fr/);
 });
 
-test('English and Chinese root pages redirect to the shared marketing page without losing region or workspace deep links', () => {
+test('English and Chinese root routes keep task, sample and help deep links while the empty or unknown route opens welcome', () => {
   const script = readFileSync(new URL('../public/global-home.js', import.meta.url), 'utf8');
   for (const lang of ['en', 'zh-CN']) {
-    for (const hash of ['', '#product', '#faq', '#start', '#workspace', '#account']) {
+    for (const hash of ['', '#unknown', '#demo-extra', '#start', '#demo', '#workspace', '#account', '#more-tools', '#faq', '#how-it-works', '#use-cases', '#product']) {
       const location = new URL(`https://vid2ppt.com/?lang=${lang}&country=CN&currency=USD${hash}`);
       let redirected = null;
       location.replace = value => { redirected = value; };
@@ -322,7 +322,7 @@ test('English and Chinese root pages redirect to the shared marketing page witho
       const window = { location, document, navigator: { languages: [lang] }, localStorage: { getItem: () => '', setItem() {} } };
       const context = vm.createContext({ window, document, location, URL, URLSearchParams });
       vm.runInContext(languageScript, context); vm.runInContext(script, context);
-      const workspace = ['#start', '#workspace', '#account'].includes(hash);
+      const workspace = ['#start', '#demo', '#workspace', '#account', '#more-tools', '#faq', '#how-it-works', '#use-cases', '#product'].includes(hash);
       if (workspace) {
         assert.equal(redirected, null, `${lang}${hash}`);
         assert.equal(location.hash, hash);
@@ -720,11 +720,12 @@ test('welcome and pricing show product benefits without the old technical FAQs o
   }
 });
 
-test('switching English and Chinese keeps welcome as marketing and workspace deep links in the shared application', async () => {
+test('switching between English and Chinese preserves sample, workspace and help routes with region preferences', async () => {
   for (const [lang, nextLang] of [['en', 'zh-CN'], ['zh-CN', 'en']]) {
     for (const [path, hash, expectedPath] of [
       ['/welcome/', '', '/welcome/'], ['/', '', '/welcome/'],
-      ['/', '#start', '/'], ['/', '#account', '/'], ['/', '#workspace', '/']
+      ['/', '#start', '/'], ['/', '#demo', '/'], ['/', '#account', '/'], ['/', '#workspace', '/'],
+      ['/', '#more-tools', '/'], ['/', '#faq', '/'], ['/', '#how-it-works', '/'], ['/', '#use-cases', '/'], ['/', '#product', '/']
     ]) {
       const page = harness({ lang, path, query: `country=CN&currency=USD${hash}` }); await page.flush();
       const select = page.elements.get('siteLanguage');
@@ -990,7 +991,7 @@ test('an authoritative CNY Paddle quote remains payable when exchange-rate loadi
 test('marketing links retain the selected country and currency through welcome, pricing and the pass entry', async () => {
   const welcome = harness({ path: '/welcome/', query: 'country=BR&currency=BRL' }); await welcome.flush();
   const pricingLinks = welcome.document.querySelectorAll('a').filter(link => new URL(link.href).pathname === '/pricing/');
-  assert.ok(pricingLinks.length >= 2);
+  assert.ok(pricingLinks.length >= 1, 'pricing stays available in navigation without duplicating the main task actions');
   for (const link of pricingLinks) {
     const target = new URL(link.href);
     assert.equal(target.searchParams.get('lang'), 'en');
@@ -1081,5 +1082,38 @@ test('English and Chinese pages keep payment implementation out of visible copy 
       assert.ok(page.elements.get('globalPaymentStatus').textContent);
       assert.doesNotMatch(page.document.body.textContent, /Paddle|webhook|付款回调|支付回调/i, `${lang} ${path} completed`);
     }
+  }
+});
+
+test('welcome gives all locales distinct video and sample routes without using payment or conversion services', async () => {
+  const languages = readdirSync(new URL('../public/locales/', import.meta.url)).filter(name => name.endsWith('.json'));
+  for (const filename of languages) {
+    const lang = filename.slice(0, -5);
+    const dictionary = JSON.parse(readFileSync(new URL(`../public/locales/${filename}`, import.meta.url), 'utf8'));
+    const page = harness({ lang, path: '/welcome/', query: 'country=BR&currency=BRL' });
+    await page.flush();
+    assert.equal(page.document.documentElement.lang, lang, 'new copy must not cause a locale fallback');
+    const actions = page.document.querySelectorAll('.welcome-hero .global-actions a');
+    assert.equal(actions.length, 2);
+    assert.ok(actions[0].textContent.includes(dictionary.startOwn));
+    assert.equal(actions[1].textContent, dictionary.trySample);
+    assert.deepEqual(actions.map(link => new URL(link.href).hash), ['#start', '#demo']);
+    for (const link of actions) {
+      const target = new URL(link.href);
+      assert.equal(target.pathname, '/');
+      assert.equal(target.searchParams.get('lang'), lang);
+      assert.equal(target.searchParams.get('country'), 'BR');
+      assert.equal(target.searchParams.get('currency'), 'BRL');
+    }
+    const preview = page.document.querySelector('.product-preview');
+    assert.equal(preview.tagName, 'A', 'the illustration must be a real keyboard-accessible sample entry');
+    assert.equal(preview.getAttribute('aria-hidden'), null);
+    assert.equal(preview.getAttribute('aria-label'), dictionary.trySample);
+    assert.equal(new URL(preview.href).hash, '#demo');
+    assert.ok(preview.textContent.includes(dictionary.samplePreview));
+    assert.equal(page.document.querySelector('.sample-help').textContent, dictionary.sampleHelp);
+    assert.equal(page.document.querySelectorAll('.welcome-workflow .step-card').length, 3);
+    assert.equal(page.checkouts.length, 0);
+    assert.ok(page.requests.every(request => request.url.startsWith('/locales/')));
   }
 });

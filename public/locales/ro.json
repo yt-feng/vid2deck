@@ -107,5 +107,9 @@
   "presetPasses": "{count} permise de acces",
   "accountTools": "Ai plătit deja? Verifică-ți accesul",
   "privacyNote": "Conținutul tău, tratat cu grijă.",
-  "privacyDetails": "Cum îți protejăm confidențialitatea"
+  "privacyDetails": "Cum îți protejăm confidențialitatea",
+  "startOwn": "Folosește videoclipul meu",
+  "trySample": "Încearcă un exemplu",
+  "sampleHelp": "Exemplul nu necesită înregistrare și nu consumă credite de conversie.",
+  "samplePreview": "Exemplu interactiv · conținut demonstrativ"
 }

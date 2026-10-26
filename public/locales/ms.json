@@ -107,5 +107,9 @@
   "presetPasses": "{count} pas",
   "accountTools": "Sudah membayar? Semak akses anda",
   "privacyNote": "Kandungan anda dikendalikan dengan teliti.",
-  "privacyDetails": "Cara kami melindungi privasi anda"
+  "privacyDetails": "Cara kami melindungi privasi anda",
+  "startOwn": "Gunakan video saya",
+  "trySample": "Cuba contoh",
+  "sampleHelp": "Contoh tidak memerlukan pendaftaran dan tidak menggunakan kuota penukaran.",
+  "samplePreview": "Contoh interaktif · kandungan ilustrasi"
 }

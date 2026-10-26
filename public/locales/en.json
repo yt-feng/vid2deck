@@ -107,5 +107,9 @@
   "presetPasses": "{count} passes",
   "accountTools": "Already paid? Check your access",
   "privacyNote": "Your content, handled with care.",
-  "privacyDetails": "How we protect your privacy"
+  "privacyDetails": "How we protect your privacy",
+  "startOwn": "Use my video",
+  "trySample": "Try a sample",
+  "sampleHelp": "The sample needs no sign-up and uses no conversion credits.",
+  "samplePreview": "Interactive sample · illustrated content"
 }

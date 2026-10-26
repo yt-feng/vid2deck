@@ -36,3 +36,28 @@
 @media(max-width:600px){.global-quantity-presets{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
 @media(max-width:480px){.quantity-preset{min-height:133px;padding:13px 8px 11px}.preset-code,.quantity-preset[aria-pressed=true] .preset-code{width:34px;height:34px;font-size:23px}}
 .privacy-note{display:flex;align-items:center;justify-content:center;gap:8px 12px;flex-wrap:wrap;margin:44px 0 0;color:var(--muted);font-size:12px;line-height:1.6;text-align:center}.privacy-note svg{flex-shrink:0}.privacy-note a{color:inherit;text-underline-offset:3px}
+
+/* First visit: two clear entry points, followed by the actual task sequence. */
+.global-page-welcome .global-nav{margin-bottom:24px}
+.global-page-welcome .welcome-hero{gap:44px;padding:16px 0 40px}
+.global-page-welcome .welcome-hero h1{font-size:clamp(34px,4.2vw,54px);margin:16px 0 20px}
+.global-page-welcome .welcome-hero .hero-copy>p{font-size:16px;margin-bottom:16px}
+.global-page-welcome .welcome-hero .global-actions{margin:24px 0 10px;gap:10px}
+.global-page-welcome .welcome-hero .sample-help{font-size:12px;color:#47715a;margin:0 0 12px}
+.global-page-welcome .welcome-hero .global-note{font-size:12px;margin-bottom:0}
+.global-page-welcome a.product-preview{display:block;color:inherit;text-decoration:none;transition:transform .2s,box-shadow .2s,border-color .2s}
+.global-page-welcome a.product-preview:hover{transform:rotate(0);border-color:#789b7c;box-shadow:0 22px 60px #224d3022}
+.global-page-welcome a.product-preview:focus-visible{outline:3px solid #47715a;outline-offset:6px;transform:rotate(0)}
+.global-page-welcome .preview-play{font-size:22px;padding-inline-start:0}
+.global-page-welcome .preview-open{margin-inline-start:auto;font-size:17px;color:#245740}
+.welcome-workflow{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:24px 0 28px;margin:0 0 28px}
+.welcome-workflow .section-heading{margin-bottom:20px}
+.welcome-workflow .section-heading h2{font-size:17px;margin:0;font-weight:650}
+.welcome-workflow .steps-grid{gap:26px}
+.welcome-workflow .step-card{flex-direction:row;align-items:flex-start;gap:13px;padding:0}
+.welcome-workflow .step-number{font-size:12px;font-weight:700;letter-spacing:0;line-height:28px;flex:0 0 28px;width:28px;height:28px;text-align:center;background:#e9efe3;color:#47715a;border-radius:50%;margin:0}
+.welcome-workflow .step-card h2{font-size:15px;line-height:1.5;margin:3px 0 7px}
+.welcome-workflow .step-card p{font-size:12px;line-height:1.7;margin:0}
+@media(max-width:780px){.global-page-welcome .welcome-hero{gap:22px}.global-page-welcome .welcome-hero h1{font-size:44px}.global-page-welcome .product-preview{width:100%;max-width:500px;margin:0}.welcome-workflow .steps-grid{grid-template-columns:1fr;gap:20px}.welcome-workflow .step-card h2{font-size:16px}.welcome-workflow .step-card p{font-size:13px}.global-page-welcome .welcome-hero .hero-copy>p{max-width:530px}}
+@media(max-width:480px){.global-page-welcome .welcome-hero{padding-top:6px;padding-bottom:28px}.global-page-welcome .welcome-hero h1{font-size:36px;line-height:1.15}.global-page-welcome .welcome-hero .hero-copy>p{font-size:14px}.global-page-welcome .welcome-hero .sample-help,.global-page-welcome .welcome-hero .global-note{font-size:11px}.global-page-welcome .welcome-hero .global-actions{gap:8px}.global-page-welcome .global-actions .global-action{padding:11px 13px;font-size:13px}.welcome-workflow{padding:22px 0;margin-bottom:22px}}
+@media(prefers-reduced-motion:reduce){.global-page-welcome a.product-preview{transition:none}}

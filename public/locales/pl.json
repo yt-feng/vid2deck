@@ -107,5 +107,9 @@
   "presetPasses": "Liczba karnetów: {count}",
   "accountTools": "Już zapłacono? Sprawdź swój dostęp",
   "privacyNote": "Twoje treści pod dobrą opieką.",
-  "privacyDetails": "Jak chronimy Twoją prywatność"
+  "privacyDetails": "Jak chronimy Twoją prywatność",
+  "startOwn": "Użyj mojego filmu",
+  "trySample": "Wypróbuj przykład",
+  "sampleHelp": "Przykład nie wymaga rejestracji i nie zużywa limitu konwersji.",
+  "samplePreview": "Interaktywny przykład · treści demonstracyjne"
 }
